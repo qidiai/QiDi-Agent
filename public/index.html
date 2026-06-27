@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QIDI Agent - 启迪智能体</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-text">
+          <span class="logo-q">Q</span><span class="logo-i">I</span><span class="logo-d">D</span><span class="logo-i2">I</span>
+        </div>
+        <div class="logo-sub">启迪智能体</div>
+      </div>
+      <nav class="nav">
+        <a href="#dashboard" class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">仪表盘</span>
+        </a>
+        <a href="#console" class="nav-item" data-page="console">
+          <span class="nav-icon">💻</span>
+          <span class="nav-text">编程</span>
+        </a>
+        <a href="#tools" class="nav-item" data-page="tools">
+          <span class="nav-icon">🔧</span>
+          <span class="nav-text">工具管理</span>
+        </a>
+        <a href="#agents" class="nav-item" data-page="agents">
+          <span class="nav-icon">🤖</span>
+          <span class="nav-text">模型管理</span>
+        </a>
+        <a href="#routing" class="nav-item" data-page="routing">
+          <span class="nav-icon">🧠</span>
+          <span class="nav-text">智能路由</span>
+        </a>
+        <a href="#tokens" class="nav-item" data-page="tokens">
+          <span class="nav-icon">💰</span>
+          <span class="nav-text">Token 统计</span>
+        </a>
+        <a href="#reports" class="nav-item" data-page="reports">
+          <span class="nav-icon">📝</span>
+          <span class="nav-text">报告中心</span>
+        </a>
+        <a href="#tasks" class="nav-item" data-page="tasks">
+          <span class="nav-icon">📋</span>
+          <span class="nav-text">任务管理</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <h1 id="page-title">仪表盘</h1>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="refreshData()">
+            <span>🔄</span> 刷新
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <div id="page-dashboard" class="page active">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">🔧</div>
+              <div class="stat-content">
+                <div class="stat-value" id="stat-tools">0</div>
+                <div class="stat-label">已连接工具</div>
+              </div>
+              <div class="stat-trend up" id="stat-tools-online">0 在线</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🤖</div>
+              <div class="stat-content">
+                <div class="stat-value" id="stat-agents">0</div>
+                <div class="stat-label">智能体数量</div>
+              </div>
+              <div class="stat-trend up" id="stat-agents-active">0 活跃</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">💰</div>
+              <div class="stat-content">
+                <div class="stat-value" id="stat-tokens">0</div>
+                <div class="stat-label">Token 消耗</div>
+              </div>
+              <div class="stat-trend">总计</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📝</div>
+              <div class="stat-content">
+                <div class="stat-value" id="stat-reports">0</div>
+                <div class="stat-label">实验报告</div>
+              </div>
+              <div class="stat-trend up" id="stat-success-rate">0% 成功率</div>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="card">
+              <div class="card-header">
+                <h3>工具状态</h3>
+                <a href="#tools" class="card-link">查看全部 →</a>
+              </div>
+              <div class="card-body">
+                <div id="tools-preview" class="tools-list">
+                  <div class="loading">加载中...</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>智能体状态</h3>
+                <a href="#agents" class="card-link">查看全部 →</a>
+              </div>
+              <div class="card-body">
+                <div id="agents-preview" class="agents-list">
+                  <div class="loading">加载中...</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>Token 消耗排行</h3>
+                <a href="#tokens" class="card-link">查看详情 →</a>
+              </div>
+              <div class="card-body">
+                <div id="tokens-preview" class="tokens-list">
+                  <div class="loading">加载中...</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>最近报告</h3>
+                <a href="#reports" class="card-link">查看全部 →</a>
+              </div>
+              <div class="card-body">
+                <div id="reports-preview" class="reports-list">
+                  <div class="loading">加载中...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-console" class="page">
+          <div class="page-header">
+            <div>
+              <h2>编程控制台</h2>
+              <p class="page-desc">输入代码任务，让 AI Agent 帮你完成编程</p>
+            </div>
+          </div>
+          
+          <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="card">
+              <div class="card-header">
+                <h3>📝 任务输入</h3>
+              </div>
+              <div class="card-body">
+                <div style="margin-bottom: 16px;">
+                  <label style="display: block; font-weight: 500; margin-bottom: 8px;">选择模型</label>
+                  <select id="console-model" multiple style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; min-height: 80px;">
+                    <option value="">加载中...</option>
+                  </select>
+                  <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">按住 Ctrl/Cmd 可以多选</div>
+                </div>
+                
+                <div style="margin-bottom: 16px;">
+                  <label style="display: block; font-weight: 500; margin-bottom: 8px;">执行模式</label>
+                  <div id="console-modes" style="display: flex; gap: 12px;">
+                    <div class="mode-card mode-selected" data-mode="privacy" onclick="selectMode('privacy')" style="flex: 1; padding: 12px; border: 2px solid #10b981; border-radius: 12px; cursor: pointer; background: #ecfdf5; transition: all 0.2s;">
+                      <div style="font-size: 24px; margin-bottom: 6px;">🔒</div>
+                      <div style="font-weight: 600; color: #065f46; margin-bottom: 4px;">隐私模式</div>
+                      <div style="font-size: 11px; color: #059669;">本地拆分+质检<br>Ollama打分（不离开本地）<br>契约拼装·安全第一</div>
+                    </div>
+                    <div class="mode-card" data-mode="quality" onclick="selectMode('quality')" style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; background: #fff; transition: all 0.2s;">
+                      <div style="font-size: 24px; margin-bottom: 6px;">✨</div>
+                      <div style="font-weight: 600; color: #374151; margin-bottom: 4px;">高质量模式</div>
+                      <div style="font-size: 11px; color: #6b7280;">云端拆分+质检<br>最强模型打分（6维）<br>AI智能合并·质量第一</div>
+                    </div>
+                  </div>
+                  <div style="margin-top: 8px;">
+                    <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="recommendMode()">💡 智能推荐</button>
+                    <span id="mode-recommend" style="font-size: 11px; color: #6b7280; margin-left: 8px;"></span>
+                  </div>
+                </div>
+                
+                <div style="margin-bottom: 16px;">
+                  <label style="display: block; font-weight: 500; margin-bottom: 8px;">任务描述 *</label>
+                  <textarea id="console-task" rows="6" placeholder="例如：用 C 语言写一个贪吃蛇游戏"
+                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; resize: vertical; font-family: inherit;"></textarea>
+                </div>
+                
+                <div style="margin-bottom: 16px;">
+                  <label style="display: block; font-weight: 500; margin-bottom: 8px;">约束条件</label>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                      <input type="checkbox" id="const-c" value="C语言"> C 语言
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                      <input type="checkbox" id="const-python" value="Python"> Python
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                      <input type="checkbox" id="const-console" value="控制台" checked> 控制台
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                      <input type="checkbox" id="const-web" value="Web"> Web
+                    </label>
+                  </div>
+                </div>
+                
+                <div style="display: flex; gap: 12px;">
+                  <button class="btn btn-primary" style="flex: 1;" onclick="executeTask()">
+                    <span>🚀</span> 执行任务
+                  </button>
+                  <button class="btn" style="flex: 0;" onclick="clearConsole()">
+                    <span>🗑️</span> 清空
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="card">
+              <div class="card-header">
+                <h3>📤 执行结果</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <span id="console-status" class="status-badge status-idle">空闲</span>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="downloadOutput()">📥 下载</button>
+                </div>
+              </div>
+              <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                <div id="console-output" style="font-family: 'Consolas', monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word;">
+                  <div class="empty-state" style="padding: 40px;">
+                    <div class="empty-icon">💻</div>
+                    <div class="empty-text">等待任务输入</div>
+                    <div class="empty-desc">在左侧输入任务描述并点击执行</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" style="margin-top: 20px;">
+            <div class="card-header">
+              <h3>📁 生成的文件</h3>
+              <span id="file-count" style="font-size: 12px; color: #6b7280;">0 个文件</span>
+            </div>
+            <div class="card-body">
+              <div id="output-files" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px;">
+                <div class="empty-state" style="grid-column: 1/-1; padding: 20px;">
+                  <div class="empty-text">暂无生成文件</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-tools" class="page">
+          <div class="page-header">
+            <div>
+              <h2>工具管理</h2>
+              <p class="page-desc">管理和配置 AI 编程工具</p>
+            </div>
+            <button class="btn btn-primary" onclick="scanTools()">
+              <span>🔍</span> 扫描工具
+            </button>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div id="tools-full" class="tools-grid">
+                <div class="loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-agents" class="page">
+          <div class="page-header">
+            <div>
+              <h2>模型管理</h2>
+              <p class="page-desc">管理本地和云端 AI 模型，启用/禁用模型</p>
+            </div>
+            <button class="btn btn-primary" onclick="showAddModelModal()">
+              <span>➕</span> 添加模型
+            </button>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div id="agents-full" class="agents-grid">
+                <div class="loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-routing" class="page">
+          <div class="page-header">
+            <div>
+              <h2>智能路由</h2>
+              <p class="page-desc">配置任务路由策略，自动选择最合适的模型</p>
+            </div>
+          </div>
+          
+          <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-icon">⚡</div>
+              <div class="stat-content">
+                <div class="stat-value" id="routing-fast-count">0</div>
+                <div class="stat-label">快速任务</div>
+              </div>
+              <div class="stat-trend" id="routing-fast-target">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🎯</div>
+              <div class="stat-content">
+                <div class="stat-value" id="routing-normal-count">0</div>
+                <div class="stat-label">常规任务</div>
+              </div>
+              <div class="stat-trend" id="routing-normal-target">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🧠</div>
+              <div class="stat-content">
+                <div class="stat-value" id="routing-complex-count">0</div>
+                <div class="stat-label">复杂任务</div>
+              </div>
+              <div class="stat-trend" id="routing-complex-target">-</div>
+            </div>
+          </div>
+          
+          <div class="dashboard-grid" style="grid-template-columns: 1fr;">
+            <div class="card">
+              <div class="card-header">
+                <h3>路由策略配置</h3>
+              </div>
+              <div class="card-body">
+                <div id="routing-strategy" class="routing-config">
+                  <div class="loading">加载中...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" style="margin-top: 20px;">
+            <div class="card-header">
+              <h3>模型优先级</h3>
+              <span style="font-size:12px;color:#6b7280;">优先级高的模型会被优先选择</span>
+            </div>
+            <div class="card-body">
+              <div id="routing-models" class="routing-models">
+                <div class="loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top: 20px; display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="saveRoutingConfig()">
+              <span>💾</span> 保存配置
+            </button>
+            <button class="btn" onclick="loadRoutingConfig()">
+              <span>🔄</span> 重置
+            </button>
+          </div>
+        </div>
+
+        <div id="page-tokens" class="page">
+          <div class="page-header">
+            <div>
+              <h2>Token 统计</h2>
+              <p class="page-desc">各智能体和工具的 Token 消耗详情</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div id="tokens-full" class="tokens-table">
+                <div class="loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-reports" class="page">
+          <div class="page-header">
+            <div>
+              <h2>报告中心</h2>
+              <p class="page-desc">查看实验报告和历史记录</p>
+            </div>
+            <div class="filter-bar">
+              <input type="text" id="report-search" placeholder="搜索报告..." onkeyup="searchReports()">
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div id="reports-full" class="reports-table">
+                <div class="loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-tasks" class="page">
+          <div class="page-header">
+            <div>
+              <h2>任务管理</h2>
+              <p class="page-desc">查看任务执行状态和进度</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div id="tasks-full" class="tasks-list">
+                <div class="empty-state">
+                  <div class="empty-icon">📋</div>
+                  <div class="empty-text">暂无任务</div>
+                  <div class="empty-desc">任务开始后将在这里显示</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="model-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" onclick="closeModelModal()"></div>
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 id="model-modal-title">添加模型</h3>
+        <button class="btn-close" onclick="closeModelModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="model-form" onsubmit="saveModel(event)">
+          <input type="hidden" id="model-name-original" value="">
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">模型名称 *</label>
+            <input type="text" id="model-name" required placeholder="例如: 我的 GPT-4"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">模型类型 *</label>
+            <select id="model-type" required onchange="updateModelDefaults()"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+              <option value="">请选择模型类型</option>
+              <option value="openai">OpenAI 兼容 API (GPT, DeepSeek, 通义等)</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="ollama">Ollama 本地模型</option>
+              <option value="custom">自定义 API</option>
+            </select>
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">API 地址 *</label>
+            <input type="text" id="model-baseurl" required placeholder="https://api.openai.com/v1"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+            <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+              OpenAI 兼容: https://api.openai.com/v1 | DeepSeek: https://api.deepseek.com/v1 | 通义: https://dashscope.aliyuncs.com/api/v1
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">模型名称 *</label>
+            <input type="text" id="model-model" required placeholder="gpt-4, deepseek-coder, qwen2.5:7b"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+            <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+              常用模型: gpt-4, gpt-3.5-turbo, claude-3-sonnet, deepseek-coder, qwen2.5:7b
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">API Key *</label>
+            <input type="password" id="model-apikey" placeholder="sk-xxxx 或环境变量格式 ${API_KEY}"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+            <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+              支持直接输入 API Key 或使用环境变量格式: ${OPENAI_API_KEY}
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">描述</label>
+            <input type="text" id="model-description" placeholder="模型的简短描述"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 6px;">超时时间 (毫秒)</label>
+            <input type="number" id="model-timeout" value="60000" placeholder="60000"
+              style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+          </div>
+          
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+            <button type="button" class="btn" onclick="closeModelModal()">取消</button>
+            <button type="submit" class="btn btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="report-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" onclick="closeReportModal()"></div>
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 id="modal-title">报告详情</h3>
+        <button class="btn-close" onclick="closeReportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre id="modal-content" class="report-content"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

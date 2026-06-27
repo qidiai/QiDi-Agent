@@ -1,0 +1,23 @@
+{
+  "reports": [
+    {
+      "id": "exp_1782583048043",
+      "timestamp": 1782583048043,
+      "task": "用C语言写一个简单的加法函数 add(int a, int b)",
+      "successRate": 100,
+      "tags": [
+        "C",
+        "成功",
+        "C语言"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 556
+    }
+  ],
+  "tags": {
+    "C": 1,
+    "成功": 1,
+    "C语言": 1
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "originalTask": "用C语言写一个简单的加法函数 add(int a, int b)",
+  "successRate": 100,
+  "totalTasks": 2,
+  "completedTasks": 2,
+  "failedTasks": 0,
+  "constraints": {
+    "language": "C",
+    "techStack": "",
+    "platform": "",
+    "framework": "",
+    "style": "",
+    "fileExtension": ".c"
+  },
+  "keywords": "C语言",
+  "tags": [
+    "C",
+    "成功",
+    "C语言"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 556
+}

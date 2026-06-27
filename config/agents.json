@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "description": "多 Agent 配置文件 - 编辑此文件来启用/禁用不同的 AI Agent",
+  "defaultAgent": "ollama",
+  "agents": {
+    "ollama": {
+      "enabled": true,
+      "provider": "ollama",
+      "name": "Ollama 本地模型",
+      "name_display": "🦎 Ollama",
+      "description": "本地部署的 Ollama 模型，支持 qwen2.5:7b、deepseek-r1 等开源模型",
+      "config": {
+        "baseURL": "http://localhost:11434",
+        "model": "qwen2.5:7b",
+        "timeout": 120000
+      }
+    },
+    "openai": {
+      "enabled": false,
+      "provider": "openai",
+      "name": "OpenAI GPT",
+      "name_display": "🤖 GPT",
+      "description": "OpenAI GPT-4 / GPT-3.5 系列模型",
+      "config": {
+        "apiKey": "${OPENAI_API_KEY}",
+        "baseURL": "https://api.openai.com/v1",
+        "model": "gpt-4",
+        "timeout": 60000
+      }
+    },
+    "anthropic": {
+      "enabled": false,
+      "provider": "anthropic",
+      "name": "Anthropic Claude",
+      "name_display": "🧠 Claude",
+      "description": "Anthropic Claude 3.5 Sonnet / Haiku 等模型",
+      "config": {
+        "apiKey": "${ANTHROPIC_API_KEY}",
+        "model": "claude-3-5-sonnet-20240620",
+        "timeout": 60000
+      }
+    },
+    "deepseek": {
+      "enabled": true,
+      "provider": "openai",
+      "name": "DeepSeek",
+      "name_display": "🔮 DeepSeek",
+      "description": "DeepSeek Coder / Chat 系列模型，性价比高",
+      "config": {
+        "apiKey": "${DEEPSEEK_API_KEY}",
+        "baseURL": "https://api.deepseek.com/v1",
+        "model": "deepseek-coder",
+        "timeout": 60000
+      }
+    },
+    "groq": {
+      "enabled": false,
+      "provider": "openai",
+      "name": "Groq",
+      "name_display": "⚡ Groq",
+      "description": "Groq 推理速度快，适合实时应用",
+      "config": {
+        "apiKey": "${GROQ_API_KEY}",
+        "baseURL": "https://api.groq.com/openai/v1",
+        "model": "llama-3.1-70b-versatile",
+        "timeout": 60000
+      }
+    },
+    "zhipu": {
+      "enabled": false,
+      "provider": "openai",
+      "name": "智谱 GLM",
+      "name_display": "🌐 智谱",
+      "description": "智谱 AI GLM-4 系列模型",
+      "config": {
+        "apiKey": "${ZHIPU_API_KEY}",
+        "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4",
+        "timeout": 60000
+      }
+    }
+  },
+  "dispatch": {
+    "mode": "parallel",
+    "timeout": 300000,
+    "parallelLimit": 3,
+    "compareResults": true,
+    "selectBest": true,
+    "retryOnFailure": true,
+    "maxRetries": 2
+  },
+  "logging": {
+    "level": "info",
+    "showProgress": true,
+    "showQualityScores": true,
+    "showTokenUsage": true
+  },
+  "cache": {
+    "enabled": true,
+    "ttl": 3600000,
+    "maxSize": 100
+  },
+  "workspace": {
+    "baseDir": "./workspace",
+    "createTimestamp": true,
+    "separateByAgent": true
+  }
+}

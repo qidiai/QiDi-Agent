@@ -1,0 +1,83 @@
+{
+  "scannedAt": 1782541346636,
+  "tools": [
+    {
+      "name": "open-code",
+      "displayName": "Open Code",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "opencode"
+    },
+    {
+      "name": "qoder",
+      "displayName": "Qoder",
+      "detected": true,
+      "status": "offline",
+      "version": null,
+      "installPath": "C:\\Program Files\\Qoder\\qoder.exe",
+      "command": "C:\\Program Files\\Qoder\\qoder.exe"
+    },
+    {
+      "name": "trae",
+      "displayName": "Trae CN",
+      "detected": true,
+      "status": "offline",
+      "version": null,
+      "installPath": "C:\\Users\\ASUS\\AppData\\Local\\Programs\\Trae CN\\bin\\trae-cn.cmd",
+      "command": "C:\\Users\\ASUS\\AppData\\Local\\Programs\\Trae CN\\bin\\trae-cn.cmd"
+    },
+    {
+      "name": "openclaw",
+      "displayName": "OpenClaw",
+      "detected": true,
+      "status": "online",
+      "version": "unknown",
+      "installPath": "C:\\Users\\ASUS\\AppData\\Roaming\\npm\\openclaw",
+      "command": "openclaw"
+    },
+    {
+      "name": "atom-code",
+      "displayName": "AtomCode",
+      "detected": true,
+      "status": "online",
+      "version": "unknown",
+      "installPath": "C:\\Users\\ASUS\\AppData\\Local\\AtomCode\\atomcode.exe",
+      "command": "atomcode"
+    },
+    {
+      "name": "hermes-agent",
+      "displayName": "Hermes Agent",
+      "detected": true,
+      "status": "offline",
+      "version": null,
+      "installPath": "C:\\Users\\ASUS\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\hermes.exe",
+      "command": "hermes"
+    },
+    {
+      "name": "claude-code",
+      "displayName": "Claude Code",
+      "detected": true,
+      "status": "online",
+      "version": "unknown",
+      "installPath": "C:\\Users\\ASUS\\AppData\\Roaming\\npm\\claude",
+      "command": "claude"
+    },
+    {
+      "name": "mimo-code",
+      "displayName": "Mimo Code",
+      "detected": true,
+      "status": "online",
+      "version": "unknown",
+      "installPath": "C:\\Users\\ASUS\\AppData\\Roaming\\npm\\mimo",
+      "command": "mimo"
+    }
+  ],
+  "registered": [
+    "atom-code",
+    "openclaw",
+    "claude-code",
+    "mimo-code"
+  ]
+}

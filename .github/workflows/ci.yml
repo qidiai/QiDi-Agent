@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: |
+          node --check src/cli/index.js
+          node --check src/core/TaskOrchestrator.js
+          node --check src/core/ContractAssembler.js
+          node --check src/core/WebUIServer.js
+          node --check src/core/TaskRouter.js
+          node --check src/core/ExecutionModeManager.js
+          node --check src/core/MultiAgentDispatcher.js
+          node --check src/core/ToolScanner.js
+          node --check src/adapters/BaseToolAdapter.js
+          node --check src/providers/OllamaProvider.js
+          node --check src/providers/OpenAIProvider.js
+          node --check src/providers/AnthropicProvider.js
+        shell: bash
+
+      - name: Run tests
+        run: npm test
+        env:
+          LOG_LEVEL: silent
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: test/reports/
+          retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Check for console.log debug leftovers
+        run: |
+          count=$(grep -r "console\.log\(" src/ --include="*.js" -c || true)
+          if [ "$count" -gt "0" ]; then
+            echo "::warning::Found $count console.log() calls in src/ — consider using logger"
+          fi

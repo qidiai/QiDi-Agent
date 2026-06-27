@@ -1,0 +1,15 @@
+feat: Qidi Agent v1.0.0 - 多AI编程工具统一编排与协作平台
+
+- 双执行模式：隐私模式(本地Ollama拆分/质检) + 高质量模式(云端AI拆分/质检/合并)
+- 任务路由引擎：round_robin/capability/manual/broadcast 4种策略
+- 契约拼装引擎：7语言(C/Python/JS/TS/Java/Go/Rust)静态契约提取+AI辅助
+- 8个工具适配器：Claude Code/Open Code/OpenClaw/Qoder/Hermes/AtomCode/Mimo/Trae
+- 3个LLM Provider：Ollama/OpenAI(兼容DeepSeek/Groq/GLM)/Anthropic Claude
+- Web UI管理界面：8页面(Dashboard/编程控制台/工具管理/模型管理/路由/Token/报告/任务)
+- CLI 13个命令：run/multi/scan/connect/agents/check/list/reports/report/context/config/web/help
+- 安全修复：路径穿越防护/命令注入防护/shell:false+escapeShellArg/.gitignore补全
+- 正确性修复：Anthropic变量遮蔽/OpenAI双重reject/契约字段漏合并/Trae适配器卡死
+- 开源配套：CONTRIBUTING.md/CODE_OF_CONDUCT.md/CHANGELOG.md/PR模板/Issue模板
+- 测试：53/53通过(100%,等级S)
+
+Co-Authored-By: AtomCode (GLM-5.2) <noreply@atomgit.com>

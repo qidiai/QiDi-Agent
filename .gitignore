@@ -1,0 +1,91 @@
+# ==========================================
+# QiDi-Agent .gitignore
+# ==========================================
+
+# 🚨 敏感数据 - 禁止提交
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# 🚨 缓存与临时数据 - 禁止提交
+cache/
+*.cache
+*.tmp
+temp/
+tmp/
+
+# 🚨 内存与会话数据 - 禁止提交
+memory/
+*.session
+sessions/
+
+# 🚨 工作空间数据 - 禁止提交
+workspace/
+workspaces/
+output/
+outputs/
+*.log
+
+# 🚨 测试报告 - 禁止提交
+test/reports/*.json
+test/*_workspace/
+test_e2e_workspace/
+*.test.results
+
+# ==========================================
+# Node.js
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ==========================================
+# IDE
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==========================================
+# 系统文件
+# ==========================================
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# 运行时生成
+# ==========================================
+logs/
+*.pid
+.pid
+
+# ==========================================
+# 临时测试/调试/演示产物
+# ==========================================
+ab_compare.js
+ab_prompt.txt
+cifar10_output_v2.txt
+demo_e2e.js
+demo_output/
+demo_prompts/
+smoke_*.txt
+test_out*.txt
+test_output/
+test_multi_task_workspace/
+tmp_*/
+测评报告_AtomCode.md
+复测报告_AtomCode.md
+最终检测报告_AtomCode.md
+SCORE_REPORT.md
+ANALYSIS_REPORT.md
