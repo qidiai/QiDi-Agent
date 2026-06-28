@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const logger = require('./Logger')('VersionManager');
 
 class VersionManager {
   constructor(options = {}) {
@@ -193,7 +194,7 @@ class VersionManager {
       
       fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
     } catch (e) {
-      console.warn('记录版本历史失败:', e.message);
+      logger.warn('记录版本历史失败:', e.message);
     }
   }
 

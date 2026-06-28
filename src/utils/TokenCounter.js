@@ -17,9 +17,10 @@ class TokenCounter {
   }
 
   estimateTokens(text) {
-    if (!text) return 0;
+    if (text == null) return 0;
     
-    const textStr = typeof text === 'string' ? text : JSON.stringify(text);
+    const textStr = typeof text === 'string' ? text : '';
+    if (!textStr) return 0;
     
     const chineseChars = (textStr.match(/[\u4e00-\u9fff]/g) || []).length;
     const englishWords = (textStr.match(/[a-zA-Z]+/g) || []).length;

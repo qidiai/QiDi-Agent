@@ -172,6 +172,7 @@ class TaskRouter {
         task,
         adapter: result.adapter,
         reason: result.reason,
+        isBroadcast: result.isBroadcast,
         strategy: this.options.strategy
       });
     }

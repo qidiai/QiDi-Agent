@@ -365,5 +365,71 @@ node src/cli/index.js list
 
 ---
 
-*文档生成时间：2026-06-26*
-*项目版本：v0.1.0*
+## 八、v1.0.0 新增模块（2026-06-28）
+
+### 8.1 InteractiveSession（交互式编程会话）
+
+**文件**：`src/cli/InteractiveSession.js`
+
+独立封装的交互式 REPL，替代原 `interactive` 命令内联的 readline 逻辑。
+
+**职责**：
+- 多行任务输入（`;` 触发，空行/`;` 提交，`.cancel` 取消）
+- 命令历史持久化（`~/.qidi/history`，最多 200 条，readline 原生支持 ↑↓ 翻阅）
+- 上下文记忆持久化（`~/.qidi/session.json`：最近任务、最近报告 ID）
+- Tab 命令补全
+- 软中断 Ctrl+C（首次取消当前输入/任务，二次退出）
+- 任务实时进度（订阅 TaskOrchestrator 事件，spinner 动态更新文案）
+- 产出文件预览（任务完成后列出 workspace 中的代码文件）
+- 内嵌文件查看 `view <path>`（带行号，限 200 行）
+- 命令快捷方式：`scan`/`status`/`tools`/`mode`/`provider`/`tasks`/`reports`/`report`/`context`/`ls`/`view`/`pwd`/`history`/`reset`/`clear`
+
+**与其他模块的关系**：
+- 依赖 `TaskOrchestrator` 执行任务
+- 依赖 `ToolScanner` + `AdapterFactory` 扫描工具
+- 依赖 `ProviderFactory` 获取模型提供商
+- 依赖 `FileManager` 进行文件列表/查看
+- 不修改任何核心模块，仅作为 CLI 表层封装
+
+### 8.2 文件管理 REST API
+
+**文件**：`src/core/WebUIServer.js`（新增 `_resolveSafe` / `_listFiles` / `_readFile` / `_writeFile` / `_renameFile` / `_deleteFile` / `_makeDir` / `_walkDir` / `_detectLang`）
+
+**设计原则**：
+- **统一入口**：所有文件操作走 `/api/files/*`，废弃散落的私有路径
+- **安全优先**：`_resolveSafe` 强制路径必须 resolve 后仍在 `workspaceDir` 内，防穿越
+- **二进制感知**：`_readFile` 检测 NUL 字节，二进制以 base64 传输，前端只读
+- **语言检测**：`_detectLang` 按扩展名映射语言，供前端高亮
+- **原文件路由兼容**：`/api/files/view` 复用 `_resolveSafe`，保持旧前端可用
+
+**REST 端点**：`GET /api/files`、`GET /api/files/read`、`POST /api/files/write`、`POST /api/files/rename`、`POST /api/files/delete`、`POST /api/files/mkdir`、`POST /api/files/upload`、`GET /api/files/download`、`GET /api/files/view`（兼容）
+
+### 8.3 文件管理前端页面
+
+**文件**：`public/index.html`（新增 `#page-files`）、`public/js/app.js`（新增 `files*` 系列函数）、`public/css/style.css`（新增 `.files-list` / `.code-editor` / `.upload-drop-zone` / `.template-tag` 等）
+
+**能力**：
+- 路径导航栏 + 递归开关 + 文件计数
+- 左栏文件列表（文件夹/文件图标、大小、点击进入或打开）
+- 右栏带行号编辑器（Tab 缩进、Ctrl+S 保存、二进制只读）
+- 新建文件/新建目录/上传/下载/删除（删除二次确认）
+- 编程控制台的产出文件卡片新增"✏️ 编辑"按钮可跳转本页
+
+### 8.4 编程控制台增强
+
+**文件**：`public/index.html`（重写 `#page-console`）、`public/js/app.js`（新增 `updateTaskEditor` / `applyTemplate` / `toggleMultiline` / `handleUploadedFiles` / `saveTaskToWorkspace` / `copyOutput` / `downloadAllOutputFiles` 等）
+
+**新增能力**：
+- 带行号的任务编辑器（Tab 缩进、行列/字数实时提示）
+- 快捷任务模板（6 个常用任务一键填充）
+- 文件上传区（拖拽 + 点击，写入 `uploads/`）
+- 多行模式切换
+- 从工作目录载入已有文件作为任务上下文
+- "存为任务"保存到 `tasks/task_<ts>.md`
+- 执行结果"复制"按钮
+- 产出文件"全部下载"
+
+---
+
+*文档生成时间：2026-06-28*
+*项目版本：v1.0.0*

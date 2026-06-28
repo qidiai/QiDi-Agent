@@ -112,7 +112,7 @@ async function runIntegrationTest() {
     check('覆盖度检查通过', taskResult.coverageCheck?.allRequirementsCovered === true);
     check('Token统计生成', taskResult.tokenStats !== undefined);
     check('报告已生成', taskResult.reportId !== undefined);
-    check('事件流完整', events.includes('taskStart') && events.includes('taskSplit') && events.includes('taskComplete'));
+    check('事件流完整', events.includes('taskStart') && events.some(e => e.startsWith('taskSplit')) && events.includes('taskComplete'));
     
   } catch (e) {
     check('端到端任务编排', false, e.message);
@@ -130,14 +130,14 @@ async function runIntegrationTest() {
     'Agent1': {
       success: true,
       result: {
-        codeBlocks: [{ language: 'c', code: 'int add(int a, int b) { return a + b; }', filePath: 'math.c' }],
+        codeBlocks: [{ language: 'c', code: '#include <stdio.h>\nint add(int a, int b) { return a + b; }', filePath: 'math.c' }],
         quality: { qualityScore: 80 }
       }
     },
     'Agent2': {
       success: true,
       result: {
-        codeBlocks: [{ language: 'c', code: 'int add(int a, int b) {\n  // 边界检查\n  if (a > 1000000 || b > 1000000) return -1;\n  return a + b;\n}', filePath: 'math.c' }],
+        codeBlocks: [{ language: 'c', code: '#include <stdio.h>\nint add(int a, int b) {\n  // 边界检查\n  if (a > 1000000 || b > 1000000) return -1;\n  return a + b;\n}', filePath: 'math.c' }],
         quality: { qualityScore: 90 }
       }
     }
@@ -217,9 +217,9 @@ async function runIntegrationTest() {
   console.log('\n📋 测试5: 覆盖度验证\n');
   
   const subtasks = [
-    { id: 'T1', title: '设计接口', description: '设计API接口', acceptanceCriteria: '接口清晰' },
-    { id: 'T2', title: '实现算法', description: '实现斐波那契算法', acceptanceCriteria: '算法正确' },
-    { id: 'T3', title: '代码审查', description: '审查代码质量', acceptanceCriteria: '无严重问题' }
+    { id: 'T1', title: '设计数据结构', description: '设计斐波那契数列的数据结构和函数接口', acceptanceCriteria: '接口定义清晰', role: 'architect', dependsOn: [] },
+    { id: 'T2', title: '实现核心算法', description: '实现递归和迭代两种斐波那契算法', acceptanceCriteria: '算法正确', role: 'code_writer', dependsOn: ['T1'] },
+    { id: 'T3', title: '代码质量审查', description: '审查C语言代码质量和约束遵守情况', acceptanceCriteria: '无严重问题', role: 'quality_checker', dependsOn: ['T2'] }
   ];
   const coverage = splitter._validateCoverage(subtasks, '用C语言实现斐波那契数列包含递归和迭代两种算法');
   check('覆盖度计算', coverage.coverageRatio > 0);

@@ -19,6 +19,8 @@ class CacheStore {
 
     this._ensureDir(this.persistDir);
     this._load();
+    this._saveTimer = null;
+    this._pendingSave = false;
   }
 
   _ensureDir(dir) {
@@ -103,7 +105,7 @@ class CacheStore {
       this._evictOldest();
     }
 
-    this._save();
+    this._debouncedSave();
     return cacheKey;
   }
 
@@ -144,15 +146,19 @@ class CacheStore {
     return null;
   }
 
-  _findSimilar(key) {
+  _findSimilar(key, threshold) {
+    const thresholdVal = threshold != null ? threshold : this.similarityThreshold;
     const normalizedKey = this._normalizeText(key);
     let bestMatch = null;
     let bestSimilarity = 0;
-
+    
+    let iterations = 0;
     for (const [cacheKey, entry] of this.cache.entries()) {
+      if (++iterations > 5000) break; // 防止大缓存时完全遍历
+      if (!entry || !entry.originalKey) continue;
       const similarity = this._calculateSimilarity(key, entry.originalKey);
       
-      if (similarity >= this.similarityThreshold && similarity > bestSimilarity) {
+      if (similarity >= thresholdVal && similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = {
           response: entry.response,
@@ -188,14 +194,14 @@ class CacheStore {
   delete(key) {
     const cacheKey = this._hash(key);
     const result = this.cache.delete(cacheKey);
-    this._save();
+    this._debouncedSave();
     return result;
   }
 
   clear() {
     this.cache.clear();
     this.stats = { hits: 0, misses: 0, savedTokens: 0 };
-    this._save();
+    this._debouncedSave();
   }
 
   getStats() {
@@ -224,6 +230,29 @@ class CacheStore {
     return report;
   }
 
+  _debouncedSave() {
+    if (this._pendingSave) return;
+    this._pendingSave = true;
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this._pendingSave = false;
+      this._saveTimer = null;
+      this._save();
+    }, 1000);
+  }
+
+  /**
+   * 强制立即持久化
+   */
+  flush() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._pendingSave = false;
+    this._save();
+  }
+
   pruneExpired() {
     const now = Date.now();
     let pruned = 0;
@@ -235,12 +264,21 @@ class CacheStore {
       }
     }
 
-    this._save();
+    this._debouncedSave();
     return pruned;
   }
 
+  /**
+   * 查找与给定文本语义相似的缓存条目
+   */
+  findSimilar(text, threshold) {
+    return this._findSimilar(text, threshold);
+  }
+
   setTaskResponse(taskId, agentName, task, response, metadata = {}) {
-    const key = `${agentName}:${taskId}:${task.title}:${task.description.substring(0, 50)}`;
+    const desc = typeof task === 'object' && task ? (task.description || task.title || JSON.stringify(task).substring(0, 50)) : String(task || '').substring(0, 50);
+    const title = typeof task === 'object' && task ? (task.title || task.description || '') : '';
+    const key = `${agentName}:${taskId}:${String(title).substring(0, 50)}:${String(desc).substring(0, 50)}`;
     return this.set(key, response, {
       ...metadata,
       taskId,
@@ -249,7 +287,9 @@ class CacheStore {
   }
 
   getTaskResponse(taskId, agentName, task) {
-    const key = `${agentName}:${taskId}:${task.title}:${task.description.substring(0, 50)}`;
+    const desc = typeof task === 'object' && task ? (task.description || task.title || JSON.stringify(task).substring(0, 50)) : String(task || '').substring(0, 50);
+    const title = typeof task === 'object' && task ? (task.title || task.description || '') : '';
+    const key = `${agentName}:${taskId}:${String(title).substring(0, 50)}:${String(desc).substring(0, 50)}`;
     return this.get(key);
   }
 }

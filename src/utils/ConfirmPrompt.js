@@ -6,6 +6,7 @@
  */
 
 const readline = require('readline');
+const logger = require('./Logger')('ConfirmPrompt');
 
 class ConfirmPrompt {
   constructor(options = {}) {
@@ -33,7 +34,7 @@ class ConfirmPrompt {
     }
     
     const choices = defaultChoice ? '[Y/n]' : '[y/N]';
-    console.log(`  ${question} ${choices}: `);
+    logger.info(`${question} ${choices}: `);
     return defaultChoice;
   }
 
@@ -72,7 +73,7 @@ class ConfirmPrompt {
       return defaultIndex;
     }
 
-    console.log(`\n  📋 ${question}`);
+    logger.info(`\n  📋 ${question}`);
     options.forEach((opt, i) => {
       const marker = i === defaultIndex ? '→' : ' ';
       console.log(`    ${marker} ${i + 1}. ${opt.label || opt.name || opt}`);

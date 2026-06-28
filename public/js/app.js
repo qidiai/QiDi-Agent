@@ -1,11 +1,18 @@
 let currentPage = 'dashboard';
+let currentFilesTab = 'files';
 let dashboardData = null;
 let toolsData = [];
 let agentsData = [];
+let conversationHistory = [];
+let currentTaskMsgId = null;
+let customSystemPrompt = null;
+let chatSessionId = null;
 let reportsData = [];
 let tokensData = [];
 
 document.addEventListener('DOMContentLoaded', () => {
+  // 从 localStorage 恢复聊天记录
+  restoreChatFromStorage();
   initNavigation();
   loadAllData();
   setInterval(loadDashboard, 30000);
@@ -39,13 +46,13 @@ function switchPage(page) {
 
   const titles = {
     dashboard: '仪表盘',
-    console: '编程控制台',
+    console: 'Agent',
     tools: '工具管理',
     agents: '模型管理',
     routing: '智能路由',
     tokens: 'Token 统计',
-    reports: '报告中心',
-    tasks: '任务管理'
+    tasks: '任务管理',
+    files: '文件与报告'
   };
   document.getElementById('page-title').textContent = titles[page] || '仪表盘';
 
@@ -55,8 +62,11 @@ function switchPage(page) {
   if (page === 'agents') loadAgents();
   if (page === 'routing') loadRoutingConfig();
   if (page === 'tokens') loadTokens();
-  if (page === 'reports') loadReports();
   if (page === 'tasks') loadTasks();
+  if (page === 'files') {
+    switchFilesTab(currentFilesTab || 'files');
+    loadReports();
+  }
 }
 
 async function loadAllData() {
@@ -190,8 +200,11 @@ async function loadTools() {
 
 function renderToolsFull(tools) {
   const container = document.getElementById('tools-full');
+  // 同步 Agent 页底部工具数量徽标
+  const countEl = document.getElementById('tools-panel-count');
+  if (countEl) countEl.textContent = `${(tools || []).length} 个`;
   if (!tools || tools.length === 0) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">暂无工具</div><div class="empty-desc">点击上方"扫描工具"按钮检测已安装的AI工具</div></div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">暂无工具</div><div class="empty-desc">点击上方"扫描本机工具"按钮检测已安装的AI工具</div></div>';
     return;
   }
 
@@ -769,11 +782,10 @@ function refreshData() {
   loadAllData();
   const page = currentPage;
   if (page !== 'dashboard') {
-    if (page === 'tools') loadTools();
     if (page === 'agents') loadAgents();
     if (page === 'tokens') loadTokens();
-    if (page === 'reports') loadReports();
     if (page === 'tasks') loadTasks();
+    if (page === 'files') switchFilesTab(currentFilesTab || 'files');
   }
 }
 
@@ -885,28 +897,12 @@ let currentMode = 'privacy';
 
 function selectMode(mode) {
   currentMode = mode;
-  
-  document.querySelectorAll('.mode-card').forEach(card => {
-    const cardMode = card.getAttribute('data-mode');
-    if (cardMode === mode) {
-      card.classList.add('mode-selected');
-      if (mode === 'privacy') {
-        card.style.borderColor = '#10b981';
-        card.style.background = '#ecfdf5';
-        card.querySelector('div:nth-child(2)').style.color = '#065f46';
-        card.querySelector('div:nth-child(3)').style.color = '#059669';
-      } else {
-        card.style.borderColor = '#6366f1';
-        card.style.background = '#eef2ff';
-        card.querySelector('div:nth-child(2)').style.color = '#3730a3';
-        card.querySelector('div:nth-child(3)').style.color = '#4f46e5';
-      }
+  // 新布局：.mode-pill 胶囊开关
+  document.querySelectorAll('.mode-pill').forEach(pill => {
+    if (pill.dataset.mode === mode) {
+      pill.classList.add('mode-pill-active');
     } else {
-      card.classList.remove('mode-selected');
-      card.style.borderColor = '#e5e7eb';
-      card.style.background = '#fff';
-      card.querySelector('div:nth-child(2)').style.color = '#374151';
-      card.querySelector('div:nth-child(3)').style.color = '#6b7280';
+      pill.classList.remove('mode-pill-active');
     }
   });
 }
@@ -939,22 +935,27 @@ async function recommendMode() {
 }
 
 async function initConsole() {
-  const modelSelect = document.getElementById('console-model');
-  
+  const badge = document.getElementById('console-models-badge');
+  if (!badge) return;
+
   try {
     const res = await fetch('/api/agents');
     const data = await res.json();
-    const enabledModels = data.agents.filter(a => a.enabled);
-    
-    modelSelect.innerHTML = enabledModels.map(a => 
-      `<option value="${a.name}">${a.displayName || a.name} ${a.model ? `(${a.model})` : ''}</option>`
-    ).join('');
-    
-    if (enabledModels.length === 0) {
-      modelSelect.innerHTML = '<option value="" disabled>没有启用的模型</option>';
+    const agents = data.agents || [];
+    const enabled = agents.filter(a => a.enabled);
+    if (enabled.length === 0) {
+      badge.innerHTML = '<span style="font-size:11px;color:#dc2626;">⚠️ 无启用模型，请到「模型管理」启用</span>';
+      badge.dataset.empty = '1';
+    } else {
+      badge.dataset.empty = '0';
+      badge.innerHTML = enabled.map(a => {
+        const name = a.displayName || a.name;
+        const tag = a.isLocal ? '本地' : '云端';
+        return `<span style="padding:3px 8px;background:#e0e7ff;color:#3730a3;border-radius:10px;font-size:11px;">${name} · ${tag}</span>`;
+      }).join('');
     }
   } catch (e) {
-    modelSelect.innerHTML = '<option value="" disabled>加载失败</option>';
+    badge.innerHTML = '<span style="font-size:11px;color:#dc2626;">加载失败</span>';
   }
 }
 
@@ -964,46 +965,59 @@ async function executeTask() {
     alert('请输入任务描述');
     return;
   }
-  
-  const modelSelect = document.getElementById('console-model');
-  const selectedModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
-  
+
+  const badge = document.getElementById('console-models-badge');
+  if (badge && badge.dataset.empty === '1') {
+    appendChatMessage('system', '⚠️ 当前无启用模型，请到「模型管理」页启用至少一个模型');
+    return;
+  }
+
   const constraints = {};
   if (document.getElementById('const-c').checked) constraints.language = 'C语言';
   if (document.getElementById('const-python').checked) constraints.language = 'Python';
   if (document.getElementById('const-console').checked) constraints.platform = '控制台';
   if (document.getElementById('const-web').checked) constraints.platform = 'Web';
-  
+
   document.getElementById('console-status').className = 'status-badge status-busy';
   document.getElementById('console-status').textContent = '执行中';
-  
-  const outputEl = document.getElementById('console-output');
-  outputEl.innerHTML = '<div style="color: #6b7280;">🚀 正在启动任务...\n</div>';
-  
+
+  // 在聊天中追加用户指令和任务消息
+  const msgId = `task-msg-${Date.now()}`;
+  currentTaskMsgId = msgId;
+  appendChatMessage('user', escapeHtml(task));
+  appendChatMessage('task', '🚀 正在启动任务...', msgId);
+
   try {
     const res = await fetch('/api/tasks/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         task,
-        models: selectedModels.length > 0 ? selectedModels : ['ollama'],
         constraints,
-        mode: currentMode  // 执行模式
+        mode: currentMode
       })
     });
-    
+
     const data = await res.json();
-    
+
     if (data.success) {
       currentTaskId = data.taskId;
       startPolling(data.taskId);
     } else {
-      outputEl.innerHTML = `<div style="color: #dc2626;">❌ 启动失败: ${data.message || '未知错误'}</div>`;
+      const msgEl = document.getElementById(msgId);
+      if (msgEl) {
+        const bubble = msgEl.querySelector('.chat-bubble');
+        if (bubble) bubble.innerHTML = `❌ 启动失败: ${escapeHtml(data.message || '未知错误')}`;
+      }
       document.getElementById('console-status').className = 'status-badge status-error';
       document.getElementById('console-status').textContent = '失败';
     }
   } catch (e) {
-    outputEl.innerHTML = `<div style="color: #dc2626;">❌ 网络错误: ${e.message}</div>`;
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      const bubble = msgEl.querySelector('.chat-bubble');
+      if (bubble) bubble.innerHTML = `❌ 网络错误: ${escapeHtml(e.message)}`;
+    }
     document.getElementById('console-status').className = 'status-badge status-error';
     document.getElementById('console-status').textContent = '失败';
   }
@@ -1011,27 +1025,28 @@ async function executeTask() {
 
 function startPolling(taskId) {
   if (consoleInterval) clearInterval(consoleInterval);
-  
+
   consoleInterval = setInterval(async () => {
     try {
       const res = await fetch(`/api/tasks/${taskId}/status`);
       const data = await res.json();
-      
+
       if (data.error) {
         clearInterval(consoleInterval);
         return;
       }
-      
+
       updateConsoleOutput(data);
-      
+
       if (data.status === 'completed' || data.status === 'failed') {
         clearInterval(consoleInterval);
         consoleInterval = null;
-        
+
         if (data.status === 'completed') {
           document.getElementById('console-status').className = 'status-badge status-online';
           document.getElementById('console-status').textContent = '完成';
           updateOutputFiles(data.files || []);
+          currentTaskMsgId = null;
         } else {
           document.getElementById('console-status').className = 'status-badge status-error';
           document.getElementById('console-status').textContent = '失败';
@@ -1044,38 +1059,42 @@ function startPolling(taskId) {
 }
 
 function updateConsoleOutput(data) {
-  const outputEl = document.getElementById('console-output');
+  const msgEl = document.getElementById(currentTaskMsgId);
+  if (!msgEl) return;
+
+  const bubble = msgEl.querySelector('.chat-bubble');
+  if (!bubble) return;
+
   const output = data.output?.join('') || '';
-  
   let html = '';
-  
+
   if (data.status === 'running') {
-    html += '<div style="color: #6b7280;">⏳ 执行中...</div>\n';
+    html += '⏳ 执行中...\n';
   }
-  
+
   html += output.split('\n').map(line => {
     if (line.startsWith('✅')) {
-      return `<div style="color: #059669;">${escapeHtml(line)}</div>`;
+      return `<span style="color:#059669;">${escapeHtml(line)}</span>`;
     } else if (line.startsWith('❌')) {
-      return `<div style="color: #dc2626;">${escapeHtml(line)}</div>`;
+      return `<span style="color:#dc2626;">${escapeHtml(line)}</span>`;
     } else if (line.startsWith('⚠️')) {
-      return `<div style="color: #d97706;">${escapeHtml(line)}</div>`;
+      return `<span style="color:#d97706;">${escapeHtml(line)}</span>`;
     } else {
-      return `<div>${escapeHtml(line)}</div>`;
+      return escapeHtml(line);
     }
-  }).join('');
-  
+  }).join('<br>');
+
   if (data.progress) {
-    html += `<div style="margin-top: 12px; color: #6b7280;">
-      进度: ${data.progress}%
-      <div style="height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin-top: 4px;">
-        <div style="height: 100%; background: #ffd93d; width: ${data.progress}%; transition: width 0.3s;"></div>
+    html += `<div style="margin-top:12px;color:#6b7280;">进度: ${data.progress}%
+      <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-top:4px;">
+        <div style="height:100%;background:#ffd93d;width:${data.progress}%;transition:width 0.3s;"></div>
       </div>
     </div>`;
   }
-  
-  outputEl.innerHTML = html;
-  outputEl.scrollTop = outputEl.scrollHeight;
+
+  bubble.innerHTML = html;
+  const outputEl = document.getElementById('console-output');
+  if (outputEl) outputEl.scrollTop = outputEl.scrollHeight;
 }
 
 function updateOutputFiles(files) {
@@ -1090,15 +1109,44 @@ function updateOutputFiles(files) {
   
   countEl.textContent = `${files.length} 个文件`;
   
-  container.innerHTML = files.map(f => `
-    <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
-      <div style="font-weight: 500; margin-bottom: 4px;">${escapeHtml(f.name)}</div>
-      <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px;">
-        ${formatSize(f.size)} | ${new Date(f.modified).toLocaleString()}
+  container.innerHTML = files.map(f => {
+    const relPath = (f.path || f.name).replace(/\\/g, '/');
+    const fileName = f.name || (relPath.split('/').pop() || relPath);
+    return `
+    <div class="output-file-card" data-path="${escapeHtml(relPath)}">
+      <div class="file-name">${fileIconFor(fileName)} ${escapeHtml(fileName)}</div>
+      <div style="font-size: 11px; color: #6b7280;">
+        ${formatSize(f.size || 0)} | ${f.modified ? new Date(f.modified).toLocaleString() : '-'}
       </div>
-      <button class="btn" style="font-size: 11px; padding: 4px 8px;" onclick="viewFile('${f.path.replace(/\\/g, '/')}')">查看</button>
-    </div>
-  `).join('');
+      ${relPath ? `<div style="font-size:10px;color:#9ca3af;word-break:break-all;">${escapeHtml(relPath)}</div>` : ''}
+      <div class="file-actions">
+        ${relPath ? `<button class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="viewFile('${escapeHtml(relPath)}')">👁️ 查看</button>` : ''}
+        ${relPath ? `<button class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="downloadOne('${escapeHtml(relPath)}')">📥 下载</button>` : ''}
+        ${relPath ? `<button class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="editInFiles('${escapeHtml(relPath)}')">✏️ 编辑</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function downloadOne(relPath) {
+  const a = document.createElement('a');
+  a.href = `/api/files/download?path=${encodeURIComponent(relPath)}`;
+  a.download = '';
+  a.click();
+}
+
+function editInFiles(relPath) {
+  // 跳到文件管理页面并打开该文件
+  switchPage('files');
+  const idx = relPath.lastIndexOf('/');
+  if (idx > 0) {
+    const dir = relPath.slice(0, idx);
+    document.getElementById('files-path').value = dir;
+    filesCurrentPath = dir;
+    filesRefresh().then(() => setTimeout(() => filesOpenFile(relPath), 200));
+  } else {
+    filesRefresh().then(() => setTimeout(() => filesOpenFile(relPath), 200));
+  }
 }
 
 function escapeHtml(text) {
@@ -1109,21 +1157,13 @@ function escapeHtml(text) {
 
 function clearConsole() {
   document.getElementById('console-task').value = '';
-  document.getElementById('console-output').innerHTML = `
-    <div class="empty-state" style="padding: 40px;">
-      <div class="empty-icon">💻</div>
-      <div class="empty-text">等待任务输入</div>
-      <div class="empty-desc">在左侧输入任务描述并点击执行</div>
-    </div>
-  `;
-  document.getElementById('console-status').className = 'status-badge status-idle';
-  document.getElementById('console-status').textContent = '空闲';
+  clearOutput();
   document.getElementById('output-files').innerHTML = `
-    <div class="empty-state" style="grid-column: 1/-1; padding: 20px;">
-      <div class="empty-text">暂无生成文件</div>
-    </div>
-  `;
-  document.getElementById('file-count').textContent = '0 个文件';
+    <div class="empty-state" style="grid-column:1/-1;padding:16px;"><div class="empty-text" style="font-size:12px;">暂无生成文件</div></div>`;
+  document.getElementById('file-count').textContent = '0 个';
+  uploadedFiles = [];
+  renderUploadList();
+  updateTaskEditor();
   currentTaskId = null;
 }
 
@@ -1209,3 +1249,927 @@ function getTaskStatusText(status) {
   };
   return map[status] || status || '未知';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 编程控制台增强：行号编辑器、模板、上传、复制、存为任务
+// ═══════════════════════════════════════════════════════════════
+
+const TASK_TEMPLATES = [
+  { icon: '🐍', label: 'Web 服务器', text: '用 Python 写一个支持静态文件和 /api/time 接口的 Web 服务器，端口 8080' },
+  { icon: '🎮', label: '贪吃蛇', text: '用 C 语言写一个贪吃蛇游戏，支持键盘控制、计分、撞墙死亡' },
+  { icon: '🌐', label: 'REST API', text: '用 Node.js + Express 写一个待办事项 REST API，支持增删改查，内存存储' },
+  { icon: '🧮', label: '排序算法', text: '用 Python 实现快排、归并、堆排序，并写一个对比基准测试' },
+  { icon: '📄', label: '爬虫', text: '用 Python 写一个爬虫，抓取某新闻网站首页标题和链接，保存为 JSON' },
+  { icon: '🧪', label: '单元测试', text: '为一个给定的字符串工具类写完整的单元测试（含边界用例）' }
+];
+
+let multilineMode = false;
+let uploadedFiles = []; // [{name, content, size}]
+let currentEditFile = null;
+let filesEditorDirty = false; // 编辑器脏标记 // 当前在文件管理页面打开的文件路径
+
+function initTaskTemplates() {
+  // 新布局：模板放进 popover
+  const pop = document.getElementById('chat-tpl-popover');
+  if (pop) {
+    pop.innerHTML = TASK_TEMPLATES.map((t, i) =>
+      `<div class="chat-tpl-item" onclick="applyTemplate(${i})"><span class="tpl-icon">${t.icon}</span><span>${t.label}</span></div>`
+    ).join('');
+  }
+}
+
+function toggleTplPopover() {
+  const pop = document.getElementById('chat-tpl-popover');
+  if (!pop) return;
+  pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyTemplate(i) {
+  const t = TASK_TEMPLATES[i];
+  if (!t) return;
+  document.getElementById('console-task').value = t.text;
+  updateTaskEditor();
+  const pop = document.getElementById('chat-tpl-popover');
+  if (pop) pop.style.display = 'none';
+}
+
+function updateTaskEditor() {
+  const ta = document.getElementById('console-task');
+  if (!ta) return;
+  const text = ta.value;
+  // 字数
+  const cc = document.getElementById('task-char-count');
+  if (cc) cc.textContent = `${text.length} 字`;
+  // 自适应高度
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(200, Math.max(44, ta.scrollHeight)) + 'px';
+  // 按钮启用态
+  const send = document.getElementById('chat-send-btn');
+  if (send) send.disabled = text.trim().length === 0;
+  const exec = document.getElementById('chat-exec-btn');
+  if (exec) exec.disabled = text.trim().length === 0;
+}
+
+function toggleMultiline() {
+  multilineMode = !multilineMode;
+  const ta = document.getElementById('console-task');
+  if (multilineMode) {
+    ta.placeholder = '多行模式：自由换行，最后点「发送」提交全部内容';
+  } else {
+    ta.placeholder = '描述任务，Enter 发送 · Shift+Enter 换行 · 拖入/粘贴文件自动上传';
+  }
+}
+
+// 拖拽 + 粘贴 上传（绑定到输入框容器）
+function initUploadDropZone() {
+  const wrap = document.getElementById('chat-input-wrap');
+  if (!wrap) return;
+  ['dragenter', 'dragover'].forEach(ev => {
+    wrap.addEventListener(ev, e => {
+      e.preventDefault();
+      wrap.classList.add('dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    wrap.addEventListener(ev, e => {
+      e.preventDefault();
+      wrap.classList.remove('dragover');
+    });
+  });
+  wrap.addEventListener('drop', e => {
+    const files = e.dataTransfer?.files;
+    if (files && files.length) handleUploadedFiles(files);
+  });
+  // 粘贴文件（截图/复制文件）自动上传
+  const ta = document.getElementById('console-task');
+  if (ta) {
+    ta.addEventListener('paste', e => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const fileItems = [];
+      for (const it of items) {
+        if (it.kind === 'file') {
+          const f = it.getAsFile();
+          if (f) fileItems.push(f);
+        }
+      }
+      if (fileItems.length > 0) {
+        e.preventDefault();
+        handleUploadedFiles(fileItems);
+      }
+    });
+  }
+  // ＋ 按钮触发文件选择
+  const addBtn = document.getElementById('chat-add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      document.getElementById('task-file-input').click();
+    });
+  }
+  // ⚡ 模板按钮切换气泡
+  const tplBtn = document.getElementById('chat-tpl-btn');
+  if (tplBtn) {
+    tplBtn.addEventListener('click', toggleTplPopover);
+  }
+  // 点击气泡外关闭
+  document.addEventListener('click', e => {
+    const pop = document.getElementById('chat-tpl-popover');
+    const tplBtn = document.getElementById('chat-tpl-btn');
+    if (pop && pop.style.display === 'block' &&
+        !pop.contains(e.target) && e.target !== tplBtn) {
+      pop.style.display = 'none';
+    }
+  });
+}
+
+function onFileSelected(event) {
+  const files = event.target.files;
+  if (files && files.length) handleUploadedFiles(files);
+  event.target.value = '';
+}
+
+function handleUploadedFiles(fileList) {
+  const arr = Array.from(fileList);
+  arr.forEach(f => {
+    if (f.size > 2 * 1024 * 1024) {
+      alert(`文件 ${f.name} 超过 2MB，已跳过`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      uploadedFiles.push({ name: f.name, content: reader.result, size: f.size });
+      renderUploadList();
+    };
+    reader.onerror = () => alert(`读取 ${f.name} 失败`);
+    reader.readAsText(f);
+  });
+}
+
+function renderUploadList() {
+  const wrap = document.getElementById('upload-list');
+  if (!wrap) return;
+  if (uploadedFiles.length === 0) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    const addBtn = document.getElementById('chat-add-btn');
+    if (addBtn) addBtn.classList.remove('has-attachments');
+    return;
+  }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = uploadedFiles.map((f, i) =>
+    `<span class="chat-attachment">📄 ${escapeHtml(f.name)} <span style="color:#9ca3af;">${formatSize(f.size)}</span><span class="remove" onclick="removeUpload(${i})">✕</span></span>`
+  ).join('');
+  const addBtn = document.getElementById('chat-add-btn');
+  if (addBtn) addBtn.classList.add('has-attachments');
+}
+
+function clearOutput() {
+  conversationHistory = [];
+  currentTaskMsgId = null;
+  customSystemPrompt = null;
+  chatSessionId = null;
+  document.getElementById('console-output').innerHTML = `
+    <div class="chat-empty">
+      <div class="chat-empty-icon">🤖</div>
+      <div class="chat-empty-title">Agent 待命</div>
+      <div class="chat-empty-desc">在下方输入框描述需求，与 AI 对话沟通后点击「执行任务」按钮运行<br>支持拖入文件 / 粘贴文件 / 点击 ＋ 上传参考</div>
+    </div>`;
+  document.getElementById('console-status').className = 'status-badge status-idle';
+  document.getElementById('console-status').textContent = '空闲';
+  // 重置上下文用量指示器
+  const bar = document.getElementById('context-usage-bar');
+  const text = document.getElementById('context-usage-text');
+  if (bar) bar.style.width = '0%';
+  if (text) text.textContent = '';
+  // 清除 localStorage 的对话缓存
+  try { localStorage.removeItem('qidi_chat_history'); } catch (_) {}
+}
+
+function toggleOutputFiles() {
+  const body = document.getElementById('output-files-body');
+  const toggle = document.getElementById('output-files-toggle');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (toggle) toggle.textContent = open ? '展开 ▾' : '收起 ▴';
+}
+
+// Agent 页底部：工具管理折叠区
+function toggleToolsPanel() {
+  const body = document.getElementById('tools-panel-body');
+  const toggle = document.getElementById('tools-panel-toggle');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (toggle) toggle.textContent = open ? '展开 ▾' : '收起 ▴';
+  // 首次展开自动加载工具列表
+  if (!open && !body.dataset.loaded) {
+    loadTools();
+    body.dataset.loaded = '1';
+  }
+}
+
+// 文件与报告页：tab 切换
+function switchFilesTab(tab) {
+  currentFilesTab = tab;
+  const filesBtn = document.getElementById('tab-files-btn');
+  const reportsBtn = document.getElementById('tab-reports-btn');
+  const filesView = document.getElementById('files-view');
+  const reportsView = document.getElementById('reports-view');
+  if (!filesView || !reportsView) return;
+  if (tab === 'files') {
+    filesBtn.classList.add('tab-pill-active');
+    reportsBtn.classList.remove('tab-pill-active');
+    filesView.style.display = '';
+    reportsView.style.display = 'none';
+    filesRefresh();
+  } else {
+    reportsBtn.classList.add('tab-pill-active');
+    filesBtn.classList.remove('tab-pill-active');
+    filesView.style.display = 'none';
+    reportsView.style.display = '';
+    loadReports();
+  }
+}
+
+function removeUpload(i) {
+  uploadedFiles.splice(i, 1);
+  renderUploadList();
+}
+
+async function loadFileIntoTask() {
+  // 简易：让用户输入路径，载入到任务描述
+  const p = prompt('输入工作目录中的相对路径（例如 task_xxx/main.py）：');
+  if (!p) return;
+  try {
+    const res = await fetch(`/api/files/read?path=${encodeURIComponent(p)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      alert('载入失败: ' + (err.error || res.status));
+      return;
+    }
+    const data = await res.json();
+    if (data.binary) {
+      alert('二进制文件不能载入到任务描述');
+      return;
+    }
+    document.getElementById('console-task').value =
+      `请基于以下已有文件 ${p} 改进：\n\n\`\`\`\n${data.content}\n\`\`\`\n\n我的需求：`;
+    updateTaskEditor();
+  } catch (e) {
+    alert('载入失败: ' + e.message);
+  }
+}
+
+async function saveTaskToWorkspace() {
+  const text = document.getElementById('console-task').value.trim();
+  if (!text) {
+    alert('任务描述为空');
+    return;
+  }
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const relPath = `tasks/task_${ts}.md`;
+  try {
+    const res = await fetch('/api/files/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relPath, content: `# 任务\n\n${text}\n` })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`已保存到 ${relPath}`);
+    } else {
+      alert('保存失败: ' + (data.error || '未知错误'));
+    }
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+}
+
+function copyOutput() {
+  const text = document.getElementById('console-output').innerText;
+  navigator.clipboard.writeText(text).then(
+    () => alert('已复制到剪贴板'),
+    () => alert('复制失败，请手动选择文本')
+  );
+}
+
+// 聊天：发送消息给 AI
+async function sendMessage() {
+  const ta = document.getElementById('console-task');
+  const text = ta.value.trim();
+  if (!text) return;
+
+  ta.value = '';
+  updateTaskEditor();
+
+  // 处理 /角色 命令：设定自定义身份
+  if (text.startsWith('/角色 ')) {
+    const roleDesc = text.slice(4).trim();
+    if (roleDesc) {
+      customSystemPrompt = roleDesc;
+      appendChatMessage('system', `✅ 身份已更新为：${escapeHtml(roleDesc)}`);
+      conversationHistory = [];
+    }
+    return;
+  }
+
+  // 处理 /帮助 命令：介绍功能
+  if (text === '/帮助' || text === '/help') {
+    customSystemPrompt = null;
+    conversationHistory = [];
+    appendChatMessage('system', '⏳ 正在获取功能介绍...');
+    const thinkingId = `thinking-${Date.now()}`;
+    appendChatMessage('assistant', '🤔 思考中...', thinkingId);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: '你是谁？请介绍一下你的功能' }]
+        })
+      });
+      const data = await res.json();
+      const thinkingEl = document.getElementById(thinkingId);
+      if (thinkingEl) thinkingEl.remove();
+      if (data.success) {
+        conversationHistory.push({ role: 'user', content: '你是谁？请介绍一下你的功能' });
+        conversationHistory.push({ role: 'assistant', content: data.content });
+        const displayText = data.content + (data.model ? `<div style="font-size:10px;color:#9ca3af;margin-top:6px;">—— ${escapeHtml(data.model)}</div>` : '');
+        appendChatMessage('assistant', displayText);
+      } else {
+        appendChatMessage('system', `❌ ${escapeHtml(data.message)}`);
+      }
+    } catch (e) {
+      const thinkingEl = document.getElementById(thinkingId);
+      if (thinkingEl) thinkingEl.remove();
+      appendChatMessage('system', `❌ 网络错误: ${escapeHtml(e.message)}`);
+    }
+    return;
+  }
+
+  // 正常对话
+  conversationHistory.push({ role: 'user', content: text });
+  appendChatMessage('user', escapeHtml(text));
+
+  const thinkingId = `thinking-${Date.now()}`;
+  appendChatMessage('assistant', '🤔 思考中...', thinkingId);
+
+  try {
+    const body = { messages: conversationHistory };
+    if (customSystemPrompt) {
+      body.options = { systemPrompt: customSystemPrompt };
+    }
+    if (chatSessionId) {
+      body.sessionId = chatSessionId;
+    }
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    const thinkingEl = document.getElementById(thinkingId);
+    if (thinkingEl) thinkingEl.remove();
+
+    if (data.success) {
+      // 保存会话 ID 用于持续对话
+      if (data.sessionId) chatSessionId = data.sessionId;
+
+      conversationHistory.push({ role: 'assistant', content: data.content });
+      const displayText = data.content + (data.model ? `<div style="font-size:10px;color:#9ca3af;margin-top:6px;">—— ${escapeHtml(data.model)}</div>` : '');
+      appendChatMessage('assistant', displayText);
+
+      // 更新上下文用量指示器
+      if (data.usage) {
+        updateContextUsage(data.usage);
+      }
+
+      // 持久化到 localStorage
+      saveChatToStorage();
+    } else {
+      appendChatMessage('system', `❌ ${escapeHtml(data.message)}`);
+    }
+  } catch (e) {
+    const thinkingEl = document.getElementById(thinkingId);
+    if (thinkingEl) thinkingEl.remove();
+    appendChatMessage('system', `❌ 网络错误: ${escapeHtml(e.message)}`);
+  }
+}
+
+// 在输出区追加一条消息气泡
+function appendChatMessage(role, content, msgId) {
+  const outputEl = document.getElementById('console-output');
+
+  // 移除空状态占位
+  const emptyEl = outputEl.querySelector('.chat-empty');
+  if (emptyEl) emptyEl.remove();
+
+  const div = document.createElement('div');
+  div.className = `chat-msg chat-msg-${role}`;
+  if (msgId) div.id = msgId;
+
+  if (role === 'user') {
+    div.innerHTML = `<div class="chat-bubble">${content}</div><div class="chat-avatar">👤</div>`;
+  } else if (role === 'assistant') {
+    div.innerHTML = `<div class="chat-avatar">🤖</div><div class="chat-bubble">${content}</div>`;
+  } else if (role === 'task') {
+    div.innerHTML = `<div class="chat-bubble">${content}</div>`;
+  } else {
+    div.innerHTML = `<div class="chat-bubble">${content}</div>`;
+  }
+
+  outputEl.appendChild(div);
+  outputEl.scrollTop = outputEl.scrollHeight;
+}
+
+// ===== 上下文记忆与持久化 =====
+
+/** 从 localStorage 恢复聊天记录 */
+function restoreChatFromStorage() {
+  try {
+    const saved = localStorage.getItem('qidi_chat_history');
+    if (!saved) return;
+    const parsed = JSON.parse(saved);
+    if (!parsed.history || !Array.isArray(parsed.history) || parsed.history.length === 0) return;
+
+    conversationHistory = parsed.history;
+    chatSessionId = parsed.sessionId || null;
+    customSystemPrompt = parsed.customPrompt || null;
+
+    // 渲染到界面
+    const outputEl = document.getElementById('console-output');
+    if (!outputEl) return;
+    // 清除空状态占位
+    outputEl.innerHTML = '';
+    for (const msg of conversationHistory) {
+      appendChatMessage(msg.role, escapeHtml(msg.content));
+    }
+  } catch (_) {}
+}
+
+/** 保存聊天记录到 localStorage */
+function saveChatToStorage() {
+  try {
+    localStorage.setItem('qidi_chat_history', JSON.stringify({
+      history: conversationHistory,
+      sessionId: chatSessionId,
+      customPrompt: customSystemPrompt,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (_) {}
+}
+
+/** 更新上下文用量指示器 */
+function updateContextUsage(usage) {
+  const bar = document.getElementById('context-usage-bar');
+  const text = document.getElementById('context-usage-text');
+  if (!bar || !text) return;
+
+  const pct = Math.min(100, Math.round((usage.promptTokens / usage.contextLimit) * 100));
+  bar.style.width = `${pct}%`;
+
+  // 颜色随使用率变化
+  if (pct > 90) {
+    bar.style.background = '#dc2626';
+  } else if (pct > 70) {
+    bar.style.background = '#d97706';
+  } else {
+    bar.style.background = '#6366f1';
+  }
+
+  const parts = [
+    `上下文: ${pct}%`,
+    `(${usage.promptTokens}/${usage.contextLimit} tokens)`
+  ];
+  if (usage.truncatedCount > 0) {
+    parts.push(`已截断 ${usage.truncatedCount} 条旧消息`);
+  }
+  text.textContent = parts.join(' · ');
+}
+
+// 执行任务（附带上传文件）
+async function executeTaskWithFiles() {
+  // 先把上传文件写入工作目录 uploads/
+  if (uploadedFiles.length > 0) {
+    try {
+      await fetch('/api/files/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: 'uploads',
+          files: uploadedFiles.map(f => ({ name: f.name, content: f.content }))
+        })
+      });
+    } catch (_) { /* ignore upload error */ }
+  }
+  try {
+    return await executeTask();
+  } catch (e) {
+    console.error('executeTaskWithFiles error:', e);
+    appendChatMessage('system', `❌ 提交异常: ${escapeHtml(e.message)}`);
+  }
+}
+
+async function downloadAllOutputFiles() {
+  // 简易：依次下载当前任务输出文件
+  const cards = document.querySelectorAll('#output-files .output-file-card');
+  if (cards.length === 0) {
+    alert('暂无文件');
+    return;
+  }
+  cards.forEach(card => {
+    const p = card.getAttribute('data-path');
+    if (p) {
+      const a = document.createElement('a');
+      a.href = `/api/files/download?path=${encodeURIComponent(p)}`;
+      a.download = '';
+      a.click();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 文件管理页面
+// ═══════════════════════════════════════════════════════════════
+
+let filesCurrentPath = '.';
+let filesCurrentListing = [];
+
+async function filesRefresh() {
+  const pathInput = document.getElementById('files-path');
+  filesCurrentPath = (pathInput?.value || '.').trim() || '.';
+  const recursive = document.getElementById('files-recursive')?.checked ? '1' : '0';
+  try {
+    const res = await fetch(`/api/files?path=${encodeURIComponent(filesCurrentPath)}&recursive=${recursive}`);
+    const data = await res.json();
+    renderFilesList(data);
+  } catch (e) {
+    alert('加载文件列表失败: ' + e.message);
+  }
+}
+
+function renderFilesList(data) {
+  const list = document.getElementById('files-list');
+  const countEl = document.getElementById('files-count');
+  if (!data.exists) {
+    list.innerHTML = '<div class="empty-state" style="padding:30px;"><div class="empty-text">路径不存在</div></div>';
+    if (countEl) countEl.textContent = '0 项';
+    filesCurrentListing = [];
+    return;
+  }
+  if (data.type === 'file') {
+    // 单文件点击直接打开
+    filesOpenFile(data.path);
+    list.innerHTML = `<div class="file-entry active"><span class="file-icon">📄</span>${escapeHtml(data.path)}</div>`;
+    if (countEl) countEl.textContent = '1 项';
+    return;
+  }
+  const entries = data.entries || [];
+  filesCurrentListing = entries;
+  if (countEl) countEl.textContent = `${entries.length} 项`;
+
+  // 父目录快捷
+  let html = '';
+  if (filesCurrentPath !== '.' && filesCurrentPath !== '') {
+    html += `<div class="file-entry" onclick="filesGotoParent()"><span class="file-icon">⬆️</span>..</div>`;
+  }
+  html += entries.map(e => {
+    const icon = e.type === 'dir' ? '📁' : fileIconFor(e.name);
+    const size = e.type === 'file' ? `<span class="file-size">${formatSize(e.size || 0)}</span>` : '';
+    return `<div class="file-entry" data-path="${escapeHtml(e.path)}" data-type="${e.type}" onclick="filesEntryClick('${escapeHtml(e.path)}','${e.type}')">
+      <span class="file-icon">${icon}</span><span>${escapeHtml(e.name)}</span>${size}
+    </div>`;
+  }).join('');
+  list.innerHTML = html || '<div class="empty-state" style="padding:30px;"><div class="empty-text">空目录</div></div>';
+}
+
+function filesGotoParent() {
+  let p = filesCurrentPath;
+  if (p === '.' || p === '') { filesCurrentPath = '.'; }
+  else {
+    const idx = p.lastIndexOf('/');
+    filesCurrentPath = idx < 0 ? '.' : p.slice(0, idx) || '.';
+  }
+  document.getElementById('files-path').value = filesCurrentPath;
+  filesRefresh();
+}
+
+function filesEntryClick(relPath, type) {
+  if (type === 'dir') {
+    document.getElementById('files-path').value = relPath;
+    filesCurrentPath = relPath;
+    filesRefresh();
+  } else {
+    filesOpenFile(relPath);
+  }
+}
+
+function fileIconFor(name) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  const map = {
+    js: '📜', mjs: '📜', cjs: '📜', ts: '📜', tsx: '📜', jsx: '📜',
+    py: '🐍', c: '🔧', cpp: '🔧', h: '🔧', java: '☕', go: '🐹', rs: '🦀',
+    json: '🗂️', md: '📘', txt: '📄', html: '🌐', css: '🎨', yml: '⚙️', yaml: '⚙️',
+    png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️',
+    pdf: '📕', zip: '📦', sql: '🗄️'
+  };
+  return map[ext] || '📄';
+}
+
+async function filesOpenFile(relPath) {
+  try {
+    const res = await fetch(`/api/files/read?path=${encodeURIComponent(relPath)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      alert('打开失败: ' + (err.error || res.status));
+      return;
+    }
+    const data = await res.json();
+    currentEditFile = data;
+
+    document.getElementById('files-editor-empty').style.display = 'none';
+    const wrap = document.getElementById('files-editor-wrap');
+    wrap.style.display = 'block';
+    const editor = document.getElementById('files-editor');
+    if (data.binary) {
+      editor.value = '⚠️ 二进制文件，无法编辑（可下载）';
+      editor.disabled = true;
+      document.getElementById('files-save-btn').disabled = true;
+    } else {
+      editor.value = data.content || '';
+      editor.disabled = false;
+      document.getElementById('files-save-btn').disabled = false;
+    }
+    document.getElementById('files-editor-title').textContent = `📄 ${data.path}`;
+    document.getElementById('files-editor-meta').textContent =
+      `${formatSize(data.size)} · ${data.lang || 'text'} · ${new Date(data.modified).toLocaleString()}`;
+    document.getElementById('files-download-btn').disabled = false;
+    document.getElementById('files-delete-btn').disabled = false;
+
+    // 高亮当前文件
+    document.querySelectorAll('.file-entry').forEach(el => el.classList.remove('active'));
+    const cur = document.querySelector(`.file-entry[data-path="${CSS.escape(relPath)}"]`);
+    if (cur) cur.classList.add('active');
+
+    filesUpdateGutter();
+    filesEditorDirty = false; // 打开文件时重置脏标记
+    updateFilesEditorStatus();
+  } catch (e) {
+    alert('打开失败: ' + e.message);
+  }
+}
+
+function filesUpdateGutter() {
+  const editor = document.getElementById('files-editor');
+  const gutter = document.getElementById('files-editor-gutter');
+  if (!editor || !gutter) return;
+  const lines = editor.value.split('\n').length;
+  gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+}
+
+function updateFilesEditorStatus() {
+  const statusEl = document.getElementById('files-editor-status');
+  if (!statusEl) return;
+  if (filesEditorDirty) {
+    statusEl.textContent = '⚠️ 有未保存的更改';
+    statusEl.style.color = '#e67e22';
+  } else if (currentEditFile) {
+    statusEl.textContent = '✅ 已保存';
+    statusEl.style.color = '#27ae60';
+  } else {
+    statusEl.textContent = '未打开文件';
+    statusEl.style.color = '#7f8c8d';
+  }
+}
+
+async function filesEditorSave() {
+  if (!currentEditFile || currentEditFile.binary) return;
+  const content = document.getElementById('files-editor').value;
+  try {
+    const res = await fetch('/api/files/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentEditFile.path, content })
+    });
+    const data = await res.json();
+    if (data.success) {
+      filesEditorDirty = false;
+      updateFilesEditorStatus();
+      filesRefresh();
+    } else {
+      alert('保存失败: ' + (data.error || '未知'));
+    }
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+}
+
+function filesEditorDownload() {
+  if (!currentEditFile) return;
+  const a = document.createElement('a');
+  a.href = `/api/files/download?path=${encodeURIComponent(currentEditFile.path)}`;
+  a.download = '';
+  a.click();
+}
+
+async function filesEditorDelete() {
+  if (!currentEditFile) return;
+  if (!confirm(`确定删除 ${currentEditFile.path}？`)) return;
+  try {
+    const res = await fetch('/api/files/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentEditFile.path })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('已删除');
+      filesCloseEditor();
+      filesRefresh();
+    } else {
+      alert('删除失败: ' + (data.error || '未知'));
+    }
+  } catch (e) {
+    alert('删除失败: ' + e.message);
+  }
+}
+
+function filesCloseEditor() {
+  // 如果有未保存的更改，提示用户
+  if (filesEditorDirty) {
+    if (!confirm('有未保存的更改，确定要关闭吗？')) return;
+  }
+  currentEditFile = null;
+  filesEditorDirty = false;
+  document.getElementById('files-editor-empty').style.display = '';
+  document.getElementById('files-editor-wrap').style.display = 'none';
+  document.getElementById('files-save-btn').disabled = true;
+  document.getElementById('files-download-btn').disabled = true;
+  document.getElementById('files-delete-btn').disabled = true;
+  updateFilesEditorStatus();
+}
+
+function filesNewFile() {
+  const name = prompt('新文件相对路径（例如 notes/todo.md）：');
+  if (!name) return;
+  fetch('/api/files/write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: name, content: '' })
+  }).then(r => r.json()).then(d => {
+    if (d.success) {
+      // 进入该文件所在目录并打开
+      const idx = name.lastIndexOf('/');
+      if (idx > 0) {
+        document.getElementById('files-path').value = name.slice(0, idx);
+      }
+      filesRefresh().then(() => filesOpenFile(name));
+    } else {
+      alert('创建失败: ' + (d.error || '未知'));
+    }
+  }).catch(e => alert('创建失败: ' + e.message));
+}
+
+function filesNewDir() {
+  const name = prompt('新目录相对路径：');
+  if (!name) return;
+  fetch('/api/files/mkdir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: name })
+  }).then(r => r.json()).then(d => {
+    if (d.success) {
+      document.getElementById('files-path').value = name;
+      filesRefresh();
+    } else {
+      alert('创建失败: ' + (d.error || '未知'));
+    }
+  }).catch(e => alert('创建失败: ' + e.message));
+}
+
+function filesUploadClick() {
+  document.getElementById('files-upload-input').click();
+}
+
+function filesOnUpload(event) {
+  const files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
+  
+  // 显示上传进度
+  const statusDiv = document.getElementById('files-upload-status');
+  if (statusDiv) {
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = `<div style="margin-bottom:4px;font-size:12px;">正在上传 ${files.length} 个文件...</div><div style="background:#e5e7eb;border-radius:4px;height:8px;"><div id="files-upload-progress" style="background:#3b82f6;height:8px;border-radius:4px;width:0%;transition:width 0.3s;"></div></div>`;
+  }
+  
+  // 使用 FormData 进行 multipart 上传
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append('files', f);
+  }
+  if (filesCurrentPath) {
+    formData.append('dir', filesCurrentPath);
+  }
+  
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/files/upload');
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable && statusDiv) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      const bar = document.getElementById('files-upload-progress');
+      if (bar) bar.style.width = pct + '%';
+    }
+  });
+  xhr.addEventListener('load', () => {
+    if (statusDiv) statusDiv.style.display = 'none';
+    if (xhr.status === 200) {
+      const d = JSON.parse(xhr.responseText);
+      if (d.success) {
+        alert(`已上传 ${d.count || d.uploaded.length} 个文件`);
+        filesRefresh();
+      } else {
+        alert('上传失败: ' + (d.error || '未知'));
+      }
+    } else {
+      alert('上传失败: HTTP ' + xhr.status);
+    }
+  });
+  xhr.addEventListener('error', () => {
+    if (statusDiv) statusDiv.style.display = 'none';
+    alert('上传失败：网络错误');
+  });
+  xhr.send(formData);
+  event.target.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 初始化（DOMContentLoaded 之外，独立绑定）
+// ═══════════════════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', () => {
+  initTaskTemplates();
+  initUploadDropZone();
+
+  // 任务输入框：自适应高度 + 回车提交 + Tab 缩进
+  const ta = document.getElementById('console-task');
+  if (ta) {
+    ta.addEventListener('input', updateTaskEditor);
+    ta.addEventListener('keydown', e => {
+      // Enter 发送聊天，Shift+Enter 换行；多行模式下 Enter 换行
+      if (e.key === 'Enter' && !e.shiftKey && !multilineMode) {
+        e.preventDefault();
+        sendMessage();
+        return;
+      }
+      // Ctrl+Enter 直接执行任务
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        executeTaskWithFiles();
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = ta.selectionStart, en = ta.selectionEnd;
+        ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(en);
+        ta.selectionStart = ta.selectionEnd = s + 2;
+        updateTaskEditor();
+      }
+    });
+    updateTaskEditor();
+  }
+
+  // 文件编辑器：联动行号 + 脏标记 + 状态栏
+  const fe = document.getElementById('files-editor');
+  if (fe) {
+    fe.addEventListener('input', () => {
+      filesUpdateGutter();
+      filesEditorDirty = true;
+      updateFilesEditorStatus();
+    });
+    fe.addEventListener('keyup', filesUpdateGutter);
+    fe.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = fe.selectionStart, en = fe.selectionEnd;
+        fe.value = fe.value.slice(0, s) + '  ' + fe.value.slice(en);
+        fe.selectionStart = fe.selectionEnd = s + 2;
+        filesUpdateGutter();
+      }
+      // Ctrl+S 保存
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        filesEditorSave();
+      }
+    });
+  }
+
+  // 遗留兼容：旧布局中替换执行按钮（新布局已直接绑定 executeTaskWithFiles）
+  const execBtn = document.querySelector('#page-console .btn-primary[onclick="executeTask()"]');
+  if (execBtn) {
+    execBtn.setAttribute('onclick', 'executeTaskWithFiles()');
+  }
+});

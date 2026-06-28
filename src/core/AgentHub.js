@@ -193,11 +193,49 @@ class AgentHub {
   }
 
   enableAgent(name) {
-    return this.updateAgentConfig(name, { enabled: true });
+    let result = false;
+    
+    // 尝试更新内存中已有的 agent
+    if (this.agents.has(name)) {
+      this.agents.get(name).config.enabled = true;
+      this.agents.get(name).status = 'ready';
+      result = true;
+    }
+    
+    // 如果 config 中有但未加载（已禁用或新注册），则加载
+    if (this.config && this.config.agents && this.config.agents[name]) {
+      const agentConfig = this.config.agents[name];
+      agentConfig.enabled = true;
+      if (!this.agents.has(name)) {
+        const provider = this._createProvider(agentConfig);
+        this.agents.set(name, {
+          config: agentConfig,
+          provider: provider,
+          status: 'ready'
+        });
+      }
+      result = true;
+    }
+    
+    // 持久化到文件
+    if (result) {
+      const configPath = path.join(this.configDir, 'agents.json');
+      try { fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8'); } catch (e) {}
+    }
+    
+    return result;
   }
 
   disableAgent(name) {
-    return this.updateAgentConfig(name, { enabled: false });
+    if (this.agents.has(name)) {
+      this.agents.get(name).config.enabled = false;
+      this.agents.get(name).status = 'disabled';
+      
+      const configPath = path.join(this.configDir, 'agents.json');
+      try { fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8'); } catch (e) {}
+      return true;
+    }
+    return false;
   }
 
   reload() {

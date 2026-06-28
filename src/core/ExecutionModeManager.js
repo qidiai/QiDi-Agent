@@ -1,21 +1,25 @@
 /**
  * 执行模式管理器
  * 
- * 两种核心模式：
+ * 三种核心模式：
  * 
  * 1. 隐私模式 (privacy) - 安全第一
  *    - 拆分：本地 Ollama
  *    - 代码生成：云端工具各拿碎片（路由分发）
- *    - 质检：本地工具链检查（编译/Lint/测试），关闭 AI 打分
- *    - 合并：接口契约拼装
+ *    - 质检：本地模型 AI 打分 + 本地工具链
+ *    - 合并：接口契约拼装（唯一使用契约的模式）
  * 
  * 2. 高质量模式 (quality) - 质量第一
  *    - 拆分：云端 API（DeepSeek/Claude 等）
- *    - 代码生成：云端工具各拿碎片（路由分发）
+ *    - 代码生成：云端工具各拿碎片（能力匹配分发）
  *    - 质检：云端模型 AI 打分 + 本地工具链
- *    - 合并：AI 智能合并
+ *    - 合并：AI 智能合并（不使用契约）
  * 
- * 共同点：代码生成都走工具路由分发（各拿碎片，不广播）
+ * 3. 效率模式 (efficiency) - 分布式并行协作
+ *    - 拆分：云端最强模型（最多20个子任务）
+ *    - 代码生成：广播并行（所有工具同时尝试不同方案）
+ *    - 质检：本地 Ollama 快速初筛 + 本地工具链
+ *    - 合并：AI 智能合并（不使用契约）
  */
 
 class ExecutionModeManager {
@@ -178,6 +182,81 @@ class ExecutionModeManager {
           '追求最高代码质量',
           '需要 AI 深度参与'
         ]
+      },
+
+      efficiency: {
+        name: 'efficiency',
+        displayName: '效率模式',
+        slogan: '分布式并行协作',
+        description: '复杂任务自动拆解，云端拆分→广播并行→本地质检→AI合并，避免重复造轮子和内耗。',
+        icon: '⚡',
+
+        // 拆分配置
+        splitter: {
+          location: 'cloud',         // 云端拆分（用最强模型拆解复杂任务）
+          providerType: 'openai',    // 使用 DeepSeek/Claude 等
+          enableSelfCheck: true,
+          maxSubtasks: 20,           // 支持更多子任务
+          enableCoverageCheck: true,
+          enableDependencyCheck: true
+        },
+
+        // 代码生成配置
+        codeGeneration: {
+          location: 'broadcast',     // 广播模式 — 所有工具并行尝试
+          routingStrategy: 'broadcast', // 广播分发
+          broadcastMode: true,       // 开启广播
+          providerParticipates: true,
+          toolOnlyMode: false,
+          maxRetries: 3
+        },
+
+        // 质量检查配置
+        qualityCheck: {
+          location: 'hybrid',        // 混合质检
+          enableAI: true,
+          aiProvider: 'ollama',      // 本地 Ollama 快速初筛
+          enableStaticCheck: true,
+          enableCompilation: true,
+          enableLint: true,
+          enableTest: true,
+          minQualityScore: 70,
+          dimensions: ['correctness', 'consistency', 'completeness', 'readability', 'performance']
+        },
+
+        // 合并配置 — 效率模式不使用契约，直接 AI 合并
+        merging: {
+          strategy: 'ai',            // AI 智能合并（不使用契约）
+          aiEnabled: true,
+          contractStrict: false,     // ❌ 不使用契约
+          autoAdapt: true,
+          conflictResolution: 'ai_decides'
+        },
+
+        // 路由配置
+        routing: {
+          defaultStrategy: 'broadcast',
+          strategies: ['broadcast', 'capability', 'round_robin', 'manual'],
+          privacyLevel: 'low'
+        },
+
+        // 隐私相关设置
+        privacy: {
+          enabled: false,
+          dataRetention: 'standard',
+          contextSharing: 'full',
+          providerSeesFullCode: true,
+          toolSeesFullTask: false,
+          logSensitiveData: true
+        },
+
+        // 适用场景
+        useCases: [
+          '大型复杂项目',
+          '多模块并行开发',
+          '需要多种技术方案对比',
+          '追求最高效率'
+        ]
       }
     };
   }
@@ -275,33 +354,33 @@ class ExecutionModeManager {
       dimensions: [
         {
           name: '任务拆分',
-          [mode1]: m1.splitter.location === 'local' ? '🔒 本地 Ollama（安全）' : '☁️ 云端 API',
-          [mode2]: m2.splitter.location === 'local' ? '🔒 本地 Ollama（安全）' : '☁️ 云端 API',
+          [mode1]: m1.splitter.location === 'local' ? `🔒 本地 Ollama（安全，最多${m1.splitter.maxSubtasks}个子任务）` : `☁️ 云端 API（最多${m1.splitter.maxSubtasks}个子任务）`,
+          [mode2]: m2.splitter.location === 'local' ? `🔒 本地 Ollama（安全，最多${m2.splitter.maxSubtasks}个子任务）` : `☁️ 云端 API（最多${m2.splitter.maxSubtasks}个子任务）`,
           same: m1.splitter.location === m2.splitter.location
         },
         {
           name: '代码生成',
-          [mode1]: '🔒 云端工具各拿碎片（路由分发）',
-          [mode2]: '🔒 云端工具各拿碎片（路由分发）',
-          same: true
+          [mode1]: m1.codeGeneration.broadcastMode ? '📡 广播并行（所有工具尝试）' : '🔀 路由分发（各拿碎片）',
+          [mode2]: m2.codeGeneration.broadcastMode ? '📡 广播并行（所有工具尝试）' : '🔀 路由分发（各拿碎片）',
+          same: m1.codeGeneration.broadcastMode === m2.codeGeneration.broadcastMode
         },
         {
           name: '质量检查',
-          [mode1]: m1.qualityCheck.enableAI ? `✅ 本地 Ollama 打分（${m1.qualityCheck.dimensions.length}维）` : '本地工具链检查',
-          [mode2]: m2.qualityCheck.enableAI ? `✅ ${m2.qualityCheck.aiProvider || '云端'} AI 打分（${m2.qualityCheck.dimensions.length}维）` : '本地工具链检查',
-          same: m1.qualityCheck.enableAI === m2.qualityCheck.enableAI
+          [mode1]: m1.qualityCheck.location === 'local' ? `🔒 本地 Ollama 打分（${m1.qualityCheck.dimensions.length}维）` : m1.qualityCheck.location === 'cloud' ? `☁️ 云端 AI 打分（${m1.qualityCheck.dimensions.length}维）` : `🔄 混合质检（${m1.qualityCheck.dimensions.length}维）`,
+          [mode2]: m2.qualityCheck.location === 'local' ? `🔒 本地 Ollama 打分（${m2.qualityCheck.dimensions.length}维）` : m2.qualityCheck.location === 'cloud' ? `☁️ 云端 AI 打分（${m2.qualityCheck.dimensions.length}维）` : `🔄 混合质检（${m2.qualityCheck.dimensions.length}维）`,
+          same: m1.qualityCheck.location === m2.qualityCheck.location
         },
         {
           name: '代码合并',
-          [mode1]: m1.merging.strategy === 'contract' ? '📋 接口契约拼装' : '🤖 AI 智能合并',
-          [mode2]: m2.merging.strategy === 'contract' ? '📋 接口契约拼装' : '🤖 AI 智能合并',
+          [mode1]: m1.merging.strategy === 'contract' ? '📋 接口契约拼装' : m1.merging.strategy === 'hybrid' ? '🔄 混合合并（契约+AI）' : '🤖 AI 智能合并',
+          [mode2]: m2.merging.strategy === 'contract' ? '📋 接口契约拼装' : m2.merging.strategy === 'hybrid' ? '🔄 混合合并（契约+AI）' : '🤖 AI 智能合并',
           same: m1.merging.strategy === m2.merging.strategy
         },
         {
-          name: '隐私保护',
-          [mode1]: m1.privacy.privacyLevel,
-          [mode2]: m2.privacy.privacyLevel,
-          same: m1.privacy.privacyLevel === m2.privacy.privacyLevel
+          name: '路由策略',
+          [mode1]: m1.routing.defaultStrategy === 'broadcast' ? '📡 广播并行' : m1.routing.defaultStrategy === 'capability' ? '🎯 能力匹配' : m1.routing.defaultStrategy === 'round_robin' ? '🔀 轮询分发' : m1.routing.defaultStrategy,
+          [mode2]: m2.routing.defaultStrategy === 'broadcast' ? '📡 广播并行' : m2.routing.defaultStrategy === 'capability' ? '🎯 能力匹配' : m2.routing.defaultStrategy === 'round_robin' ? '🔀 轮询分发' : m2.routing.defaultStrategy,
+          same: m1.routing.defaultStrategy === m2.routing.defaultStrategy
         },
         {
           name: '适用场景',
@@ -331,12 +410,20 @@ class ExecutionModeManager {
     ];
 
     const qualityKeywords = [
-      '高质量', '最佳', '优化', '重构', '复杂', '重要', '关键',
-      'quality', 'best', 'optimize', 'refactor', 'complex'
+      '高质量', '最佳', '优化', '重构', '重要', '关键',
+      'quality', 'best', 'optimize', 'refactor', 'critical'
+    ];
+
+    const efficiencyKeywords = [
+      '效率', '并行', '并发', '分布式', '多工具', '多模型', '批量',
+      '大规模', '复杂任务', '大项目', '拆解', '分发',
+      'efficiency', 'parallel', 'distributed', 'batch', 'large',
+      'complex task', 'multi-tool', 'multi-agent'
     ];
 
     let privacyScore = 0;
     let qualityScore = 0;
+    let efficiencyScore = 0;
 
     for (const kw of privacyKeywords) {
       if (lowerDesc.includes(kw)) privacyScore++;
@@ -346,11 +433,20 @@ class ExecutionModeManager {
       if (lowerDesc.includes(kw)) qualityScore++;
     }
 
-    if (privacyScore > qualityScore) {
+    for (const kw of efficiencyKeywords) {
+      if (lowerDesc.includes(kw)) efficiencyScore++;
+    }
+
+    // 优先级：隐私 > 效率 > 高质量
+    if (privacyScore > 0) {
       return { mode: 'privacy', confidence: privacyScore, reason: '检测到敏感关键词，推荐隐私模式' };
     }
 
-    if (qualityScore > privacyScore) {
+    if (efficiencyScore > qualityScore) {
+      return { mode: 'efficiency', confidence: efficiencyScore, reason: '检测到效率关键词，推荐效率模式（分布式并行协作）' };
+    }
+
+    if (qualityScore > 0) {
       return { mode: 'quality', confidence: qualityScore, reason: '检测到质量关键词，推荐高质量模式' };
     }
 

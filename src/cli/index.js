@@ -855,194 +855,20 @@ program
 program
   .command('interactive')
   .alias('i')
-  .description('启动交互式编程界面（REPL模式）')
+  .description('启动交互式编程界面（REPL模式，支持多行输入、历史记录、上下文记忆）')
   .option('-m, --mode <mode>', '默认执行模式: privacy|quality', 'privacy')
+  .option('-p, --provider <provider>', '默认模型提供商: ollama|openai|anthropic', process.env.MODEL_PROVIDER || 'ollama')
   .option('-w, --workspace <dir>', '工作目录', './workspace')
   .action(async (options) => {
     printLogo({ banner: true });
-    
-    console.log(chalk.cyan.bold('\n  🚀 Qidi Agent 交互式编程界面'));
-    console.log(chalk.gray('  ─────────────────────────────────────────\n'));
-    console.log(chalk.gray('  输入任务描述开始编程，或输入命令进行操作'));
-    console.log(chalk.gray('  输入 help 查看帮助，exit 或 quit 退出\n'));
-    
-    // 初始化状态
-    let currentMode = options.mode;
-    let registeredTools = [];
-    let provider = null;
-    let scanned = false;
-    
-    // 显示当前状态
-    console.log(chalk.cyan('  ┌─────────────────────────────────────────┐'));
-    console.log(chalk.cyan(`  │ 当前模式: ${currentMode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式'}              │`));
-    console.log(chalk.cyan(`  │ 工具状态: 未扫描 (输入 scan 扫描)        │`));
-    console.log(chalk.cyan(`  │ 工作目录: ${path.resolve(options.workspace).substring(0, 20)}... │`));
-    console.log(chalk.cyan('  └─────────────────────────────────────────┘\n'));
-    
-    // REPL 循环
-    const readline = require('readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      prompt: chalk.green.bold('\n  qidi> ')
+    const InteractiveSession = require('./InteractiveSession');
+    const session = new InteractiveSession({
+      workspaceDir: options.workspace,
+      configDir: path.join(__dirname, '../../config'),
+      mode: options.mode,
+      provider: options.provider
     });
-    
-    rl.prompt();
-    
-    rl.on('line', async (input) => {
-      const cmd = input.trim().toLowerCase();
-      
-      // 命令处理
-      if (cmd === 'exit' || cmd === 'quit' || cmd === 'q') {
-        console.log(chalk.yellow('\n  👋 再见！\n'));
-        rl.close();
-        process.exit(0);
-      }
-      
-      if (cmd === 'help' || cmd === 'h') {
-        console.log(chalk.cyan('\n  📖 帮助信息:\n'));
-        console.log(chalk.gray('  scan              - 扫描并连接本机 AI 编程工具'));
-        console.log(chalk.gray('  任务描述          - 执行编程任务'));
-        console.log(chalk.gray('  mode privacy      - 切换到隐私模式'));
-        console.log(chalk.gray('  mode quality      - 切换到高质量模式'));
-        console.log(chalk.gray('  status            - 查看当前状态'));
-        console.log(chalk.gray('  tools             - 查看已接入工具'));
-        console.log(chalk.gray('  clear             - 清屏'));
-        console.log(chalk.gray('  help / h          - 显示帮助'));
-        console.log(chalk.gray('  exit / quit / q   - 退出\n'));
-        rl.prompt();
-        return;
-      }
-      
-      if (cmd === 'clear') {
-        console.clear && console.clear();
-        rl.prompt();
-        return;
-      }
-      
-      if (cmd === 'scan') {
-        console.log(chalk.blue('\n  🔍 正在扫描本机 AI 编程工具...'));
-        try {
-          const scanner = new ToolScanner();
-          scanner.registerAdapters(AdapterFactory.createAll());
-          await scanner.scan();
-          await scanner.connectAll();
-          registeredTools = Array.from(scanner.registeredTools.values());
-          scanned = true;
-          if (registeredTools.length > 0) {
-            console.log(chalk.green(`  ✅ 已接入 ${registeredTools.length} 个工具:\n`));
-            for (const tool of registeredTools) {
-              console.log(chalk.green(`     ✅ ${tool.displayName}`));
-            }
-          } else {
-            console.log(chalk.yellow('  ⚠️ 未发现可用的 AI 编程工具'));
-          }
-          
-          // 连接 Ollama
-          console.log(chalk.blue('\n  🔗 正在连接本地模型 (Ollama)...'));
-          try {
-            provider = ProviderFactory.create('ollama');
-            const connected = await provider.checkConnection();
-            if (connected) {
-              console.log(chalk.green('  ✅ Ollama 连接成功\n'));
-            } else {
-              console.log(chalk.yellow('  ⚠️ Ollama 未运行，请先启动: ollama serve\n'));
-            }
-          } catch (e) {
-            console.log(chalk.yellow(`  ⚠️ Ollama 连接失败: ${e.message}\n`));
-          }
-        } catch (e) {
-          console.log(chalk.yellow(`  ⚠️ 工具扫描失败: ${e.message}\n`));
-        }
-        rl.prompt();
-        return;
-      }
-      
-      if (cmd === 'status') {
-        console.log(chalk.cyan('\n  📊 当前状态:\n'));
-        console.log(chalk.gray(`  模式: ${currentMode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式'}`));
-        console.log(chalk.gray(`  工具: ${scanned ? `${registeredTools.length} 个已接入` : '未扫描 (输入 scan 扫描)'}`));
-        console.log(chalk.gray(`  Provider: ${provider ? provider.name : '未连接'}`));
-        console.log(chalk.gray(`  工作目录: ${path.resolve(options.workspace)}\n`));
-        rl.prompt();
-        return;
-      }
-      
-      if (cmd === 'tools') {
-        console.log(chalk.cyan('\n  🔧 已接入工具:\n'));
-        if (!scanned) {
-          console.log(chalk.yellow('  ⚠️ 请先运行 scan 扫描工具\n'));
-        } else if (registeredTools.length === 0) {
-          console.log(chalk.yellow('  ⚠️ 暂无已接入工具\n'));
-        } else {
-          for (const tool of registeredTools) {
-            console.log(chalk.green(`  ✅ ${tool.displayName}`));
-          }
-          console.log('');
-        }
-        rl.prompt();
-        return;
-      }
-      
-      if (cmd.startsWith('mode ')) {
-        const newMode = cmd.split(' ')[1];
-        if (newMode === 'privacy' || newMode === 'quality') {
-          currentMode = newMode;
-          console.log(chalk.green(`\n  ✅ 已切换到 ${newMode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式'}\n`));
-        } else {
-          console.log(chalk.yellow('\n  ⚠️ 无效模式，可选: privacy | quality\n'));
-        }
-        rl.prompt();
-        return;
-      }
-      
-      // 执行任务
-      if (input.trim().length > 0 && !cmd.startsWith('/')) {
-        const taskDescription = input.trim();
-        console.log(chalk.cyan(`\n  🚀 开始执行任务 (${currentMode === 'privacy' ? '隐私模式' : '高质量模式'})...\n`));
-        
-        const spinner = ora('  正在处理...').start();
-        
-        try {
-          if (!provider) {
-            provider = ProviderFactory.create('ollama');
-          }
-          
-          const orchestrator = new TaskOrchestrator(provider, {
-            workspaceDir: options.workspace,
-            toolAdapters: registeredTools,
-            executionMode: currentMode
-          });
-          orchestrator.setExecutionMode(currentMode);
-          
-          await orchestrator.initialize();
-          const result = await orchestrator.runTask(taskDescription);
-          
-          spinner.succeed('  任务完成！');
-          
-          console.log(chalk.green(`\n  ✅ 成功率: ${result.successRate}%`));
-          console.log(chalk.gray(`  📁 输出目录: ${result.outputDir}`));
-          if (result.reportId) {
-            console.log(chalk.gray(`  📋 报告ID: ${result.reportId}`));
-          }
-          console.log('');
-          
-        } catch (e) {
-          spinner.fail(`  任务失败: ${e.message}`);
-          console.log('');
-        }
-        
-        rl.prompt();
-        return;
-      }
-      
-      rl.prompt();
-    });
-    
-    rl.on('close', () => {
-      console.log(chalk.yellow('\n  👋 再见！\n'));
-      process.exit(0);
-    });
+    await session.start();
   });
 
 // ────────────────── help 命令 ──────────────────

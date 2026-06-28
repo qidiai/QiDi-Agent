@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const ConfirmPrompt = require('../utils/ConfirmPrompt');
+const logger = require('../utils/Logger')('ToolScanner');
 
 class ToolScanner {
   constructor(options = {}) {
@@ -30,7 +31,7 @@ class ToolScanner {
     
     this.scanResults = [];
     
-    console.log('🔍 正在扫描本机 AI 编程工具...\n');
+    logger.info('正在扫描本机 AI 编程工具...');
 
     const scanPromises = this.adapters.map(async (adapter) => {
       const startTime = Date.now();
@@ -49,12 +50,12 @@ class ToolScanner {
         this.scanResults.push(result);
         
         if (detected) {
-          console.log(`✅ ${adapter.displayName} - ${adapter.installPath || 'PATH中找到'}`);
+          logger.info(`${adapter.displayName} - ${adapter.installPath || 'PATH中找到'}`);
           if (adapter.version) {
-            console.log(`     版本: ${adapter.version} | 状态: 待启用`);
+            logger.info(`     版本: ${adapter.version} | 状态: 待启用`);
           }
         } else {
-          console.log(`❌ ${adapter.displayName} - 未找到`);
+          logger.info(`${adapter.displayName} - 未找到`);
         }
       } catch (e) {
         this.scanResults.push({
@@ -64,18 +65,18 @@ class ToolScanner {
           status: 'error',
           error: e.message
         });
-        console.log(`❌ ${adapter.displayName} - 扫描失败: ${e.message}`);
+        logger.warn(`扫描失败: ${adapter.displayName}`, e.message);
+        logger.error(`${adapter.displayName} - 扫描失败: ${e.message}`);
       }
     });
 
     await Promise.all(scanPromises);
     
     // 用户确认阶段
-    console.log('');
     const detectedTools = this.scanResults.filter(r => r.detected);
     
     if (detectedTools.length === 0) {
-      console.log('  ℹ️  未发现任何 AI 编程工具');
+      logger.info('未发现任何 AI 编程工具');
       return { tools: [], enabled: [] };
     }
 
@@ -103,7 +104,7 @@ class ToolScanner {
   async connectAll() {
     const results = {};
     
-    console.log('🔗 正在连接所有已发现的工具...\n');
+    logger.info('正在连接所有已发现的工具...');
 
     for (const adapter of this.adapters) {
       if (adapter.detected) {
@@ -115,10 +116,11 @@ class ToolScanner {
           };
           
           if (result.success) {
-            console.log(`✅ ${adapter.displayName} - 连接成功`);
+            logger.info(`${adapter.displayName} - 连接成功`);
             this.registeredTools.set(adapter.name, adapter);
           } else {
-            console.log(`❌ ${adapter.displayName} - 连接失败: ${result.message}`);
+            logger.warn(`连接失败: ${adapter.displayName}`, result.message);
+            logger.error(`${adapter.displayName} - 连接失败: ${result.message}`);
           }
         } catch (e) {
           results[adapter.name] = {
@@ -126,12 +128,13 @@ class ToolScanner {
             message: e.message,
             displayName: adapter.displayName
           };
-          console.log(`❌ ${adapter.displayName} - 连接失败: ${e.message}`);
+          logger.error(`${adapter.displayName} - 连接失败: ${e.message}`);
+          logger.warn(`连接失败: ${adapter.displayName}`, e.message);
         }
       }
     }
     
-    console.log('');
+    logger.info(`连接完成，共 ${Object.keys(results).length} 个工具`);
     return results;
   }
 
@@ -186,7 +189,7 @@ class ToolScanner {
     
     for (const [name, adapter] of this.registeredTools.entries()) {
       try {
-        console.log(`\n🚀 分派任务给 ${adapter.displayName}...`);
+        logger.info(`分派任务给 ${adapter.displayName}...`);
         const result = await adapter.execute(task, {
           ...options,
           taskId: `${name}_${Date.now()}`
@@ -197,17 +200,18 @@ class ToolScanner {
         };
         
         if (result.success) {
-          console.log(`✅ ${adapter.displayName} - 任务完成`);
+          logger.info(`${adapter.displayName} - 任务完成`);
         } else {
-          console.log(`❌ ${adapter.displayName} - 任务失败`);
+          logger.warn(`${adapter.displayName} - 任务失败`);
         }
       } catch (e) {
+        logger.error(`分发任务失败: ${adapter.displayName}`, e);
         results[name] = {
           success: false,
           message: e.message,
           displayName: adapter.displayName
         };
-        console.log(`❌ ${adapter.displayName} - 任务失败: ${e.message}`);
+        logger.error(`${adapter.displayName} - 任务失败: ${e.message}`);
       }
     }
     

@@ -8,6 +8,7 @@ const ProviderFactory = require('../providers');
 const MergeEngine = require('../agents/MergeEngine');
 const ExecutionModeManager = require('./ExecutionModeManager');
 const ConfirmPrompt = require('../utils/ConfirmPrompt');
+const logger = require('../utils/Logger')('RealTaskExecutor');
 
 class RealTaskExecutor extends EventEmitter {
   constructor(options = {}) {
@@ -104,6 +105,16 @@ class RealTaskExecutor extends EventEmitter {
   }
 
   async _loadProviders() {
+    // 优先使用外部传入的 provider（来自 AgentHub），不重复扫描线上模型
+    if (this.provider) {
+      this.enabledProviders.push({
+        name: this.provider.name || 'webui-agent',
+        provider: this.provider,
+        config: {}
+      });
+      this.emit('providerConnected', { name: this.provider.name || 'webui-agent' });
+    }
+
     const configPath = path.join(__dirname, '../../config/agents.json');
     if (fs.existsSync(configPath)) {
       try {
@@ -131,20 +142,30 @@ class RealTaskExecutor extends EventEmitter {
           }
         }
       } catch (e) {
-        console.error('加载配置失败:', e.message);
+        logger.error('加载配置失败:', e.message);
       }
-    }
-    
-    if (this.enabledProviders.length === 0 && this.provider) {
-      this.enabledProviders.push({
-        name: this.provider.name,
-        provider: this.provider,
-        config: {}
-      });
     }
   }
 
   async _scanTools() {
+    // 如果外部传入了已扫描授权的 toolScanner，直接复用，避免二次扫描+授权
+    if (this.options.toolScanner) {
+      const registered = this.options.toolScanner.getRegisteredTools();
+      if (registered && registered.length > 0) {
+        this.connectedTools = registered.map(t => ({ name: t.name, ...t }));
+        for (const tool of this.connectedTools) {
+          const adapter = this.options.toolScanner.getTool(tool.name);
+          if (adapter) {
+            this.toolExecutor.registerAdapter(adapter);
+            this.toolAdapters.set(tool.name, adapter);
+          }
+          this.emit('toolConnected', { name: tool.name });
+        }
+        logger.info(`复用 WebUI 已授权工具: ${this.connectedTools.map(t => t.name).join(', ')}`);
+        return;
+      }
+    }
+
     try {
       const scanner = new ToolScanner({
         silentScan: this.options.silentScan,
@@ -166,10 +187,10 @@ class RealTaskExecutor extends EventEmitter {
       }
       
       if (this.connectedTools.length === 0 && scanResult.tools?.length > 0) {
-        console.log('  ℹ️  用户未启用任何工具，将仅使用 LLM Provider 执行');
+        logger.info('用户未启用任何工具，将仅使用 LLM Provider 执行');
       }
     } catch (e) {
-      console.error('扫描工具失败:', e.message);
+      logger.error('扫描工具失败:', e.message);
     }
   }
 
@@ -451,7 +472,7 @@ class RealTaskExecutor extends EventEmitter {
             size: code.length
           });
         } catch (e) {
-          console.error('写入文件失败:', e.message);
+          logger.error('写入文件失败:', e.message);
         }
       }
     }

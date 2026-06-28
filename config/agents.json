@@ -36,6 +36,7 @@
       "description": "Anthropic Claude 3.5 Sonnet / Haiku 等模型",
       "config": {
         "apiKey": "${ANTHROPIC_API_KEY}",
+        "baseURL": "https://api.anthropic.com",
         "model": "claude-3-5-sonnet-20240620",
         "timeout": 60000
       }
@@ -44,12 +45,12 @@
       "enabled": true,
       "provider": "openai",
       "name": "DeepSeek",
-      "name_display": "🔮 DeepSeek",
+      "name_display": "DeepSeek",
       "description": "DeepSeek Coder / Chat 系列模型，性价比高",
       "config": {
-        "apiKey": "${DEEPSEEK_API_KEY}",
         "baseURL": "https://api.deepseek.com/v1",
-        "model": "deepseek-coder",
+        "model": "deepseek-chat",
+        "apiKey": "${DEEPSEEK_API_KEY}",
         "timeout": 60000
       }
     },

@@ -34,6 +34,7 @@ npx qidi help
 |------|------|---------|
 | `run` | 运行单个代码任务 | `qidi run -t "任务" --mode privacy` |
 | `multi` | 多 Agent 并行分派 | `qidi multi -t "任务" -m parallel` |
+| `interactive` | 交互式编程界面（REPL） | `qidi interactive --mode quality` |
 | `scan` | 扫描本机 AI 编程工具 | `qidi scan --connect --save` |
 | `connect` | 连接 AI 编程工具 | `qidi connect --auto` |
 | `agents` | 查看/管理 Agent | `qidi agents --check` |
@@ -44,6 +45,9 @@ npx qidi help
 | `context` | 查看历史上下文 | `qidi context -c 5` |
 | `config` | 配置管理 | `qidi config --show` |
 | `web` | 启动 Web UI | `qidi web -p 8080` |
+| `logs` | 查看日志 | `qidi logs --clean` |
+| `version` | 显示版本信息 | `qidi version` |
+| `update` | 检查更新 | `qidi update --changelog` |
 | `help` | 显示命令指南 | `qidi help` |
 
 ---

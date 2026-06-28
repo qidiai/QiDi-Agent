@@ -5,7 +5,7 @@ class OllamaProvider extends BaseProvider {
   constructor(config = {}) {
     super(config);
     this.name = 'ollama';
-    this.baseUrl = config.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    this.baseUrl = config.baseUrl || config.baseURL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     this.model = config.model || process.env.OLLAMA_MODEL || 'qwen2.5:7b';
     this.modelSmall = config.modelSmall || process.env.OLLAMA_MODEL_SMALL || this.model;
   }

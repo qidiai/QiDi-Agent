@@ -156,16 +156,83 @@ class AnthropicProvider {
     const requestBody = {
       model: model,
       max_tokens: maxTokens,
-      messages: messages.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      })),
+      system: system || null,
       temperature: temperature
     };
 
-    // 添加系统提示
-    if (system) {
-      requestBody.system = system;
+    // 完善角色映射：Anthropic 支持 system/user/assistant/tool 四种角色
+    if (messages && messages.length > 0) {
+      const mappedMessages = [];
+      let systemBlock = null;
+
+      // 先收集 system 角色消息
+      const systemMsg = messages.find(m => m.role === 'system');
+      if (systemMsg) {
+        systemBlock = systemMsg.content;
+      }
+
+      // 映射其余消息，正确处理 tool 角色
+      for (const msg of messages) {
+        if (msg.role === 'system') continue; // 已在上面处理
+        
+        if (msg.role === 'tool') {
+          // tool 角色 → 作为 assistant 的 tool_result 块
+          // Anthropic 要求 tool_use 和 tool_result 成对出现
+          mappedMessages.push({
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: msg.tool_use_id || '',
+              content: msg.content
+            }]
+          });
+        } else if (msg.role === 'tool_use') {
+          // tool_use 角色（来自 API 响应的结构化输出）→ assistant 的 tool_use 块
+          mappedMessages.push({
+            role: 'assistant',
+            content: [{
+              type: 'tool_use',
+              id: msg.id || '',
+              name: msg.name || '',
+              input: msg.input || {}
+            }]
+          });
+        } else if (msg.role === 'assistant') {
+          // assistant 角色：支持文本块和 tool_use 块的混合
+          if (Array.isArray(msg.content)) {
+            // 已经是结构化格式，直接使用
+            mappedMessages.push({
+              role: 'assistant',
+              content: msg.content
+            });
+          } else {
+            // 纯文本 → 转为文本块
+            mappedMessages.push({
+              role: 'assistant',
+              content: [{ type: 'text', text: msg.content }]
+            });
+          }
+        } else {
+          // user 角色：支持文本或结构化内容
+          if (Array.isArray(msg.content)) {
+            mappedMessages.push({
+              role: 'user',
+              content: msg.content
+            });
+          } else {
+            mappedMessages.push({
+              role: 'user',
+              content: [{ type: 'text', text: msg.content }]
+            });
+          }
+        }
+      }
+
+      requestBody.messages = mappedMessages;
+      // system 优先放在 requestBody 顶层（Anthropic API 推荐方式）
+      if (systemBlock) {
+        requestBody.system = systemBlock;
+      }
     }
 
     // 添加工具定义
@@ -214,19 +281,48 @@ class AnthropicProvider {
       throw new Error('ANTHROPIC_API_KEY 未设置');
     }
 
+    const mappedMessages = [];
+    let streamSystemBlock = system || null;
+    const systemMsg = messages.find(m => m.role === 'system');
+    if (systemMsg) {
+      streamSystemBlock = systemMsg.content;
+    }
+
+    for (const msg of messages) {
+      if (msg.role === 'system') continue;
+      if (msg.role === 'tool') {
+        mappedMessages.push({
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: msg.tool_use_id || '', content: msg.content }]
+        });
+      } else if (msg.role === 'tool_use') {
+        mappedMessages.push({
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: msg.id || '', name: msg.name || '', input: msg.input || {} }]
+        });
+      } else if (msg.role === 'assistant') {
+        mappedMessages.push({
+          role: 'assistant',
+          content: Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }]
+        });
+      } else {
+        mappedMessages.push({
+          role: 'user',
+          content: Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }]
+        });
+      }
+    }
+
     const requestBody = {
       model: model,
       max_tokens: maxTokens,
-      messages: messages.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      })),
+      messages: mappedMessages,
       temperature: temperature,
       stream: true
     };
 
-    if (system) {
-      requestBody.system = system;
+    if (streamSystemBlock) {
+      requestBody.system = streamSystemBlock;
     }
 
     if (tools && tools.length > 0) {

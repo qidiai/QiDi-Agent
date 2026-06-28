@@ -1,0 +1,39 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true,
+    "commonjs": true
+  },
+  "extends": [
+    "standard"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-console": "off",
+    "semi": ["error", "always"],
+    "quotes": ["error", "single"],
+    "indent": ["error", 2],
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "prefer-const": "warn",
+    "no-var": "error",
+    "eqeqeq": ["warn", "always"],
+    "no-with": "error",
+    "brace-style": ["error", "1tbs"],
+    "comma-dangle": ["warn", "only-multiline"],
+    "func-names": "warn"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "workspace/",
+    "output/",
+    "reports/",
+    "memory/",
+    "checkpoints/",
+    "logs/",
+    ".cache/",
+    "coverage/"
+  ]
+}

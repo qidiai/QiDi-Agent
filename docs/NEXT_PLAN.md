@@ -1,18 +1,107 @@
 # QiDi Agent 下一步优化计划
 
+> 更新日期：2026-06-28
+
 ## 待处理问题清单（P2/P3级，不阻断发布）
 
 | 序号 | 问题 | 级别 | 预估工时 | 状态 |
 |------|------|------|----------|------|
-| 1 | CORS Allow-Origin: * + 无认证 | P2 | 1h | 待处理 |
-| 2 | Anthropic 角色映射过粗（system/tool 丢失） | P2 | 0.5h | 待处理 |
-| 3 | 无统一 logger | P2 | 2h | ⚠️ Logger模块已存在，待推广使用 |
-| 4 | TaskOrchestrator 1229 行未拆分 | P2 | 1d | 待处理 |
+| 1 | CORS Allow-Origin: * + 无认证 | P0 | 1h | ✅ 已完成（默认 localhost + timingSafeEqual 认证） |
+| 2 | Anthropic 角色映射过粗（system/tool 丢失） | P2 | 0.5h | ✅ 已完成 |
+| 3 | 无统一 logger | P2 | 2h | ✅ 已完成（已推广至 WebUI、ToolScanner、ContractAssembler） |
+| 4 | TaskOrchestrator 1229 行未拆分 | P1 | 1d | ✅ 已完成（拆分为 TaskScheduler + TaskExecutor + 门面 Orchestrator） |
 | 5 | 无 CI/CD / Dockerfile / 端到端测试 | P3 | 0.5d | ✅ 已完成（CI/CD + Dockerfile） |
+| 6 | CLI interactive 体验简陋（无多行/历史/记忆） | P2 | 0.5d | ✅ 已完成（InteractiveSession） |
+| 7 | WebUI 编程输入界面简陋 | P2 | 0.5d | ✅ 已完成（行号编辑器+模板+上传） |
+| 8 | WebUI 文件操作散乱、无统一 API | P2 | 0.5d | ✅ 已完成（/api/files/* 统一 API） |
+| 9 | WebUI 无文件管理页面 | P2 | 0.5d | ✅ 已完成（#page-files） |
+| 10 | 项目文档分散、无索引 | P3 | 0.5d | ✅ 已完成（docs/README.md 索引+新增 CLI_GUIDE/WEBUI_GUIDE） |
+| 11 | WebUI 文件编辑未保存提示缺失 | P3 | 1h | ✅ 已完成（dirty flag + 状态栏 + 关闭确认） |
+| 12 | 文件管理上传走 JSON 体积受限，未支持 multipart | P3 | 2h | ✅ 已完成（multer multipart + 进度条 + 50MB 限制） |
+| 13 | WebUI 无速率限制 | P0 | 1h | ✅ 已完成（全局 100/min，execute 10/min） |
+| 14 | setTimeout fire-and-forget 导致 unhandledRejection | P0 | 1h | ✅ 已完成（改为 async/await） |
+| 15 | _activeTasks 无限增长内存泄漏 | P0 | 1h | ✅ 已完成（容量限制 100 + 定时清理） |
+| 16 | Logger 导入方式不一致导致运行时错误 | P0 | 0.5h | ✅ 已完成（统一为 createLogger('module') 模式） |
+| 17 | 任务暂停/恢复/断点续传 | P1 | 2h | ✅ 已完成 |
+| 18 | ESLint 集成 + 代码规范检查 | P2 | 1h | ✅ 已完成 |
 
 ---
 
 ## 优化方案详情
+
+### 16. Logger 导入方式不一致导致运行时错误 【P0】
+
+**问题**：`ContractAssembler.js` 和 `WebUIServer.js` 使用了 `const { logger } = require('../utils/Logger')`，但 Logger 模块导出的是 `createLogger` 函数而非含 `logger` 属性的对象，导致 `logger` 为 `undefined`。
+
+**修复**：统一为 `const createLogger = require('../utils/Logger'); const logger = createLogger('ModuleName')` 模式。
+
+**涉及文件**：
+- `src/core/ContractAssembler.js`
+- `src/core/WebUIServer.js`
+
+---
+
+### 17. 任务暂停/恢复/断点续传 【P1】
+
+**目标**：支持长时间运行的任务中途暂停，恢复后从断点继续执行。
+
+**实现**：
+- `TaskScheduler` 新增 `pause()/resume()/isPaused()` 方法
+- 每个任务执行前检查暂停状态
+- `saveCheckpoint(runId, tasks)` 自动保存每个任务完成后的状态
+- `restoreCheckpoint(runId)` 从 checkpoint 恢复任务状态
+- `TaskOrchestrator` 暴露完整的暂停/恢复/checkpoint API
+- 自动清理过期 checkpoint（默认 7 天）
+
+**API**：
+```javascript
+// 暂停
+await orchestrator.pause();
+
+// 恢复
+orchestrator.resume();
+
+// 手动保存 checkpoint
+const filePath = orchestrator.saveCheckpoint();
+
+// 列出所有 checkpoint
+const checkpoints = orchestrator.listCheckpoints();
+
+// 从 checkpoint 恢复
+const restored = orchestrator.restoreCheckpoint('run_xxx');
+
+// 清理过期 checkpoint
+orchestrator.cleanOldCheckpoints(7);
+```
+
+**涉及文件**：
+- `src/core/TaskScheduler.js`（核心实现）
+- `src/core/TaskOrchestrator.js`（API 暴露）
+
+---
+
+### 18. ESLint 集成 + 代码规范检查 【P2】
+
+**目标**：引入 ESLint 统一代码风格，自动检测和修复常见错误。
+
+**实现**：
+- 添加 ESLint 及其 standard 配置到 devDependencies
+- 创建 `.eslintrc.json` 配置文件
+- package.json 新增 `lint`/`lint:fix`/`lint:ci` 脚本
+- 忽略 node_modules、workspace、output 等目录
+
+**使用**：
+```bash
+npm run lint              # 检查代码
+npm run lint:fix          # 自动修复
+npm run lint:ci           # CI 模式（严格模式）
+```
+
+**涉及文件**：
+- `.eslintrc.json`（新建）
+- `package.json`（新增脚本和 devDependencies）
+
+---
 
 ### 1. CORS Allow-Origin: * + 无认证 【P2】
 
@@ -124,15 +213,23 @@
 ## 实施优先级建议
 
 1. **高优先级（发布后立即处理）**：
-   - CORS + 认证（安全风险）
-   - Anthropic 角色映射（功能完整性）
+   - ✅ CORS + 认证（安全风险）— 默认 localhost + timingSafeEqual
+   - ✅ Anthropic 角色映射（功能完整性）
+   - ✅ 速率限制（防滥用）
+   - ✅ setTimeout fire-and-forget 修复（稳定性）
+   - ✅ _activeTasks 容量控制（内存安全）
 
 2. **中优先级（后续迭代）**：
-   - Logger 推广使用（运维便利性）
+   - ✅ Logger 推广使用 + 导入修复（运维便利性）
+   - ✅ TaskOrchestrator 拆分（可维护性）
+   - ✅ 任务暂停/恢复/断点续传（可靠性）
+   - ✅ ESLint 集成（代码规范）
    - 端到端测试增强
 
 3. **低优先级（重构预留）**：
-   - TaskOrchestrator 拆分（技术债务，可逐步实施）
+   - ✅ WebUI 文件编辑未保存提示 — 已完成
+   - ✅ 文件管理上传 multipart 支持 — 已完成
+   - 更多 AI 编程软件适配器（Cursor、Windsurf 等）
 
 ---
 
@@ -302,13 +399,17 @@ class NewToolAdapter extends BaseToolAdapter {
 
 | 阶段 | 内容 | 预估时间 | 优先级 |
 |------|------|----------|--------|
-| Phase 1 | CORS + 认证 + Anthropic 角色映射 | 1.5h | 🔴 高 |
+| Phase 1 | CORS + 认证 + Anthropic 角色映射 | 1.5h | 🔴 高 ✅ |
 | Phase 2 | 效率模式交互设计 + 模型选择 | 1d | 🔴 高 |
 | Phase 3 | Cursor + Windsurf 适配器开发 | 1d | 🔴 高 |
-| Phase 4 | Logger 推广使用 | 2h | 🟡 中 |
-| Phase 5 | Codeium + Copilot 适配器 | 1d | 🟡 中 |
-| Phase 6 | TaskOrchestrator 拆分（分步实施） | 2-3d | 🟢 低 |
-| Phase 7 | 端到端测试增强 + CI 覆盖率 | 1d | 🟢 低 |
+| Phase 4 | Logger 推广使用 + 导入修复 | 2h | 🟡 中 ✅ |
+| Phase 5 | 任务暂停/恢复/断点续传 | 2h | 🟡 中 ✅ |
+| Phase 6 | ESLint 集成 | 1h | 🟡 中 ✅ |
+| Phase 7 | Codeium + Copilot 适配器 | 1d | 🟡 中 |
+| Phase 8 | TaskOrchestrator 拆分（分步实施） | 2-3d | 🟢 低 ✅ |
+| Phase 9 | 端到端测试增强 + CI 覆盖率 | 1d | 🟢 低 |
+| Phase 8 | P0 安全加固（速率限制/内存控制/fire-and-forget） | 3h | 🔴 高 ✅ |
+| Phase 9 | P3 WebUI 用户体验（未保存提示 + multipart 上传） | 3h | 🟢 低 ✅ |
 
 ---
 

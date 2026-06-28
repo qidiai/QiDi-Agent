@@ -517,9 +517,10 @@ async function testExecutionModeManager() {
     const modes = mgr.getAllModes();
 
     assert(Array.isArray(modes), 'modes 应为数组');
-    assertEqual(modes.length, 2, '应有2种模式');
+    assertEqual(modes.length, 3, '应有3种模式');
     assert(modes.find(m => m.name === 'privacy'), '缺少 privacy 模式');
     assert(modes.find(m => m.name === 'quality'), '缺少 quality 模式');
+    assert(modes.find(m => m.name === 'efficiency'), '缺少 efficiency 模式');
     modes.forEach(m => {
       assert(m.displayName, `模式 ${m.name} 缺少 displayName`);
       assert(m.description, `模式 ${m.name} 缺少 description`);
@@ -896,7 +897,7 @@ async function testTaskOrchestrator() {
     const orchestrator = new TaskOrchestrator(provider, { workspaceDir: './test_workspace' });
     const modes = orchestrator.getExecutionModes();
     assert(Array.isArray(modes), 'modes 应为数组');
-    assertEqual(modes.length, 2, '应有2种模式');
+    assertEqual(modes.length, 3, '应有3种模式');
   });
 }
 

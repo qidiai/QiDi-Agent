@@ -18,6 +18,8 @@
  */
 
 const ProviderFactory = require('../providers');
+const createLogger = require('../utils/Logger');
+const logger = createLogger('ContractAssembler');
 
 class ContractAssembler {
   constructor(options = {}) {
@@ -65,7 +67,7 @@ class ContractAssembler {
           aiExtracted = await this._extractContractsByAI(block.code, lang, staticExtracted);
         } catch (e) {
           // AI 提取失败，仅用静态分析结果
-          console.warn('本地模型契约提取失败:', e.message);
+          logger.warn(`本地模型契约提取失败 (${block.filePath}):`, e.message);
         }
       }
       
@@ -102,7 +104,7 @@ class ContractAssembler {
       // 如果传入的是 Provider 实例，直接使用
       if (modelConfig.chat && typeof modelConfig.chat === 'function') {
         this.localModel = modelConfig;
-        console.log('✅ 契约拼装引擎：使用已配置的本地模型');
+        logger.info('契约拼装引擎：使用已配置的本地模型');
         return;
       }
       
@@ -112,10 +114,10 @@ class ContractAssembler {
           baseURL: modelConfig.baseURL || 'http://localhost:11434',
           model: modelConfig.model || 'qwen2.5:7b'
         });
-        console.log('✅ 契约拼装引擎：初始化本地 Ollama 模型');
+        logger.info('契约拼装引擎：初始化本地 Ollama 模型');
       }
     } catch (e) {
-      console.warn('⚠️ 契约拼装引擎：本地模型初始化失败:', e.message);
+      logger.warn('契约拼装引擎：本地模型初始化失败', e.message);
       this.localModel = null;
     }
   }
@@ -173,7 +175,7 @@ ${code}
         };
       }
     } catch (e) {
-      console.warn('AI 契约提取解析失败:', e.message);
+      logger.warn('AI 契约提取解析失败:', e.message);
     }
     
     return null;

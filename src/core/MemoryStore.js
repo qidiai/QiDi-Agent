@@ -12,8 +12,13 @@ class MemoryStore {
     this.persistFile = options.persistFile || 'session.json';
     this.maxHistory = options.maxHistory || 100;
     
+    // 标签反向索引: tag -> Set<taskId>
+    this._tagIndex = new Map();
+    
     this._ensureDir(this.persistDir);
     this._load();
+    this._saveTimer = null;
+    this._pendingSave = false;
   }
 
   _ensureDir(dir) {
@@ -28,9 +33,27 @@ class MemoryStore {
       if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf-8');
         this.store = JSON.parse(data);
+        this._rebuildTagIndex();
       }
     } catch (e) {
       this.store = { global: {}, tasks: {}, tags: {} };
+    }
+  }
+
+  /**
+   * 重建标签索引
+   */
+  _rebuildTagIndex() {
+    this._tagIndex.clear();
+    for (const [taskId, taskData] of Object.entries(this.store.tasks)) {
+      if (taskData.tags && Array.isArray(taskData.tags)) {
+        for (const tag of taskData.tags) {
+          if (!this._tagIndex.has(tag)) {
+            this._tagIndex.set(tag, new Set());
+          }
+          this._tagIndex.get(tag).add(taskId);
+        }
+      }
     }
   }
 
@@ -44,7 +67,7 @@ class MemoryStore {
 
   setGlobal(key, value) {
     this.store.global[key] = value;
-    this._save();
+    this._debouncedSave();
     return this;
   }
 
@@ -61,7 +84,7 @@ class MemoryStore {
       this.store.tasks[taskId] = {};
     }
     this.store.tasks[taskId][key] = value;
-    this._save();
+    this._debouncedSave();
     return this;
   }
 
@@ -83,14 +106,18 @@ class MemoryStore {
       this.store.tasks[taskId][key] = [];
     }
     this.store.tasks[taskId][key].push(value);
-    this._save();
+    this._debouncedSave();
     return this;
   }
 
   queryByTag(tag) {
+    const taskIds = this._tagIndex.get(tag);
+    if (!taskIds) return [];
+    
     const results = [];
-    for (const [taskId, taskData] of Object.entries(this.store.tasks)) {
-      if (taskData.tags && taskData.tags.includes(tag)) {
+    for (const taskId of taskIds) {
+      const taskData = this.store.tasks[taskId];
+      if (taskData) {
         results.push({ taskId, ...taskData });
       }
     }
@@ -106,8 +133,13 @@ class MemoryStore {
     }
     if (!this.store.tasks[taskId].tags.includes(tag)) {
       this.store.tasks[taskId].tags.push(tag);
+      // 更新索引
+      if (!this._tagIndex.has(tag)) {
+        this._tagIndex.set(tag, new Set());
+      }
+      this._tagIndex.get(tag).add(taskId);
     }
-    this._save();
+    this._debouncedSave();
     return this;
   }
 
@@ -139,14 +171,48 @@ class MemoryStore {
 
   clear() {
     this.store = { global: {}, tasks: {}, tags: {} };
-    this._save();
+    this._tagIndex.clear();
+    this._debouncedSave();
     return this;
   }
 
   clearTask(taskId) {
-    delete this.store.tasks[taskId];
-    this._save();
+    if (this.store.tasks[taskId]) {
+      // 从索引中移除该 task 的所有标签
+      const taskData = this.store.tasks[taskId];
+      if (taskData.tags) {
+        for (const tag of taskData.tags) {
+          const idx = this._tagIndex.get(tag);
+          if (idx) {
+            idx.delete(taskId);
+            if (idx.size === 0) this._tagIndex.delete(tag);
+          }
+        }
+      }
+      delete this.store.tasks[taskId];
+    }
+    this._debouncedSave();
     return this;
+  }
+
+  _debouncedSave() {
+    if (this._pendingSave) return;
+    this._pendingSave = true;
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this._pendingSave = false;
+      this._saveTimer = null;
+      this._save();
+    }, 1000);
+  }
+
+  flush() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._pendingSave = false;
+    this._save();
   }
 }
 
