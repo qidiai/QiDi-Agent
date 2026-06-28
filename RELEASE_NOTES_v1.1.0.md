@@ -63,9 +63,22 @@ v1.1.0 是一次**全栈优化发布**，覆盖从底层安全到前端用户体
 ### 6. CLI 交互式会话增强
 | 项目 | 详情 |
 |------|------|
-| **文件** | `src/cli/InteractiveSession.js` |
+| **文件** | `src/cli/InteractiveSession.js`, `src/cli/index.js` |
 | **新增** | 多行输入（`;` 提交 / 空行结束 / `.cancel` 取消）、命令历史持久化（`~/.qidi/history`，200 条）、上下文记忆（最近任务/报告/错误）、Tab 补全（20+ 命令）、`ora` spinner 实时进度条 |
-| **快捷命令** | `scan`、`status`、`tools`、`mode`、`provider`、`run`、`tasks`、`reports`、`report <id>`、`context`、`ls`、`view`、`pwd`、`history`、`reset`、`clear` |
+| **新增选项** | `interactive` 命令新增 `--provider` 选项（`ollama` / `openai` / `anthropic`），支持启动时指定默认提供商 |
+| **命令集** | `scan`、`tools`、`status`、`mode privacy/quality`、`provider ollama/openai`、`run <任务>`、`tasks`、`reports`、`report <id>`、`context/ctx`、`ls [dir]`、`view <path>`、`pwd`、`history`、`reset`、`clear/cls`、`help/h/?`、`exit/quit/q` |
+
+其他 CLI 命令也进行了强化：
+- `qidi scan --connect --save` — 扫描 + 自动连接 + 保存
+- `qidi connect --auto` / `qidi connect -t <tool>` — 自动/指定工具连接
+- `qidi agents --enable/--disable <name>` — 启用/禁用 Agent
+- `qidi reports [-c N]` — 列出最近 N 个报告
+- `qidi report <id>` — 查看指定报告
+- `qidi config --show / --level debug` — 配置查看/日志级别
+- `qidi logs [--clean]` — 日志统计/清理
+- `qidi web [-p <port>]` — 启动 WebUI
+- `qidi version` — 版本信息
+- `qidi update --changelog` — 查看更新日志
 
 ### 7. 执行模式管理器
 | 项目 | 详情 |

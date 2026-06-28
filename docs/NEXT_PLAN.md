@@ -1,8 +1,10 @@
-# QiDi Agent 下一步优化计划
+# QiDi Agent v1.1.0 完成报告
 
-> 更新日期：2026-06-28
+> **发布日期**：2026-06-28  
+> **状态**：✅ 全部 18 项已完成，版本 v1.1.0 已发布  
+> **对应更新文档**：[RELEASE_NOTES_v1.1.0.md](../RELEASE_NOTES_v1.1.0.md) ｜ [CHANGELOG.md](../CHANGELOG.md)
 
-## 待处理问题清单（P2/P3级，不阻断发布）
+## 完成清单（全量 ✅）
 
 | 序号 | 问题 | 级别 | 预估工时 | 状态 |
 |------|------|------|----------|------|
@@ -27,7 +29,38 @@
 
 ---
 
-## 优化方案详情
+## 优化方案详情（完成记录）
+
+### 6. CLI 交互式会话增强 — 命令指令完整参考
+
+`interactive` 命令（别名 `i`）启动常驻 REPL，支持以下命令集：
+
+| 命令 | 作用 |
+|------|------|
+| `scan` | 扫描并接入本机 AI 编程工具 |
+| `tools` | 查看已接入工具 |
+| `status` | 查看当前模式/提供商/工具/工作目录 |
+| `mode privacy` / `mode quality` | 切换执行模式 |
+| `provider ollama` / `provider openai` | 切换默认提供商 |
+| `<任务描述>` 或 `run <任务描述>` | 执行编程任务 |
+| `tasks` | 查看最近任务历史 |
+| `reports` | 查看最近报告 ID |
+| `report <id>` | 查看报告内容 |
+| `context` / `ctx` | 查看上下文记忆 |
+| `ls [dir] [depth]` | 列出工作目录文件 |
+| `view <path>` | 查看文件（带行号，最多 200 行） |
+| `pwd` | 显示当前工作目录 |
+| `history` | 查看命令历史 |
+| `reset` | 重置上下文记忆 |
+| `clear` / `cls` | 清屏 |
+| `help` / `h` / `?` | 显示帮助 |
+| `exit` / `quit` / `q` | 退出（自动保存上下文） |
+
+`interactive` 新增 `--provider` 选项：`qidi interactive --provider openai`，支持 `ollama` / `openai` / `anthropic`。
+
+命令历史持久化到 `~/.qidi/history`（最多 200 条），上下文记忆持久化到 `~/.qidi/session.json`，方向键翻阅历史，Tab 补全。
+
+---
 
 ### 16. Logger 导入方式不一致导致运行时错误 【P0】
 
@@ -207,6 +240,61 @@ npm run lint:ci           # CI 模式（严格模式）
 - 添加更多端到端测试场景
 - CI 中增加覆盖率报告
 - Release 自动化工作流
+
+---
+
+## v1.1.0 追加完成项（本次会话新增）
+
+| 序号 | 问题 | 级别 | 状态 |
+|------|------|------|------|
+| 19 | Agent 上下文记忆管理（TokenCounter + 24K 预算 + 自动截断） | P4 | ✅ 已完成 |
+| 20 | 会话双层持久化（localStorage + 文件 + 会话 API） | P4 | ✅ 已完成 |
+| 21 | 先聊后执行交互模式（对话引导 → 确认后执行） | P4 | ✅ 已完成 |
+| 22 | Provider 透传修复（WebUI → RealTaskExecutor → 6 Agent） | P0 | ✅ 已完成 |
+| 23 | CLI 工具授权复用（WebUI 已授权工具自动同步到 CLI） | P0 | ✅ 已完成 |
+| 24 | AI 身份统一为 QIDI Agent（禁止千问等代称） | P4 | ✅ 已完成 |
+
+### 19. Agent 上下文记忆管理 【P4】
+
+**实现**：
+- TokenCounter 集成：中文×1.5、英文×1、代码×0.5 估算 token
+- 24K 上下文预算（`MAX_CHAT_CONTEXT_TOKENS = 24000`），预留 ~8K 给模型回复
+- 超出预算自动截断：移除最早对话（保留首条 user + 最新消息），循环截断至预算内
+- 前端进度条实时显示 token 占用百分比（<70% 绿 / 70-90% 橙 / >90% 红）
+
+### 20. 会话双层持久化 【P4】
+
+**实现**：
+- 前端：localStorage `qidi_chat_history`，刷新后自动恢复对话
+- 后端：文件存储至 `{configDir}/chat_memory/{sessionId}.json`
+- 会话 API：`GET/POST /api/chat/sessions`（列表/创建）、`GET/DELETE /api/chat/sessions/:id`（加载/删除）
+
+### 21. 先聊后执行交互模式 【P4】
+
+**实现**：
+- 用户先通过自然语言与 Agent 对话沟通需求，确认理解无误后，再点击「执行任务」触发实际执行
+- 严禁直接发送即执行
+- 每个聊天请求携带 `sessionId`，服务端自动创建或续接会话
+
+### 22. Provider 透传修复 【P0】
+
+**根因**：`WebUIServer._runTaskAsync()` 创建 `RealTaskExecutor` 时未传入 `provider` → `AgentFactory.createAll(undefined)` → 所有 6 个 Agent provider 为 undefined → `TaskSplitterAgent.chat()` 崩溃
+
+**修复**：从 AgentHub 首个启用 Agent 获取 `provider`，显式传入 RealTaskExecutor
+
+**影响**：任务拆分 / 代码生成 / 质检 / 合并等全链路 Agent 均获正常工作 provider
+
+### 23. CLI 工具授权复用 【P0】
+
+**根因**：`RealTaskExecutor._scanTools()` 创建独立 `ToolScanner` 实例，不继承 WebUI 已注册的授权工具
+
+**修复**：新增 `toolScanner` 参数透传，`_scanTools()` 优先复用 WebUI 已授权工具，无外部工具时回退自扫
+
+**影响**：CLI 端不再重复弹出工具授权确认，WebUI 配置的模型和工具自动同步到执行链路
+
+### 24. AI 身份统一为 QIDI Agent 【P4】
+
+**变更**：系统提示词统一使用「QIDI Agent（启迪智能体）」作为正式名称，禁止使用「千问」等模型代称；用户可通过自然语言设定临时身份。
 
 ---
 
