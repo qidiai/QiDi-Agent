@@ -1,0 +1,25 @@
+{
+  "originalTask": "用C语言实现一个斐波那契数列，包含递归和迭代两种算法",
+  "successRate": 100,
+  "totalTasks": 3,
+  "completedTasks": 3,
+  "failedTasks": 0,
+  "constraints": {
+    "language": "c",
+    "techStack": "console",
+    "platform": "windows",
+    "framework": "None",
+    "style": "C标准库",
+    "fileExtension": "c"
+  },
+  "keywords": "C语言, 算法",
+  "tags": [
+    "c",
+    "成功",
+    "C语言",
+    "算法"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 509
+}
