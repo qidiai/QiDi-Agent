@@ -18,13 +18,14 @@ const FileManager = require('../utils/FileManager');
 const { logo, miniLogo, banner, printLogo } = require('./logo');
 const { VersionManager } = require('../utils/VersionManager');
 const Logger = require('../utils/Logger').Logger;
+const packageJson = require('../../package.json');
 
 const program = new Command();
 
 program
   .name('qidi')
   .description('启迪 Agent - 多 AI 编程工具统一编排与协作平台')
-  .version('1.0.0');
+  .version(packageJson.version);
 
 program
   .command('run')
@@ -869,6 +870,30 @@ program
       provider: options.provider
     });
     await session.start();
+  });
+
+// ────────────────── tui 命令（Ink TUI 实验性）─────────────────
+program
+  .command('tui')
+  .description('启动 Ink TUI 界面（实验性，功能开发中）')
+  .option('-m, --mode <mode>', '执行模式: privacy|quality', 'privacy')
+  .option('-p, --provider <provider>', '模型提供商: ollama|openai|anthropic', process.env.MODEL_PROVIDER || 'ollama')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .action(async (options) => {
+    printLogo({ banner: true });
+    console.log(chalk.yellow('  ⚠️ Ink TUI 正在开发中，部分功能不可用\n'));
+
+    try {
+      const { startTUI } = require('../tui');
+      await startTUI({
+        workspaceDir: options.workspace,
+        mode: options.mode,
+        provider: options.provider
+      });
+    } catch (err) {
+      console.log(chalk.red(`  ❌ TUI 启动失败: ${err.message}`));
+      console.log(chalk.gray('  提示: 使用 qidi interactive 获取完整的交互式体验\n'));
+    }
   });
 
 // ────────────────── help 命令 ──────────────────

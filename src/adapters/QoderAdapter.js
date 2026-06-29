@@ -1,6 +1,7 @@
 const BaseToolAdapter = require('./BaseToolAdapter');
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 class QoderAdapter extends BaseToolAdapter {
   constructor(options = {}) {
@@ -22,12 +23,8 @@ class QoderAdapter extends BaseToolAdapter {
       if (cmdPath) {
         this.installPath = cmdPath;
         this.detected = true;
-        
-        const versionResult = await this.checkVersion();
-        if (versionResult) {
-          this.version = versionResult;
-          this.status = 'online';
-        }
+        this.version = this._getFileVersion(cmdPath);
+        this.status = 'online';
         return true;
       }
 
@@ -49,12 +46,8 @@ class QoderAdapter extends BaseToolAdapter {
           this.installPath = p;
           this.command = p;
           this.detected = true;
-          
-          const versionResult = await this.checkVersion();
-          if (versionResult) {
-            this.version = versionResult;
-            this.status = 'online';
-          }
+          this.version = this._getFileVersion(p);
+          this.status = 'online';
           return true;
         }
       }
@@ -70,6 +63,7 @@ class QoderAdapter extends BaseToolAdapter {
             this.installPath = exePath;
             this.command = exePath;
             this.detected = true;
+            this.version = this._getFileVersion(exePath);
             this.status = 'online';
             return true;
           }
@@ -81,13 +75,31 @@ class QoderAdapter extends BaseToolAdapter {
     return false;
   }
 
-  async checkVersion() {
+  _getFileVersion(filePath) {
     try {
-      const result = await this._runCommand(this.command, ['--version'], { timeout: 10000 });
-      if (result.success) {
-        return this._parseVersion(result.stdout) || 'unknown';
+      if (process.platform === 'win32') {
+        const result = spawnSync(
+          'powershell.exe',
+          ['-NoProfile', '-Command', `(Get-Item '${filePath.replace(/'/g, "''")}').VersionInfo.ProductVersion`],
+          { timeout: 5000, encoding: 'utf-8', windowsHide: true }
+        );
+        if (result.status === 0 && result.stdout) {
+          const version = result.stdout.trim();
+          if (version) return version;
+        }
+      }
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        return stat.mtime ? `installed-${stat.mtime.getTime().toString().slice(-8)}` : 'unknown';
       }
     } catch (e) {
+    }
+    return 'unknown';
+  }
+
+  async checkVersion() {
+    if (this.installPath && fs.existsSync(this.installPath)) {
+      return this._getFileVersion(this.installPath);
     }
     return null;
   }
@@ -101,18 +113,13 @@ class QoderAdapter extends BaseToolAdapter {
       throw new Error('Qoder 未安装或未找到');
     }
 
-    try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
-      if (result.success) {
-        this.status = 'online';
-        return { success: true, message: 'Qoder 连接成功' };
-      }
-      this.status = 'offline';
-      return { success: false, message: 'Qoder 不可用' };
-    } catch (e) {
-      this.status = 'error';
-      return { success: false, message: e.message };
+    if (this.installPath && fs.existsSync(this.installPath)) {
+      this.status = 'online';
+      return { success: true, message: 'Qoder 连接成功' };
     }
+
+    this.status = 'offline';
+    return { success: false, message: 'Qoder 不可用' };
   }
 
   async execute(task, options = {}) {

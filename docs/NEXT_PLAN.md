@@ -2,7 +2,8 @@
 
 > **发布日期**：2026-06-28  
 > **状态**：✅ 全部 18 项已完成，版本 v1.1.0 已发布  
-> **对应更新文档**：[RELEASE_NOTES_v1.1.0.md](../RELEASE_NOTES_v1.1.0.md) ｜ [CHANGELOG.md](../CHANGELOG.md)
+> **对应更新文档**：[RELEASE_NOTES_v1.1.0.md](../RELEASE_NOTES_v1.1.0.md) ｜ [CHANGELOG.md](../CHANGELOG.md)  
+> **专家评审报告**：[EXPERT_REVIEW.md](EXPERT_REVIEW.md)（CLI改进方案、赢利点分析、技术路线图）
 
 ## 完成清单（全量 ✅）
 

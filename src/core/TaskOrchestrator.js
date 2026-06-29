@@ -12,6 +12,7 @@ const ContractAssembler = require('./ContractAssembler');
 const ExecutionModeManager = require('./ExecutionModeManager');
 const TaskScheduler = require('./TaskScheduler');
 const TaskExecutor = require('./TaskExecutor');
+const ToolLearning = require('./ToolLearning');
 
 /**
  * 任务编排器（门面）：负责完整的任务生命周期管理。
@@ -105,6 +106,16 @@ class TaskOrchestrator extends EventEmitter {
       maxRetries: options.maxRetries || 2
     });
 
+    // ═══════════════ 被拒计数器与人工审批 ═══════════════
+    this.rejectionCounter = {
+      consecutiveFailures: 0,
+      maxConsecutiveFailures: options.maxConsecutiveFailures || 3,
+      enabled: options.enableRejectionCounter !== false,
+      requiresHumanApproval: false,
+      lastApprovalTime: null,
+      approvalHistory: []
+    };
+
     this.executor = new TaskExecutor({
       privacyMode: this.privacyMode,
       routingStrategy: this.routingStrategy,
@@ -131,6 +142,10 @@ class TaskOrchestrator extends EventEmitter {
     this.currentTaskIndex = -1;
     this.isRunning = false;
     this._currentRunId = null;
+
+    this.toolLearning = new ToolLearning({
+      learningDir: options.learningDir || './config/tool_learning'
+    });
   }
 
   // ── 路由器 ──
@@ -141,7 +156,8 @@ class TaskOrchestrator extends EventEmitter {
         strategy: this.routingStrategy,
         manualRouting: this.manualRouting,
         privacyMode: this.privacyMode,
-        toolOnlyMode: this.privacyMode
+        toolOnlyMode: this.privacyMode,
+        toolLearning: this.toolLearning
       });
     }
     return this.toolRouter;
@@ -151,6 +167,12 @@ class TaskOrchestrator extends EventEmitter {
 
   getRoutingStrategies() { return this._getTaskRouter().getStrategies(); }
   getToolCapabilities() { return this._getTaskRouter().options.capabilities; }
+  getToolLearningStats() { return this.toolLearning.getLearningStats(); }
+  getToolLearningProfiles() { return this.toolLearning.getAllToolProfiles(); }
+  getToolRecommendation(taskInfo, availableTools) {
+    return this.toolLearning.recommendBestTool(taskInfo, availableTools);
+  }
+  resetToolLearning() { return this.toolLearning.reset(); }
   getModeManager() { return this.modeManager; }
   getExecutionMode() { return this.modeManager.getCurrentMode(); }
 
@@ -189,6 +211,8 @@ class TaskOrchestrator extends EventEmitter {
     this.results = {};
     this.memory.clear();
 
+    this._resetRejectionCounter();
+
     // 生成运行 ID（用于 checkpoint）
     this._currentRunId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -224,10 +248,19 @@ class TaskOrchestrator extends EventEmitter {
       // 2. 执行（委托给 Scheduler + Executor）
       await this.scheduler.executeLoop(
         this.tasks,
-        (task, ctx) => this.executor.executeSingleTask(task, {
-          ...ctx, orchestrator: this, saveToMemory: (t, r) => this.executor._saveToMemory(t, r),
-          completedCountIncrement: () => {} // scheduler tracks internally
-        }),
+        async (task, ctx) => {
+          if (this.rejectionCounter.requiresHumanApproval) {
+            throw new Error(`需要人工审批：连续失败 ${this.rejectionCounter.consecutiveFailures} 次，请先调用 confirmHumanApproval() 确认`);
+          }
+
+          const result = await this.executor.executeSingleTask(task, {
+            ...ctx, orchestrator: this, saveToMemory: (t, r) => this.executor._saveToMemory(t, r),
+            completedCountIncrement: () => {}
+          });
+
+          this._updateRejectionCounter(task, result);
+          return result;
+        },
         {
           constraints: this.memory.getAllGlobals(),
           previousTasks: this.tasks.filter(t => t.status === 'completed')
@@ -275,6 +308,26 @@ class TaskOrchestrator extends EventEmitter {
     const completedTasks = this.tasks.filter(t => t.status === 'completed');
     const failedTasks = this.tasks.filter(t => t.status === 'failed');
     const needsRevisionTasks = this.tasks.filter(t => t.status === 'needs_revision');
+
+    for (const task of this.tasks) {
+      const toolName = task.result?.toolName;
+      if (toolName) {
+        const taskInfo = {
+          type: task.type || task.role || 'general',
+          language: task.language || splitResult.constraints?.language || 'unknown',
+          complexity: task.complexity || 'medium',
+          frameworks: task.frameworks || [],
+          role: task.role || 'code_writer'
+        };
+        const result = {
+          success: task.status === 'completed',
+          qualityScore: task.result?.quality?.qualityScore || (task.status === 'completed' ? 60 : 0),
+          duration: task.result?.duration || 0,
+          error: task.status === 'failed' ? (task.result?.error || '任务失败') : null
+        };
+        this.toolLearning.recordExecution(toolName, taskInfo, result);
+      }
+    }
 
     const summary = {
       originalTask,
@@ -341,6 +394,19 @@ class TaskOrchestrator extends EventEmitter {
       cacheStats: this.cacheStore.getStats(),
       modelStats: this.modelRouter.getStats()
     });
+
+    const qualityScores = summary.tasks
+      .filter(t => t.qualityScore !== null)
+      .map(t => t.qualityScore);
+    const avgQuality = qualityScores.length > 0
+      ? Math.round(qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length)
+      : 0;
+
+    this.modeManager.recordTaskResult(
+      this.modeManager.getCurrentMode(),
+      summary.successRate >= 60,
+      avgQuality
+    );
 
     return summary;
   }
@@ -559,6 +625,115 @@ class TaskOrchestrator extends EventEmitter {
     return this.reportGenerator.getContextSummary(recentReports.map(r => r.id));
   }
   getReportGenerator() { return this.reportGenerator; }
+
+  // ═══════════════════════════════════════════
+  // 被拒计数器与人工审批 API
+  // ═══════════════════════════════════════════
+
+  _resetRejectionCounter() {
+    this.rejectionCounter.consecutiveFailures = 0;
+    this.rejectionCounter.requiresHumanApproval = false;
+  }
+
+  _updateRejectionCounter(task, result) {
+    if (!this.rejectionCounter.enabled) return;
+
+    const isFailed = result?.success === false || 
+                     result?.quality?.qualityScore < this.modeManager.getModeConfig().qualityCheck.minQualityScore ||
+                     task?.status === 'failed';
+
+    if (isFailed) {
+      this.rejectionCounter.consecutiveFailures++;
+      
+      if (this.rejectionCounter.consecutiveFailures >= this.rejectionCounter.maxConsecutiveFailures) {
+        this.rejectionCounter.requiresHumanApproval = true;
+        this.emit('humanApprovalRequired', {
+          runId: this._currentRunId,
+          consecutiveFailures: this.rejectionCounter.consecutiveFailures,
+          maxAllowed: this.rejectionCounter.maxConsecutiveFailures,
+          taskId: task?.id,
+          taskTitle: task?.title,
+          qualityScore: result?.quality?.qualityScore
+        });
+      }
+    } else {
+      this.rejectionCounter.consecutiveFailures = 0;
+    }
+  }
+
+  confirmHumanApproval(reason = '') {
+    if (!this.rejectionCounter.requiresHumanApproval) {
+      throw new Error('当前不需要人工审批');
+    }
+
+    this.rejectionCounter.requiresHumanApproval = false;
+    this.rejectionCounter.consecutiveFailures = 0;
+    this.rejectionCounter.lastApprovalTime = Date.now();
+    this.rejectionCounter.approvalHistory.push({
+      timestamp: Date.now(),
+      reason,
+      runId: this._currentRunId
+    });
+
+    this.emit('humanApprovalConfirmed', {
+      runId: this._currentRunId,
+      reason,
+      approvalHistory: this.rejectionCounter.approvalHistory.length
+    });
+
+    return {
+      success: true,
+      message: '人工审批已确认，任务将继续执行',
+      approvalHistory: this.rejectionCounter.approvalHistory.slice(-5)
+    };
+  }
+
+  skipHumanApproval() {
+    if (!this.rejectionCounter.requiresHumanApproval) {
+      throw new Error('当前不需要人工审批');
+    }
+
+    this.rejectionCounter.requiresHumanApproval = false;
+    this.rejectionCounter.consecutiveFailures = 0;
+
+    this.emit('humanApprovalSkipped', {
+      runId: this._currentRunId
+    });
+
+    return {
+      success: true,
+      message: '已跳过人工审批，任务将继续执行'
+    };
+  }
+
+  getRejectionCounterStatus() {
+    return {
+      enabled: this.rejectionCounter.enabled,
+      consecutiveFailures: this.rejectionCounter.consecutiveFailures,
+      maxConsecutiveFailures: this.rejectionCounter.maxConsecutiveFailures,
+      requiresHumanApproval: this.rejectionCounter.requiresHumanApproval,
+      lastApprovalTime: this.rejectionCounter.lastApprovalTime,
+      approvalCount: this.rejectionCounter.approvalHistory.length
+    };
+  }
+
+  setRejectionThreshold(threshold) {
+    if (threshold < 1 || threshold > 10) {
+      throw new Error('阈值必须在 1-10 之间');
+    }
+    this.rejectionCounter.maxConsecutiveFailures = threshold;
+    return { success: true, threshold };
+  }
+
+  disableRejectionCounter() {
+    this.rejectionCounter.enabled = false;
+    return { success: true, message: '被拒计数器已禁用' };
+  }
+
+  enableRejectionCounter() {
+    this.rejectionCounter.enabled = true;
+    return { success: true, message: '被拒计数器已启用' };
+  }
 }
 
 module.exports = TaskOrchestrator;

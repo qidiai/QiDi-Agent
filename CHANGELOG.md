@@ -7,6 +7,231 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] — 2026-06-29
+
+### Added — P0: 工具学习系统（择优匹配）
+
+- **ToolLearning 模块** (`src/core/ToolLearning.js`)
+  - **执行历史记录**：记录每次工具执行的成功率、质量评分、耗时
+  - **工具画像分析**：
+    - 按语言统计成功率和平均质量
+    - 按任务类型统计表现
+    - 按复杂度统计表现
+    - 按角色统计表现
+  - **擅长领域识别**：自动分析每个工具的强项和弱项
+  - **择优匹配推荐**：
+    - 根据历史学习，对不同工具加减分
+    - 推荐最佳工具及原因说明
+  - **学习数据持久化**：自动保存到 `config/tool_learning/history.json`
+  - **API 接口**：
+    - `recordExecution(toolName, taskInfo, result)` — 记录执行结果
+    - `getToolRecommendation(taskInfo, availableTools)` — 获取最佳工具推荐
+    - `getToolLearningStats()` — 获取学习统计
+    - `getToolLearningProfiles()` — 获取所有工具画像摘要
+    - `resetToolLearning()` — 重置学习数据
+
+- **TaskRouter 集成学习加成** (`src/core/TaskRouter.js`)
+  - `_calculateCapabilityScore` 新增第3个参数 `toolName`
+  - 学习加成范围：-10 到 +10 分
+  - 能力匹配路由自动应用学习加成
+  - **API**：`setToolLearning(toolLearning)` — 设置学习模块
+
+- **TaskOrchestrator 集成学习反馈** (`src/core/TaskOrchestrator.js`)
+  - 初始化 ToolLearning 实例
+  - 任务完成后自动记录执行结果到学习系统
+  - 新增 API：`getToolLearningStats()`、`getToolLearningProfiles()`、`getToolRecommendation()`、`resetToolLearning()`
+
+### Added — P0: 系统提示词智能升级
+
+- **增强回答策略** (`src/core/WebUIServer.js`)
+  - 新增「先理解用户意图，再回答」原则
+  - 新增「复杂问题先拆解」原则
+  - 新增「不确定时诚实告知用户」原则
+  - 新增「定期总结进度和下一步计划」原则
+  - **身份要求细化**：
+    - 不主动提及底层模型名
+    - 只有用户明确问及时才如实回答具体模型名
+  - 回答更专业、更有条理
+
+### Fixed — P0: 导入路径修复
+
+- **CacheStore 导入路径** (`src/core/TaskOrchestrator.js`)
+  - 修复 `require('./CacheStore')` → `require('../utils/CacheStore')`
+
+### Changed — v1.3.0 内容（保留）
+
+---
+
+## [1.3.0] — 2026-06-29
+
+### Added — P0: 熔断器模式（Circuit Breaker）— 借鉴 cc-switch
+
+- **TaskRouter 熔断器集成** (`src/core/TaskRouter.js`)
+  - **三种状态**：Closed（正常）→ Open（熔断）→ HalfOpen（恢复探测）
+  - **双重触发机制**：
+    - 连续失败计数（默认 3 次）→ 触发熔断
+    - 错误率阈值（默认 >60%，且请求数 ≥10）→ 触发熔断
+  - **智能恢复策略**：
+    - 熔断后等待超时（默认 60 秒）→ 进入半开状态
+    - 半开状态仅允许 1 个探测请求
+    - 探测成功 → 切换回 Closed（重置统计）
+    - 探测失败 → 重新进入 Open（延长等待时间）
+  - **路由感知**：轮询策略自动跳过熔断工具，半开工具需通过探测验证
+  - **API 接口**：
+    - `recordTaskResult(toolName, success, errorMessage)` — 记录工具执行结果
+    - `getCircuitBreakerStats(toolName)` — 获取单个工具熔断器状态
+    - `getAllCircuitBreakerStats()` — 获取所有工具熔断器状态
+    - `resetCircuitBreaker(toolName)` — 重置指定工具熔断器
+    - `resetAllCircuitBreakers()` — 重置所有熔断器
+    - `allowHalfOpenProbe(toolName)` — 检查半开工具是否允许探测
+    - `checkAndUpdateState(toolName)` — 检查并更新熔断器状态（超时恢复）
+  - **配置选项**：`failureThreshold`（3）、`successThreshold`（2）、`timeoutSeconds`（60）、`errorRateThreshold`（0.6）、`minRequests`（10）
+
+### Added — P0: 模型感知参数优化（Thinking Optimizer）— 借鉴 cc-switch
+
+- **BaseAgent 模型优化配置** (`src/agents/BaseAgent.js`)
+  - **三路径分发策略**：
+    - **skip**（跳过思考）：haiku 轻量模型，温度 0.3，禁用 thinking
+    - **adaptive**（自适应思考）：sonnet/opus/gpt4 系列，温度 0.5-0.7，启用 thinking，budgetTokens 32000
+    - **legacy**（标准思考）：gpt3/qwen/llama/mistral 系列，温度 0.5-0.6，启用 thinking，budgetTokens 16384
+  - **模型家族检测**：支持 haiku、sonnet、opus、gpt4、gpt3、qwen、llama、mistral 自动识别
+  - **智能重试温度**：根据模型家族动态调整重试温度序列
+  - **API 接口**：
+    - `detectModelFamily(modelName)` — 检测模型所属家族
+    - `getModelOptimization(modelName)` — 获取模型优化配置
+    - `buildOptimizedOptions(modelName, options)` — 构建优化后的请求选项
+  - **sendWithRetry 增强**：自动检测模型类型，应用最优参数配置
+
+### Added — P0: 输出自修复（Output Rectifier）— 借鉴 cc-switch
+
+- **QualityCheckerAgent 代码块修复** (`src/agents/QualityCheckerAgent.js`)
+  - **不完整代码块修复**：检测并提取缺少结束标记的代码块
+  - **语言自动检测**：基于语法特征自动识别 C/Python/JavaScript/C++ 语言
+  - **JSON 自动修复**：
+    - 移除 markdown 代码块标记
+    - 移除 thinking 标签
+    - 提取 JSON 边界（从第一个 `{` 到最后一个 `}`）
+    - 修复未闭合字符串
+    - 修复缺失逗号
+    - 修复尾部逗号
+  - **API 接口**：
+    - `_repairCodeBlocks(text)` — 修复代码块缺失
+    - `_repairJson(text)` — 修复 JSON 格式错误
+    - `_extractJsonWithRepair(text)` — 优先使用修复后提取
+  - **集成点**：`_extractCode()` 和 `_runAIReview()` 自动使用修复逻辑
+
+### Added — P0: CLI 初始化向导
+
+- **交互式启动流程优化** (`src/cli/InteractiveSession.js`)
+  - **多步骤初始化向导**：
+    - 本地模式：步骤1→步骤2→步骤3（模式→提供商→扫描）
+    - 云端模式：步骤1→步骤2→步骤3→步骤4→步骤5（模式→提供商→模型→API Key→扫描）
+  - **高效模式支持**：新增 efficiency 模式，优先选择响应快的模型
+  - **模式标签更新**：`_cmdMode` 和 `_cmdStatus` 支持三种模式显示
+  - **启动界面显示当前配置**：模式、提供商、模型信息
+
+- **自定义模型配置**：
+  - **国际主流模型**：
+    - OpenAI：GPT-4o、GPT-4o mini、GPT-4 Turbo、GPT-3.5 Turbo、GPT-4
+    - Anthropic：Claude 3.5 Sonnet、Claude 3 Opus、Claude 3 Sonnet、Claude 3 Haiku
+  - **国内主流模型**：
+    - 字节跳动 豆包：Pro、Lite、Code
+    - 百度千帆（文心一言）：ERNIE 4.0、ERNIE 3.5、ERNIE 4.0 Turbo
+    - 阿里通义千问：2.5 72B、2.5 14B、2.5 7B、Code 7B
+    - DeepSeek：Chat、R1.5、Coder、Coder V2
+    - Moonshot（月之暗面）：8K、32K、128K
+    - MiniMax：ABAB6、ABAB5.5
+  - 支持输入自定义模型名称和 API Base URL
+  - 自动设置环境变量和默认 Base URL
+
+- **API Key 输入优化**：
+  - 密码输入隐藏（不显示输入内容）
+  - 自动验证 API Key 有效性
+  - 提示获取地址
+
+- **大文本自动文件上传**（类似 Kimi 网页版）：
+  - 输入内容超过 2000 字符时自动保存为 `task_input_<timestamp>.txt` 文件
+  - 避免 CLI 输入长度限制
+  - 文件保存在 workspace 目录，方便后续引用
+
+### Changed — v1.2.0 内容（保留）
+
+---
+
+## [1.2.0] — 2026-06-29
+
+### Added — P1: 被拒计数器与人工审批回退
+
+- **RejectionCounter 安全网机制** (`src/core/TaskOrchestrator.js`)
+  - 自动追踪连续失败次数，超过阈值（默认 3 次）时暂停执行
+  - 触发 `humanApprovalRequired` 事件，等待人工确认后继续
+  - **API 接口**：
+    - `confirmHumanApproval(reason)` — 确认人工审批，重置计数器
+    - `skipHumanApproval()` — 跳过审批，继续执行
+    - `getRejectionCounterStatus()` — 获取计数器状态
+    - `setRejectionThreshold(threshold)` — 设置阈值（1-10）
+    - `enableRejectionCounter()` / `disableRejectionCounter()` — 启用/禁用
+  - **配置**：通过 `maxConsecutiveFailures` 选项自定义阈值
+  - **触发条件**：子任务执行失败、质量评分低于阈值、任务状态标记为 failed
+
+### Added — P1: Auto模式自动决策
+
+- **autoDecideMode 智能模式选择** (`src/core/ExecutionModeManager.js`)
+  - **两阶段决策**：关键词推荐 + 历史性能评估
+  - **历史性能覆盖**：基于各模式的成功率（60%权重）和平均质量（40%权重）综合评分
+  - 当候选模式历史数据不足（<3次）时，直接使用关键词推荐结果
+  - 当候选模式表现良好（成功率≥80%且质量≥75）时，保留推荐
+  - 否则自动切换到历史表现更好的模式
+  - **API 接口**：
+    - `autoDecideMode(taskDescription, options)` — 自动决定并切换模式
+    - `recordTaskResult(mode, success, qualityScore)` — 记录任务结果用于学习
+    - `getModeStatistics()` — 获取各模式统计（成功率、平均质量、使用次数）
+    - `getAutoModeStatus()` — 获取自动模式完整状态
+    - `setAutoModeEnabled(enabled)` — 启用/禁用自动模式
+    - `resetStatistics()` — 重置历史统计
+  - **模式历史追踪**：每次模式切换记录 `{ timestamp, from, to }`
+  - **统计数据**：各模式独立维护 `{ total, success, avgQuality, successRate }`
+
+### Added — P2: 早期安全门（Early Safety Gate）
+
+- **高危操作检测** (`src/agents/QualityCheckerAgent.js`)
+  - 在编译门之前执行，作为第一道安全防线
+  - **检测规则**（可独立启用/禁用）：
+    - `fileDeletion`（高危）：检测 `rm`、`unlink`、`fs.unlink`、`fs.rm` 等文件删除操作
+    - `permissionElevation`（高危）：检测 `sudo`、`chmod`、`chown`、`setuid` 等权限提升操作
+    - `sensitiveData`（高危）：检测 `password=`、`api_key`、`secret=`、`token=` 等敏感信息硬编码
+    - `networkAccess`（中危）：检测 `http://`、`https://`、`fetch()`、`axios`、`socket` 等网络请求
+    - `systemCommands`（中危）：检测 `exec()`、`spawn()`、`child_process`、`shell` 等系统命令执行
+  - **严重等级**：高危操作直接阻断（质量分 20），中危操作警告
+  - **可配置性**：支持通过 `earlySafetyRules` 自定义检测规则
+  - **集成**：作为渐进质量门控的第一道门（earlySafety → compile → lint → aiReview → integration）
+
+### Added — P2: Agent 智能闭环增强
+
+- **BaseAgent 结构化输出保障** (`src/agents/BaseAgent.js`)
+  - JSON Schema 输出验证和自动修复
+  - 多温度重试机制（0.7→0.2→0.5）
+  - Thinking Chain 支持（`<thinking>` 标签提取）
+
+- **TaskSplitterAgent 策略自适应** (`src/agents/TaskSplitterAgent.js`)
+  - 基于执行历史动态调整拆分粒度、依赖权重、复杂度偏向
+  - 低成功率时自动调细粒度、增加依赖权重
+  - 高质量时自动放宽策略
+  - **API**：`getStrategyReport()`、`resetStrategy()`、`adaptiveResplit()`
+
+- **MergeEngine AST级合并** (`src/agents/MergeEngine.js`)
+  - 三路合并算法（基于契约提取的智能合并）
+  - 语义冲突检测（支持 C/C++/JavaScript/Python）
+  - 合并后验证（编译检查、语法检查、契约一致性检查）
+  - 回退合并策略
+
+### Changed — 测试
+
+- **测试通过率**：53/53（100%，等级 S）
+- **冒烟测试**：31/31 通过
+
+---
+
 ## [1.1.0] — 2026-06-28
 
 ### Added — P2: 效率模式（⚡ Efficiency Mode）

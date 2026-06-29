@@ -16,24 +16,232 @@ class TaskRouter {
     this.adapters = adapters;
     this.options = {
       strategy: options.strategy || 'round_robin',
-      // 手动路由表：任务类型 -> 工具名称
       manualRouting: options.manualRouting || {},
-      // 工具能力表：工具名称 -> 支持的能力
       capabilities: options.capabilities || this._buildDefaultCapabilities(),
       roundRobinIndex: 0,
-      // 隐私模式：Provider 是否参与代码生成
       privacyMode: options.privacyMode !== false,
-      // 是否仅使用工具执行（不依赖 Provider 生成）
       toolOnlyMode: options.toolOnlyMode || false,
       ...options
+    };
+
+    this.circuitBreakers = {};
+    this.circuitBreakerConfig = {
+      failureThreshold: options.failureThreshold || 3,
+      successThreshold: options.successThreshold || 2,
+      timeoutSeconds: options.timeoutSeconds || 60,
+      errorRateThreshold: options.errorRateThreshold || 0.6,
+      minRequests: options.minRequests || 10
+    };
+
+    this.toolLearning = options.toolLearning || null;
+  }
+
+  setToolLearning(toolLearning) {
+    this.toolLearning = toolLearning;
+  }
+
+  /**
+   * 获取可用的适配器列表（过滤熔断的工具）
+   */
+  getAvailableAdapters() {
+    const available = this.adapters.filter(a => a.isAvailable && a.isAvailable());
+    return available.filter(adapter => this._isAdapterAvailable(adapter));
+  }
+
+  /**
+   * 检查适配器是否可用（熔断器检查）
+   */
+  _isAdapterAvailable(adapter) {
+    const breaker = this._getOrCreateCircuitBreaker(adapter.name);
+    return breaker.state !== 'open';
+  }
+
+  /**
+   * 获取或创建熔断器
+   */
+  _getOrCreateCircuitBreaker(toolName) {
+    if (!this.circuitBreakers[toolName]) {
+      this.circuitBreakers[toolName] = {
+        state: 'closed',
+        consecutiveFailures: 0,
+        consecutiveSuccesses: 0,
+        totalRequests: 0,
+        failedRequests: 0,
+        lastOpenedAt: null,
+        halfOpenRequests: 0
+      };
+    }
+    return this.circuitBreakers[toolName];
+  }
+
+  /**
+   * 记录工具执行结果
+   */
+  recordTaskResult(toolName, success, errorMessage) {
+    const breaker = this._getOrCreateCircuitBreaker(toolName);
+    breaker.totalRequests++;
+
+    if (success) {
+      breaker.consecutiveFailures = 0;
+      breaker.consecutiveSuccesses++;
+
+      if (breaker.state === 'half_open') {
+        if (breaker.consecutiveSuccesses >= this.circuitBreakerConfig.successThreshold) {
+          this._transitionToClosed(toolName);
+        }
+      }
+    } else {
+      breaker.consecutiveFailures++;
+      breaker.failedRequests++;
+      breaker.consecutiveSuccesses = 0;
+
+      if (breaker.state === 'half_open') {
+        this._transitionToOpen(toolName);
+      } else if (breaker.state === 'closed') {
+        if (breaker.consecutiveFailures >= this.circuitBreakerConfig.failureThreshold) {
+          this._transitionToOpen(toolName);
+        } else {
+          const errorRate = breaker.totalRequests >= this.circuitBreakerConfig.minRequests
+            ? breaker.failedRequests / breaker.totalRequests
+            : 0;
+          if (errorRate >= this.circuitBreakerConfig.errorRateThreshold) {
+            this._transitionToOpen(toolName);
+          }
+        }
+      }
+    }
+
+    return breaker.state;
+  }
+
+  /**
+   * 转换到打开状态（熔断）
+   */
+  _transitionToOpen(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker) return;
+
+    breaker.state = 'open';
+    breaker.lastOpenedAt = Date.now();
+    breaker.consecutiveFailures = 0;
+    breaker.consecutiveSuccesses = 0;
+  }
+
+  /**
+   * 转换到半开状态（恢复探测）
+   */
+  _transitionToHalfOpen(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker) return;
+
+    breaker.state = 'half_open';
+    breaker.consecutiveSuccesses = 0;
+    breaker.halfOpenRequests = 0;
+  }
+
+  /**
+   * 转换到关闭状态（正常）
+   */
+  _transitionToClosed(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker) return;
+
+    breaker.state = 'closed';
+    breaker.consecutiveFailures = 0;
+    breaker.consecutiveSuccesses = 0;
+    breaker.totalRequests = 0;
+    breaker.failedRequests = 0;
+    breaker.halfOpenRequests = 0;
+  }
+
+  /**
+   * 检查半开状态的工具是否可以放行探测请求
+   */
+  allowHalfOpenProbe(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker || breaker.state !== 'half_open') {
+      return { allowed: false, usedProbe: false };
+    }
+
+    const maxProbeRequests = 1;
+    if (breaker.halfOpenRequests < maxProbeRequests) {
+      breaker.halfOpenRequests++;
+      return { allowed: true, usedProbe: true };
+    }
+    return { allowed: false, usedProbe: false };
+  }
+
+  /**
+   * 检查并更新熔断器状态（处理超时恢复）
+   */
+  checkAndUpdateState(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker) return;
+
+    if (breaker.state === 'open' && breaker.lastOpenedAt) {
+      const elapsed = (Date.now() - breaker.lastOpenedAt) / 1000;
+      if (elapsed >= this.circuitBreakerConfig.timeoutSeconds) {
+        this._transitionToHalfOpen(toolName);
+      }
+    }
+  }
+
+  /**
+   * 获取熔断器状态
+   */
+  getCircuitBreakerStats(toolName) {
+    const breaker = this.circuitBreakers[toolName];
+    if (!breaker) {
+      return null;
+    }
+
+    const errorRate = breaker.totalRequests > 0
+      ? (breaker.failedRequests / breaker.totalRequests * 100).toFixed(1)
+      : '0';
+
+    return {
+      toolName,
+      state: breaker.state,
+      consecutiveFailures: breaker.consecutiveFailures,
+      consecutiveSuccesses: breaker.consecutiveSuccesses,
+      totalRequests: breaker.totalRequests,
+      failedRequests: breaker.failedRequests,
+      errorRate: `${errorRate}%`,
+      lastOpenedAt: breaker.lastOpenedAt,
+      halfOpenRequests: breaker.halfOpenRequests
     };
   }
 
   /**
-   * 获取可用的适配器列表
+   * 获取所有熔断器状态
    */
-  getAvailableAdapters() {
-    return this.adapters.filter(a => a.isAvailable && a.isAvailable());
+  getAllCircuitBreakerStats() {
+    const stats = [];
+    for (const toolName of Object.keys(this.circuitBreakers)) {
+      stats.push(this.getCircuitBreakerStats(toolName));
+    }
+    return stats;
+  }
+
+  /**
+   * 重置熔断器
+   */
+  resetCircuitBreaker(toolName) {
+    if (this.circuitBreakers[toolName]) {
+      this._transitionToClosed(toolName);
+      return { success: true, message: `${toolName} 熔断器已重置` };
+    }
+    return { success: false, message: `${toolName} 熔断器不存在` };
+  }
+
+  /**
+   * 重置所有熔断器
+   */
+  resetAllCircuitBreakers() {
+    for (const toolName of Object.keys(this.circuitBreakers)) {
+      this._transitionToClosed(toolName);
+    }
+    return { success: true, count: Object.keys(this.circuitBreakers).length };
   }
 
   /**
@@ -211,18 +419,38 @@ class TaskRouter {
   /**
    * 轮询路由：按顺序轮流分配给不同工具
    * 隐私保护：每个工具只拿到部分任务
+   * 熔断器感知：自动跳过熔断的工具
    */
   _routeRoundRobin(task, available) {
-    const adapter = available[this.options.roundRobinIndex % available.length];
-    const toolName = adapter.displayName || adapter.name;
-    this.options.roundRobinIndex++;
+    if (available.length === 0) {
+      return { adapter: null, reason: '无可用工具' };
+    }
 
-    return {
-      adapter,
-      reason: `轮询策略：分配给 ${toolName}（第${this.options.roundRobinIndex}个任务）`,
-      strategy: 'round_robin',
-      assignedIndex: this.options.roundRobinIndex - 1
-    };
+    for (let i = 0; i < available.length; i++) {
+      const idx = (this.options.roundRobinIndex + i) % available.length;
+      const adapter = available[idx];
+      const breaker = this._getOrCreateCircuitBreaker(adapter.name);
+
+      this.checkAndUpdateState(adapter.name);
+
+      if (breaker.state === 'half_open') {
+        const probeResult = this.allowHalfOpenProbe(adapter.name);
+        if (!probeResult.allowed) continue;
+      }
+
+      const toolName = adapter.displayName || adapter.name;
+      this.options.roundRobinIndex = (idx + 1) % available.length;
+
+      return {
+        adapter,
+        reason: `轮询策略：分配给 ${toolName}（第${this.options.roundRobinIndex + 1}个任务）${breaker.state === 'half_open' ? '(半开探测)' : ''}`,
+        strategy: 'round_robin',
+        assignedIndex: this.options.roundRobinIndex,
+        circuitState: breaker.state
+      };
+    }
+
+    return { adapter: null, reason: '所有工具均不可用' };
   }
 
   /**
@@ -232,7 +460,7 @@ class TaskRouter {
   _routeByCapability(task, available) {
     const scores = available.map(adapter => {
       const caps = this.options.capabilities[adapter.name] || {};
-      const score = this._calculateCapabilityScore(task, caps);
+      const score = this._calculateCapabilityScore(task, caps, adapter.name);
 
       return {
         adapter,
@@ -261,7 +489,7 @@ class TaskRouter {
   /**
    * 计算任务与工具能力的匹配度
    */
-  _calculateCapabilityScore(task, caps) {
+  _calculateCapabilityScore(task, caps, toolName) {
     let score = 0;
     const details = [];
 
@@ -275,7 +503,7 @@ class TaskRouter {
 
     // 2. 框架匹配（最高6分，每匹配一个+2）
     if (task.frameworks && task.frameworks.length > 0 && caps.frameworks) {
-      const frameworkMatches = task.frameworks.filter(f => 
+      const frameworkMatches = task.frameworks.filter(f =>
         caps.frameworks.some(cf => cf.toLowerCase() === f.toLowerCase())
       );
       score += Math.min(frameworkMatches.length * 2, 6);
@@ -303,12 +531,31 @@ class TaskRouter {
 
     // 5. 优势匹配（最高4分）
     if (task.requiredStrengths && task.requiredStrengths.length > 0 && caps.strengths) {
-      const strengthMatches = task.requiredStrengths.filter(s => 
+      const strengthMatches = task.requiredStrengths.filter(s =>
         caps.strengths.some(cs => cs.toLowerCase() === s.toLowerCase())
       );
       score += Math.min(strengthMatches.length * 2, 4);
       if (strengthMatches.length > 0) {
         details.push(`优势匹配: ${strengthMatches.join(', ')}`);
+      }
+    }
+
+    // 6. 学习加成（-10到+10分）
+    if (this.toolLearning) {
+      const learningBonus = this.toolLearning.getToolRecommendation(toolName, {
+        language: task.language,
+        taskType: task.type || task.role,
+        complexity: task.complexity,
+        frameworks: task.frameworks,
+        role: task.role
+      });
+      if (learningBonus !== 0) {
+        score += learningBonus;
+        if (learningBonus > 0) {
+          details.push(`学习加成: +${learningBonus.toFixed(1)}`);
+        } else {
+          details.push(`学习惩罚: ${learningBonus.toFixed(1)}`);
+        }
       }
     }
 

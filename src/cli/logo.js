@@ -1,4 +1,7 @@
 const chalk = require('chalk');
+const packageJson = require('../../package.json');
+
+const version = packageJson.version;
 
 const logo = `
 ${chalk.yellow(' QQQQQ   III   DDDDD   III')}
@@ -8,7 +11,7 @@ ${chalk.yellow(' QQ  QQ   II   DDDDD    II')}
 ${chalk.yellow(' QQQQQ    II   DD       II')}
 ${chalk.yellow('    QQ                        QQ')}
 ${chalk.cyan('   ────────────────────────────────')}
-${chalk.bold.yellow('         QIDI AGENT v1.0.0')}
+${chalk.bold.yellow(`         QIDI AGENT v${version}`)}
 ${chalk.gray('     Multi-AI Tool Orchestration')}
 ${chalk.cyan('   ────────────────────────────────')}
 `;

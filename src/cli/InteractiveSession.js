@@ -25,7 +25,7 @@ const TaskOrchestrator = require('../core/TaskOrchestrator');
 const ToolScanner = require('../core/ToolScanner');
 const AdapterFactory = require('../adapters');
 const FileManager = require('../utils/FileManager');
-const { miniLogo } = require('./logo');
+const { logo, miniLogo } = require('./logo');
 
 class InteractiveSession {
   constructor(options = {}) {
@@ -110,11 +110,20 @@ class InteractiveSession {
   // ───────────────────────── 启动 ─────────────────────────
 
   async start() {
-    console.log(miniLogo);
+    console.log(logo);
+
+    await this._runStartupWizard();
+
     console.log(chalk.cyan.bold('\n  🚀 Qidi Agent 交互式编程界面'));
     console.log(chalk.gray('  ─────────────────────────────────────────'));
+    console.log(chalk.gray(`  当前模式: ${this.mode === 'privacy' ? '🔒 隐私模式' : this.mode === 'efficiency' ? '⚡ 高效模式' : '✨ 高质量模式'}`));
+    console.log(chalk.gray(`  当前提供商: ${this.defaultProvider}`));
+    if (this.selectedModel) {
+      console.log(chalk.gray(`  当前模型: ${this.selectedModel}`));
+    }
     console.log(chalk.gray('  多行任务：直接回车结束，或在末尾输入 ; 提交多行任务'));
-    console.log(chalk.gray('  输入 help 查看命令，exit 退出，Ctrl+C 退出\n'));
+    console.log(chalk.gray('  输入 help 查看命令，exit 退出，Ctrl+C 退出'));
+    console.log(chalk.yellow('  💡 提示：单行输入建议不超过 500 字，复杂任务建议使用多行模式\n'));
 
     this._loadHistory();
     this._loadContext();
@@ -128,7 +137,6 @@ class InteractiveSession {
       history: this.history.slice(-100).reverse()
     });
 
-    // 软中断：第一次 Ctrl+C 取消当前输入；第二次退出
     this.rl.on('SIGINT', () => {
       if (this._activeSpinner) {
         this._activeSpinner.fail('已取消');
@@ -145,6 +153,332 @@ class InteractiveSession {
     this.rl.on('close', () => this._onClose());
 
     this.rl.prompt();
+  }
+
+  async _runStartupWizard() {
+    console.log(chalk.cyan.bold('\n  ─────────────────── 初始化向导 ───────────────────'));
+    console.log(chalk.gray('  请选择执行模式和模型接入方式\n'));
+
+    await this._selectMode();
+    await this._selectProvider();
+    await this._scanTools();
+
+    console.log(chalk.cyan.bold('\n  ─────────────────── 初始化完成 ───────────────────\n'));
+  }
+
+  async _selectMode() {
+    console.log(chalk.yellow('  📋 步骤1: 选择执行模式'));
+    console.log(chalk.gray('    1) 🔒 隐私模式 - 代码不出本地，使用 Ollama 等本地模型'));
+    console.log(chalk.gray('    2) ✨ 高质量模式 - 调用多个云端模型，输出质量更高'));
+    console.log(chalk.gray('    3) ⚡ 高效模式 - 优先选择响应快的模型，适合简单任务'));
+
+    const validChoices = ['1', '2', '3', 'privacy', 'quality', 'efficiency'];
+    let choice = '';
+
+    while (!validChoices.includes(choice.toLowerCase())) {
+      const line = await this._readLine('  请输入 [1/2/3]: ');
+      choice = line.trim();
+    }
+
+    const modeMap = { '1': 'privacy', '2': 'quality', '3': 'efficiency' };
+    this.mode = modeMap[choice] || choice.toLowerCase();
+
+    const modeLabels = {
+      privacy: '🔒 隐私模式',
+      quality: '✨ 高质量模式',
+      efficiency: '⚡ 高效模式'
+    };
+    console.log(chalk.green(`  ✅ 已选择: ${modeLabels[this.mode]}\n`));
+  }
+
+  async _selectProvider() {
+    console.log(chalk.yellow('  📋 步骤2: 选择模型接入方式'));
+    console.log(chalk.gray('    1) 🖥️ 本地模型 - Ollama (推荐隐私模式使用)'));
+    console.log(chalk.gray(''));
+    console.log(chalk.gray('    ── 国际主流 ──'));
+    console.log(chalk.gray('    2) ☁️ OpenAI API'));
+    console.log(chalk.gray('    3) ☁️ Anthropic Claude'));
+    console.log(chalk.gray(''));
+    console.log(chalk.gray('    ── 国内主流 ──'));
+    console.log(chalk.gray('    4) ☁️ 字节跳动 豆包'));
+    console.log(chalk.gray('    5) ☁️ 百度千帆 (文心一言)'));
+    console.log(chalk.gray('    6) ☁️ 阿里通义千问'));
+    console.log(chalk.gray('    7) ☁️ DeepSeek'));
+    console.log(chalk.gray('    8) ☁️ Moonshot (月之暗面)'));
+    console.log(chalk.gray('    9) ☁️ MiniMax'));
+
+    const validChoices = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 
+      'ollama', 'openai', 'anthropic', 'doubao', 'qianfan', 'dashscope', 
+      'deepseek', 'moonshot', 'minimax'];
+    let choice = '';
+
+    while (!validChoices.includes(choice.toLowerCase())) {
+      const line = await this._readLine('  请输入 [1-9]: ');
+      choice = line.trim();
+    }
+
+    const providerMap = { 
+      '1': 'ollama', '2': 'openai', '3': 'anthropic', 
+      '4': 'doubao', '5': 'qianfan', '6': 'dashscope',
+      '7': 'deepseek', '8': 'moonshot', '9': 'minimax'
+    };
+    this.defaultProvider = providerMap[choice] || choice.toLowerCase();
+
+    const providerLabels = {
+      ollama: '🖥️ Ollama 本地模型',
+      openai: '☁️ OpenAI API',
+      anthropic: '☁️ Anthropic Claude',
+      doubao: '☁️ 字节跳动 豆包',
+      qianfan: '☁️ 百度千帆 (文心一言)',
+      dashscope: '☁️ 阿里通义千问',
+      deepseek: '☁️ DeepSeek',
+      moonshot: '☁️ Moonshot (月之暗面)',
+      minimax: '☁️ MiniMax'
+    };
+    console.log(chalk.green(`  ✅ 已选择: ${providerLabels[this.defaultProvider]}\n`));
+
+    if (this.defaultProvider !== 'ollama') {
+      await this._selectCloudModel();
+      await this._inputApiKey();
+    }
+  }
+
+  async _selectCloudModel() {
+    console.log(chalk.yellow('  📋 步骤3: 选择具体模型'));
+    
+    const modelOptions = {
+      openai: [
+        { id: 'gpt-4o', name: 'GPT-4o', desc: '最新旗舰模型，平衡速度与质量' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o mini', desc: '轻量高效，适合简单任务' },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', desc: '长上下文支持，适合复杂任务' },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', desc: '经济实惠，快速响应' },
+        { id: 'gpt-4', name: 'GPT-4', desc: '原版旗舰模型，强大推理能力' }
+      ],
+      anthropic: [
+        { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', desc: '平衡模型，适合大多数任务' },
+        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: '高端模型，极致推理能力' },
+        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', desc: '中等规模，平衡性能' },
+        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', desc: '轻量模型，极快响应' }
+      ],
+      doubao: [
+        { id: 'doubao-pro', name: '豆包 Pro', desc: '字节跳动旗舰模型，中文能力强' },
+        { id: 'doubao-lite', name: '豆包 Lite', desc: '轻量模型，快速响应' },
+        { id: 'doubao-code', name: '豆包 Code', desc: '代码专用模型，编程能力强' }
+      ],
+      qianfan: [
+        { id: 'ERNIE-4.0', name: '文心一言 4.0', desc: '百度旗舰模型，多模态能力强' },
+        { id: 'ERNIE-3.5', name: '文心一言 3.5', desc: '平衡模型，性价比高' },
+        { id: 'ERNIE-4.0-Turbo', name: '文心一言 4.0 Turbo', desc: '快速版本，适合对话' }
+      ],
+      dashscope: [
+        { id: 'qwen-2.5-72b-instruct', name: '通义千问 2.5 72B', desc: '阿里旗舰模型，中文理解强' },
+        { id: 'qwen-2.5-14b-instruct', name: '通义千问 2.5 14B', desc: '平衡模型，性能优秀' },
+        { id: 'qwen-2.5-7b-instruct', name: '通义千问 2.5 7B', desc: '轻量模型，响应快' },
+        { id: 'qwen-code-7b', name: '通义千问 Code 7B', desc: '代码专用模型' }
+      ],
+      deepseek: [
+        { id: 'deepseek-chat', name: 'DeepSeek Chat', desc: '通用对话模型，中文支持好' },
+        { id: 'deepseek-r1.5', name: 'DeepSeek R1.5', desc: '最新模型，推理能力强' },
+        { id: 'deepseek-coder', name: 'DeepSeek Coder', desc: '代码专用模型' },
+        { id: 'deepseek-coder-v2', name: 'DeepSeek Coder V2', desc: '代码模型升级版' }
+      ],
+      moonshot: [
+        { id: 'moonshot-v1-8k', name: 'Moonshot 8K', desc: '基础模型，经济实惠' },
+        { id: 'moonshot-v1-32k', name: 'Moonshot 32K', desc: '长上下文支持' },
+        { id: 'moonshot-v1-128k', name: 'Moonshot 128K', desc: '超长上下文，适合文档分析' }
+      ],
+      minimax: [
+        { id: 'abab6-chat', name: 'MiniMax ABAB6', desc: '旗舰模型，中文能力优秀' },
+        { id: 'abab5.5-chat', name: 'MiniMax ABAB5.5', desc: '平衡模型，性能稳定' }
+      ]
+    };
+
+    const models = modelOptions[this.defaultProvider] || [];
+    models.forEach((m, i) => {
+      console.log(chalk.gray(`    ${i + 1}) ${m.name} - ${m.desc}`));
+    });
+    console.log(chalk.gray(`    ${models.length + 1}) ⚙️ 自定义模型 - 输入自定义模型名称和地址`));
+
+    let choice = '';
+
+    while (!choice) {
+      const line = await this._readLine(`  请输入模型序号或直接输入自定义模型名: `);
+      choice = line.trim();
+    }
+
+    const index = parseInt(choice);
+    if (!isNaN(index) && index >= 1 && index <= models.length) {
+      this.selectedModel = models[index - 1].id;
+      const selected = models.find(m => m.id === this.selectedModel);
+      console.log(chalk.green(`  ✅ 已选择: ${selected ? selected.name : this.selectedModel}\n`));
+    } else if (index === models.length + 1) {
+      await this._configureCustomModel();
+    } else {
+      this.selectedModel = choice;
+      await this._configureCustomModel(true);
+    }
+  }
+
+  async _configureCustomModel(hasModelName = false) {
+    console.log(chalk.yellow('\n  ⚙️ 配置自定义模型'));
+    
+    if (!hasModelName) {
+      const modelName = await this._readLine('  请输入模型名称: ');
+      this.selectedModel = modelName.trim();
+    }
+
+    const modelUrl = await this._readLine('  请输入模型地址（API Base URL，留空使用默认）: ');
+    if (modelUrl.trim()) {
+      this.customBaseUrl = modelUrl.trim();
+      process.env[`${this.defaultProvider.toUpperCase()}_BASE_URL`] = this.customBaseUrl;
+    }
+
+    console.log(chalk.green(`  ✅ 自定义模型配置完成: ${this.selectedModel}${this.customBaseUrl ? ` @ ${this.customBaseUrl}` : ''}\n`));
+  }
+
+  async _inputApiKey() {
+    const apiKeyInfo = {
+      openai: { url: 'https://platform.openai.com/api-keys', env: 'OPENAI_API_KEY', baseUrl: 'https://api.openai.com/v1' },
+      anthropic: { url: 'https://console.anthropic.com/settings/api-keys', env: 'ANTHROPIC_API_KEY', baseUrl: 'https://api.anthropic.com/v1' },
+      doubao: { url: 'https://www.doubao.com/docs/api', env: 'DOUBAO_API_KEY', baseUrl: 'https://api.doubao.com/v1' },
+      qianfan: { url: 'https://console.bce.baidu.com/qianfan/', env: 'QIANFAN_API_KEY', baseUrl: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat' },
+      dashscope: { url: 'https://dashscope.console.aliyun.com/', env: 'DASHSCOPE_API_KEY', baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation' },
+      deepseek: { url: 'https://platform.deepseek.com/api_keys', env: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com/v1' },
+      moonshot: { url: 'https://platform.moonshot.cn/console/api-keys', env: 'MOONSHOT_API_KEY', baseUrl: 'https://api.moonshot.cn/v1' },
+      minimax: { url: 'https://platform.minimax.chat/console', env: 'MINIMAX_API_KEY', baseUrl: 'https://api.minimax.chat/v1' }
+    };
+
+    const info = apiKeyInfo[this.defaultProvider] || apiKeyInfo.openai;
+
+    console.log(chalk.yellow('  📋 步骤4: 输入 API Key'));
+    console.log(chalk.gray(`    请输入 API Key（输入时不显示）`));
+    console.log(chalk.gray(`    获取地址: ${info.url}\n`));
+
+    const apiKey = await this._readLineHidden(`  API Key: `);
+    
+    if (!apiKey || apiKey.trim() === '') {
+      console.log(chalk.yellow('  ⚠️ 未输入 API Key，将使用环境变量或配置文件中的密钥\n'));
+      return;
+    }
+
+    this.apiKey = apiKey.trim();
+    process.env[info.env] = this.apiKey;
+    
+    if (!this.customBaseUrl) {
+      this.customBaseUrl = info.baseUrl;
+      process.env[`${this.defaultProvider.toUpperCase()}_BASE_URL`] = info.baseUrl;
+    }
+    
+    const testResult = await this._testApiConnection();
+    if (testResult) {
+      console.log(chalk.green('  ✅ API Key 验证成功\n'));
+    } else {
+      console.log(chalk.yellow('  ⚠️ API Key 验证失败，请确保密钥正确\n'));
+    }
+  }
+
+  _readLineHidden(prompt) {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: chalk.cyan.bold(prompt)
+      });
+
+      const stdin = process.stdin;
+      const oldMode = stdin.mode;
+      stdin.setRawMode(true);
+
+      let input = '';
+      rl.on('line', (line) => {
+        stdin.setRawMode(oldMode);
+        rl.close();
+        console.log('');
+        resolve(line);
+      });
+
+      stdin.on('data', (key) => {
+        const k = key.toString();
+        if (k === '\n' || k === '\r') {
+          stdin.setRawMode(oldMode);
+          rl.close();
+          console.log('');
+          resolve(input);
+        } else if (k === '\b' || k === '\x7f') {
+          input = input.slice(0, -1);
+        } else if (k === '\u0003') {
+          stdin.setRawMode(oldMode);
+          process.exit(0);
+        } else {
+          input += k;
+        }
+      });
+
+      rl.prompt();
+    });
+  }
+
+  async _saveLongTextAsFile(content) {
+    const timestamp = Date.now();
+    const fileName = `task_input_${timestamp}.txt`;
+    const filePath = path.join(this.workspaceDir, fileName);
+    
+    await fs.promises.writeFile(filePath, content, 'utf-8');
+    return fileName;
+  }
+
+  async _testApiConnection() {
+    try {
+      const provider = ProviderFactory.create(this.defaultProvider);
+      const ok = await provider.checkConnection();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async _scanTools() {
+    const stepNum = this.defaultProvider !== 'ollama' ? 5 : 3;
+    console.log(chalk.yellow(`  📋 步骤${stepNum}: 扫描本机 AI 编程工具`));
+    const line = await this._readLine('  是否扫描? [Y/n]: ');
+    if (line.trim().toLowerCase() === 'n') {
+      console.log(chalk.gray('  ⏭️ 跳过扫描，稍后可使用 scan 命令手动扫描\n'));
+      return;
+    }
+
+    const spinner = ora('  🔍 扫描中...').start();
+    try {
+      this.toolScanner = new ToolScanner();
+      this.toolScanner.registerAdapters(AdapterFactory.createAll());
+      await this.toolScanner.scan();
+      await this.toolScanner.connectAll();
+      this.registeredTools = Array.from(this.toolScanner.registeredTools.values());
+      this.scanned = true;
+      spinner.succeed(`  ✅ 已接入 ${this.registeredTools.length} 个工具`);
+      if (this.registeredTools.length > 0) {
+        for (const t of this.registeredTools) {
+          console.log(chalk.green(`     ✅ ${t.displayName}`));
+        }
+      }
+    } catch (e) {
+      spinner.fail(`  扫描失败: ${e.message}`);
+    }
+    console.log('');
+  }
+
+  _readLine(prompt) {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: chalk.cyan.bold(prompt)
+      });
+      rl.on('line', (input) => {
+        rl.close();
+        resolve(input);
+      });
+      rl.prompt();
+    });
   }
 
   _printContextResume() {
@@ -384,7 +718,12 @@ class InteractiveSession {
 
   _cmdStatus() {
     console.log(chalk.cyan('\n  📊 当前状态:\n'));
-    console.log(chalk.gray(`  执行模式: ${this.mode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式'}`));
+    const modeLabels = {
+      privacy: '🔒 隐私模式',
+      quality: '✨ 高质量模式',
+      efficiency: '⚡ 高效模式'
+    };
+    console.log(chalk.gray(`  执行模式: ${modeLabels[this.mode] || this.mode}`));
     console.log(chalk.gray(`  提供商  : ${this.provider ? this.provider.name : this.defaultProvider + ' (未连接)'}`));
     console.log(chalk.gray(`  工具    : ${this.scanned ? `${this.registeredTools.length} 个已接入` : '未扫描 (输入 scan)'}`));
     console.log(chalk.gray(`  工作目录: ${path.resolve(this.workspaceDir)}`));
@@ -410,11 +749,16 @@ class InteractiveSession {
 
   _cmdMode(args) {
     const m = args[0];
-    if (m === 'privacy' || m === 'quality') {
+    const modeLabels = {
+      privacy: '🔒 隐私模式',
+      quality: '✨ 高质量模式',
+      efficiency: '⚡ 高效模式'
+    };
+    if (m === 'privacy' || m === 'quality' || m === 'efficiency') {
       this.mode = m;
-      console.log(chalk.green(`\n  ✅ 已切换到 ${m === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式'}\n`));
+      console.log(chalk.green(`\n  ✅ 已切换到 ${modeLabels[this.mode]}\n`));
     } else {
-      console.log(chalk.yellow(`\n  ⚠️ 无效模式，可选: privacy | quality (当前: ${this.mode})\n`));
+      console.log(chalk.yellow(`\n  ⚠️ 无效模式，可选: privacy | quality | efficiency (当前: ${modeLabels[this.mode] || this.mode})\n`));
     }
   }
 
@@ -578,7 +922,15 @@ class InteractiveSession {
   async _runTask(taskDescription) {
     if (!taskDescription || taskDescription.length === 0) return;
 
-    // 触发多行模式：以 ; 结尾且长度 > 1
+    const LONG_TEXT_THRESHOLD = 2000;
+    let taskFile = null;
+
+    if (taskDescription.length > LONG_TEXT_THRESHOLD) {
+      taskFile = await this._saveLongTextAsFile(taskDescription);
+      console.log(chalk.green(`  📄 大文本已自动保存为文件: ${taskFile}`));
+      console.log(chalk.gray('  提示：使用文件方式执行，避免CLI输入长度限制'));
+    }
+
     if (taskDescription.endsWith(';') && taskDescription.trim().length > 1) {
       this._multilineMode = true;
       this._multilineBuffer = [taskDescription.slice(0, -1)];

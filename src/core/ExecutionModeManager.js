@@ -25,7 +25,14 @@
 class ExecutionModeManager {
   constructor() {
     this.modes = this._defineModes();
-    this.currentMode = 'privacy'; // 默认隐私模式
+    this.currentMode = 'privacy';
+    this.autoModeEnabled = true;
+    this.modeHistory = [];
+    this.modeSuccessRates = {
+      privacy: { total: 0, success: 0, avgQuality: 0 },
+      quality: { total: 0, success: 0, avgQuality: 0 },
+      efficiency: { total: 0, success: 0, avgQuality: 0 }
+    };
   }
 
   /**
@@ -290,6 +297,13 @@ class ExecutionModeManager {
     if (!this.modes[modeName]) {
       throw new Error(`未知模式: ${modeName}。可选: ${Object.keys(this.modes).join(', ')}`);
     }
+    
+    this.modeHistory.push({
+      timestamp: Date.now(),
+      from: this.currentMode,
+      to: modeName
+    });
+    
     this.currentMode = modeName;
     return this.modes[modeName];
   }
@@ -451,6 +465,168 @@ class ExecutionModeManager {
     }
 
     return { mode: 'privacy', confidence: 0, reason: '默认推荐隐私模式（安全优先）' };
+  }
+
+  /**
+   * 自动决定执行模式（Auto Mode）
+   * 根据任务特征 + 历史成功率自动设置模式，无需人工确认
+   * @param {string} taskDescription - 任务描述
+   * @param {Object} options - 选项
+   * @returns {Object} 决策结果
+   */
+  autoDecideMode(taskDescription, options = {}) {
+    if (!this.autoModeEnabled && !options.force) {
+      return {
+        mode: this.currentMode,
+        changed: false,
+        reason: '自动模式已禁用',
+        autoModeEnabled: false
+      };
+    }
+
+    const recommendation = this.recommendMode(taskDescription);
+    let finalMode = recommendation.mode;
+
+    const historicalFactor = this._evaluateHistoricalPerformance(finalMode);
+    if (historicalFactor.shouldOverride && historicalFactor.bestMode) {
+      finalMode = historicalFactor.bestMode;
+    }
+
+    const changed = finalMode !== this.currentMode;
+    if (changed) {
+      this.setMode(finalMode);
+    }
+
+    return {
+      mode: finalMode,
+      changed,
+      reason: changed 
+        ? `自动切换模式: ${recommendation.reason}${historicalFactor.shouldOverride ? '（历史性能覆盖）' : ''}`
+        : `保持当前模式: ${this.modes[finalMode].displayName}`,
+      autoModeEnabled: this.autoModeEnabled,
+      recommendation,
+      historicalFactor
+    };
+  }
+
+  /**
+   * 评估历史性能，用于模式决策
+   */
+  _evaluateHistoricalPerformance(candidateMode) {
+    const candidateStats = this.modeSuccessRates[candidateMode];
+    if (!candidateStats || candidateStats.total < 3) {
+      return { shouldOverride: false, bestMode: null, reason: '历史数据不足' };
+    }
+
+    const successRate = candidateStats.total > 0 
+      ? candidateStats.success / candidateStats.total 
+      : 0;
+    const avgQuality = candidateStats.avgQuality;
+
+    if (successRate >= 0.8 && avgQuality >= 75) {
+      return { shouldOverride: false, bestMode: candidateMode, reason: '候选模式表现良好' };
+    }
+
+    let bestMode = candidateMode;
+    let bestScore = successRate * 0.6 + (avgQuality / 100) * 0.4;
+
+    for (const [mode, stats] of Object.entries(this.modeSuccessRates)) {
+      if (stats.total < 3) continue;
+      
+      const modeSuccessRate = stats.success / stats.total;
+      const modeScore = modeSuccessRate * 0.6 + (stats.avgQuality / 100) * 0.4;
+      
+      if (modeScore > bestScore && modeSuccessRate >= 0.6) {
+        bestScore = modeScore;
+        bestMode = mode;
+      }
+    }
+
+    if (bestMode !== candidateMode) {
+      return { 
+        shouldOverride: true, 
+        bestMode, 
+        reason: `${this.modes[bestMode].displayName}历史表现更好(成功率:${Math.round(bestScore * 100)}%)` 
+      };
+    }
+
+    return { shouldOverride: false, bestMode: candidateMode, reason: '候选模式已是最佳' };
+  }
+
+  /**
+   * 记录任务执行结果，用于更新历史成功率
+   */
+  recordTaskResult(mode, success, qualityScore) {
+    if (!this.modeSuccessRates[mode]) {
+      this.modeSuccessRates[mode] = { total: 0, success: 0, avgQuality: 0 };
+    }
+
+    const stats = this.modeSuccessRates[mode];
+    stats.total++;
+    
+    if (success) {
+      stats.success++;
+    }
+    
+    if (qualityScore) {
+      stats.avgQuality = Math.round(
+        (stats.avgQuality * (stats.total - 1) + qualityScore) / stats.total
+      );
+    }
+
+    return { success: true, stats: { ...stats } };
+  }
+
+  /**
+   * 获取模式统计信息
+   */
+  getModeStatistics() {
+    const result = {};
+    for (const [mode, stats] of Object.entries(this.modeSuccessRates)) {
+      const successRate = stats.total > 0 
+        ? Math.round((stats.success / stats.total) * 100) 
+        : 0;
+      result[mode] = {
+        ...stats,
+        successRate,
+        displayName: this.modes[mode]?.displayName || mode,
+        usageCount: this.modeHistory.filter(h => h.to === mode).length
+      };
+    }
+    return result;
+  }
+
+  /**
+   * 启用/禁用自动模式
+   */
+  setAutoModeEnabled(enabled) {
+    this.autoModeEnabled = enabled;
+    return { success: true, autoModeEnabled: enabled };
+  }
+
+  /**
+   * 获取自动模式状态
+   */
+  getAutoModeStatus() {
+    return {
+      autoModeEnabled: this.autoModeEnabled,
+      currentMode: this.currentMode,
+      modeHistory: this.modeHistory.slice(-10),
+      modeStatistics: this.getModeStatistics()
+    };
+  }
+
+  /**
+   * 重置历史统计
+   */
+  resetStatistics() {
+    this.modeSuccessRates = {
+      privacy: { total: 0, success: 0, avgQuality: 0 },
+      quality: { total: 0, success: 0, avgQuality: 0 },
+      efficiency: { total: 0, success: 0, avgQuality: 0 }
+    };
+    this.modeHistory = [];
+    return { success: true, message: '历史统计已重置' };
   }
 }
 
