@@ -1,6 +1,6 @@
 /**
  * 多工具任务派发与合并测试
- * 
+ *
  * 测试场景：
  * 1. 派发不同任务给不同工具（Claude Code 和 AtomCode）
  * 2. 使用 MergeEngine 合并结果
@@ -15,16 +15,16 @@ const fs = require('fs');
 const path = require('path');
 
 // Mock Provider for MergeEngine
-function createMockProvider() {
+function createMockProvider () {
   return {
     name: 'mock',
     chat: async (messages) => {
       const lastMsg = messages[messages.length - 1]?.content || '';
-      
+
       if (lastMsg.includes('合并')) {
         return {
           content: JSON.stringify({
-            mergedCode: `# 合并后的代码 - 整合了两个工具的产出\n# Claude Code 的核心逻辑 + AtomCode 的辅助功能\n\ndef main():\n    print("Hello from merged result!")\n    greet_user("World")\n\ndef greet_user(name):\n    print(f"Hello, {name}!")\n\nif __name__ == "__main__":\n    main()`,
+            mergedCode: '# 合并后的代码 - 整合了两个工具的产出\n# Claude Code 的核心逻辑 + AtomCode 的辅助功能\n\ndef main():\n    print("Hello from merged result!")\n    greet_user("World")\n\ndef greet_user(name):\n    print(f"Hello, {name}!")\n\nif __name__ == "__main__":\n    main()',
             conflicts: [
               {
                 location: 'main.py',
@@ -54,7 +54,7 @@ function createMockProvider() {
           role: 'assistant'
         };
       }
-      
+
       return {
         content: JSON.stringify({
           mergedCode: '// 单工具结果',
@@ -72,7 +72,7 @@ function createMockProvider() {
   };
 }
 
-async function testMultiTaskDispatchAndMerge() {
+async function testMultiTaskDispatchAndMerge () {
   console.log('🧪 多工具任务派发与合并测试\n');
   console.log('='.repeat(60));
 
@@ -143,11 +143,11 @@ async function testMultiTaskDispatchAndMerge() {
     }
   ];
 
-  console.log(`\n   任务分配:`);
-  console.log(`   ┌─────────────────────────────────────────────────┐`);
+  console.log('\n   任务分配:');
+  console.log('   ┌─────────────────────────────────────────────────┐');
   console.log(`   │ T1: ${tasks[0].title.padEnd(20)} → Claude Code      │`);
   console.log(`   │ T2: ${tasks[1].title.padEnd(20)} → AtomCode       │`);
-  console.log(`   └─────────────────────────────────────────────────┘`);
+  console.log('   └─────────────────────────────────────────────────┘');
 
   console.log('\n   正在并行执行...');
   const startTime = Date.now();
@@ -170,7 +170,7 @@ async function testMultiTaskDispatchAndMerge() {
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     const result = results[i];
-    
+
     if (result.status === 'fulfilled') {
       const execResult = result.value;
       toolResults[task.assignedTool] = {
@@ -182,7 +182,7 @@ async function testMultiTaskDispatchAndMerge() {
         codeBlocks: execResult.codeBlocks || [],
         duration: execResult.duration
       };
-      
+
       console.log(`   ✅ ${task.assignedTool}: ${task.title} - ${execResult.success ? '成功' : '失败'}`);
       if (execResult.codeBlocks && execResult.codeBlocks.length > 0) {
         console.log(`      代码块: ${execResult.codeBlocks.length} 个`);
@@ -228,13 +228,13 @@ async function testMultiTaskDispatchAndMerge() {
     techStack: 'python'
   });
 
-  console.log(`   ✅ 合并完成`);
+  console.log('   ✅ 合并完成');
   console.log(`   合并策略: ${mergeResult.mergeStrategy}`);
   console.log(`   冲突数: ${mergeResult.conflicts?.length || 0}`);
   console.log(`   改进数: ${mergeResult.improvements?.length || 0}`);
-  
+
   if (mergeResult.qualityAssessment) {
-    console.log(`\n   质量评分:`);
+    console.log('\n   质量评分:');
     console.log(`      - 正确性: ${mergeResult.qualityAssessment.correctness}`);
     console.log(`      - 一致性: ${mergeResult.qualityAssessment.consistency}`);
     console.log(`      - 可读性: ${mergeResult.qualityAssessment.readability}`);
@@ -242,7 +242,7 @@ async function testMultiTaskDispatchAndMerge() {
   }
 
   if (mergeResult.conflicts && mergeResult.conflicts.length > 0) {
-    console.log(`\n   冲突详情:`);
+    console.log('\n   冲突详情:');
     for (const conflict of mergeResult.conflicts) {
       console.log(`      - ${conflict.location}: ${conflict.description}`);
       console.log(`        选择方案: ${conflict.chosenResolution}`);

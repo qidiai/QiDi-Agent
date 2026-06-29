@@ -1,7 +1,7 @@
 const TokenCounter = require('./TokenCounter');
 
 class ContextCompressor {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.tokenCounter = new TokenCounter();
     this.maxContextTokens = options.maxContextTokens || 1500;
     this.keepSignatures = options.keepSignatures !== false;
@@ -9,12 +9,12 @@ class ContextCompressor {
     this.keepImports = options.keepImports !== false;
   }
 
-  compressCode(code, options = {}) {
+  compressCode (code, options = {}) {
     if (!code || code.length === 0) return '';
-    
+
     const maxTokens = options.maxTokens || this.maxContextTokens;
     const tokens = this.tokenCounter.estimateTokens(code);
-    
+
     if (tokens <= maxTokens) {
       return code;
     }
@@ -66,16 +66,16 @@ class ContextCompressor {
     return compressed;
   }
 
-  _extractImports(code) {
+  _extractImports (code) {
     const lines = code.split('\n');
     return lines.filter(line => {
       return line.match(/^#include|^import|^from\s|^require\(|^using\s/);
     });
   }
 
-  _extractSignatures(code) {
+  _extractSignatures (code) {
     const signatures = [];
-    
+
     const patterns = [
       /(?:function|def|void|int|char|float|double|struct|class|public|private|protected)\s+(\w+)\s*\([^)]*\)/g,
       /(?:async\s+function|async\s+(\w+))\s*\([^)]*\)/g,
@@ -93,9 +93,9 @@ class ContextCompressor {
     return signatures.slice(0, 15);
   }
 
-  _extractKeyStructures(code) {
+  _extractKeyStructures (code) {
     const structures = [];
-    
+
     const structPattern = /(?:typedef\s+struct|struct\s+\w+|class\s+\w+)\s*\{[^}]{0,200}\}/g;
     let match;
     while ((match = structPattern.exec(code)) !== null) {
@@ -105,17 +105,17 @@ class ContextCompressor {
     return structures.slice(0, 5);
   }
 
-  _extractImportantComments(code) {
+  _extractImportantComments (code) {
     const comments = [];
-    
+
     const docCommentPattern = /\/\*\*[\s\S]*?\*\//g;
     const singleCommentPattern = /\/\/[^\n]+/g;
-    
+
     let match;
     while ((match = docCommentPattern.exec(code)) !== null) {
       comments.push(match[0].substring(0, 100));
     }
-    
+
     while ((match = singleCommentPattern.exec(code)) !== null) {
       const cmt = match[0].substring(3).trim();
       if (cmt.length > 10 && !cmt.match(/^TODO|^FIXME|^NOTE/i)) {
@@ -126,7 +126,7 @@ class ContextCompressor {
     return comments.slice(0, 10);
   }
 
-  _extractKeyLines(code, maxTokens) {
+  _extractKeyLines (code, maxTokens) {
     const lines = code.split('\n');
     const keyLines = [];
     let currentTokens = 0;
@@ -145,9 +145,9 @@ class ContextCompressor {
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.length === 0) continue;
-      
+
       const isImportant = importantPatterns.some(p => p.test(trimmed));
-      
+
       if (isImportant || trimmed.match(/^\w+\s*=\s*[^;]+;$/)) {
         const lineTokens = this.tokenCounter.estimateTokens(trimmed);
         if (currentTokens + lineTokens <= maxTokens) {
@@ -160,34 +160,34 @@ class ContextCompressor {
     return keyLines.slice(0, 20);
   }
 
-  _generateSummary(code) {
+  _generateSummary (code) {
     const lines = code.split('\n').filter(l => l.trim().length > 0);
     const totalLines = lines.length;
-    
+
     const functionCount = (code.match(/function|def|void\s+\w+\s*\(/g) || []).length;
     const classCount = (code.match(/class\s+\w+/g) || []).length;
     const structCount = (code.match(/struct|typedef\s+struct/g) || []).length;
-    
+
     let summary = `${totalLines}行代码`;
     if (functionCount > 0) summary += `, ${functionCount}个函数`;
     if (classCount > 0) summary += `, ${classCount}个类`;
     if (structCount > 0) summary += `, ${structCount}个结构体`;
-    
+
     return summary;
   }
 
-  compressTaskHistory(history, options = {}) {
+  compressTaskHistory (history, options = {}) {
     if (!history || history.length === 0) return '';
-    
+
     const maxTokens = options.maxTokens || this.maxContextTokens;
     let compressed = '';
 
     compressed += '// === 已完成任务摘要 ===\n\n';
-    
+
     for (const task of history) {
       const taskSummary = `// ${task.taskId}: ${task.title || '未知'} (质量: ${task.qualityScore || 0}分)\n`;
       compressed += taskSummary;
-      
+
       if (task.codeBlocks && task.codeBlocks.length > 0) {
         for (const block of task.codeBlocks.slice(0, 2)) {
           const blockCompressed = this.compressCode(block.code, { maxTokens: 300 });
@@ -204,7 +204,7 @@ class ContextCompressor {
     return compressed;
   }
 
-  compressContext(context, options = {}) {
+  compressContext (context, options = {}) {
     const result = {
       constraints: context.constraints,
       previousCode: '',
@@ -222,10 +222,10 @@ class ContextCompressor {
     return result;
   }
 
-  getCompressionRatio(original, compressed) {
+  getCompressionRatio (original, compressed) {
     const originalTokens = this.tokenCounter.estimateTokens(original);
     const compressedTokens = this.tokenCounter.estimateTokens(compressed);
-    
+
     return {
       originalTokens,
       compressedTokens,

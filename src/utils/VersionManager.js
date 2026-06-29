@@ -1,6 +1,6 @@
 /**
  * 版本管理模块
- * 
+ *
  * 负责：
  * 1. 版本信息管理
  * 2. 更新检查
@@ -13,7 +13,7 @@ const https = require('https');
 const logger = require('./Logger')('VersionManager');
 
 class VersionManager {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.packagePath = options.packagePath || path.join(__dirname, '../../package.json');
     this.cacheDir = options.cacheDir || path.join(__dirname, '../../.cache');
     this.currentVersion = this._loadVersion();
@@ -24,7 +24,7 @@ class VersionManager {
   /**
    * 加载当前版本
    */
-  _loadVersion() {
+  _loadVersion () {
     try {
       const pkg = JSON.parse(fs.readFileSync(this.packagePath, 'utf8'));
       return {
@@ -40,20 +40,20 @@ class VersionManager {
   /**
    * 获取版本信息
    */
-  getVersion() {
+  getVersion () {
     return { ...this.currentVersion };
   }
 
   /**
    * 检查更新
    */
-  async checkForUpdates(remoteUrl = 'https://api.github.com/repos/qidiai/QiDi-Agent/releases/latest') {
+  async checkForUpdates (remoteUrl = 'https://api.github.com/repos/qidiai/QiDi-Agent/releases/latest') {
     try {
       this.lastCheckTime = Date.now();
-      
+
       // 尝试获取远程版本
       const remoteVersion = await this._fetchRemoteVersion(remoteUrl);
-      
+
       if (!remoteVersion) {
         return {
           hasUpdate: false,
@@ -68,7 +68,7 @@ class VersionManager {
         hasUpdate,
         currentVersion: this.currentVersion.version,
         latestVersion: remoteVersion,
-        message: hasUpdate 
+        message: hasUpdate
           ? `发现新版本 ${remoteVersion}，当前版本 ${this.currentVersion.version}`
           : '已是最新版本',
         downloadUrl: hasUpdate ? `https://github.com/qidiai/QiDi-Agent/releases/tag/${remoteVersion}` : null
@@ -85,14 +85,14 @@ class VersionManager {
   /**
    * 获取远程版本
    */
-  _fetchRemoteVersion(url) {
+  _fetchRemoteVersion (url) {
     return new Promise((resolve) => {
       try {
         https.get(url, {
           headers: { 'User-Agent': 'qidi-agent' }
         }, (res) => {
           let data = '';
-          res.on('data', chunk => data += chunk);
+          res.on('data', chunk => { data += chunk; });
           res.on('end', () => {
             try {
               const json = JSON.parse(data);
@@ -114,25 +114,25 @@ class VersionManager {
    * 比较版本号
    * 返回: 1 (v1 > v2), -1 (v1 < v2), 0 (v1 == v2)
    */
-  _compareVersions(v1, v2) {
+  _compareVersions (v1, v2) {
     const parts1 = v1.split('.').map(Number);
     const parts2 = v2.split('.').map(Number);
-    
+
     for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
       const p1 = parts1[i] || 0;
       const p2 = parts2[i] || 0;
-      
+
       if (p1 > p2) return 1;
       if (p1 < p2) return -1;
     }
-    
+
     return 0;
   }
 
   /**
    * 获取更新日志
    */
-  async getChangelog(remoteUrl = 'https://raw.githubusercontent.com/qidiai/QiDi-Agent/main/CHANGELOG.md') {
+  async getChangelog (remoteUrl = 'https://raw.githubusercontent.com/qidiai/QiDi-Agent/main/CHANGELOG.md') {
     try {
       const changelog = await this._fetchRemoteContent(remoteUrl);
       return changelog || '无法获取更新日志';
@@ -144,15 +144,15 @@ class VersionManager {
   /**
    * 获取远程内容
    */
-  _fetchRemoteContent(url) {
+  _fetchRemoteContent (url) {
     return new Promise((resolve) => {
       try {
         https.get(url, {
           headers: { 'User-Agent': 'qidi-agent' }
         }, (res) => {
           let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => resolve(data));
+          res.on('data', chunk => { data += chunk; });
+          res.on('end', () => { resolve(data); });
         }).on('error', () => resolve(null));
       } catch {
         resolve(null);
@@ -163,11 +163,11 @@ class VersionManager {
   /**
    * 记录版本使用历史
    */
-  recordUsage() {
+  recordUsage () {
     try {
       const historyFile = path.join(this.cacheDir, 'version_history.json');
       let history = [];
-      
+
       if (fs.existsSync(historyFile)) {
         try {
           history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
@@ -191,7 +191,7 @@ class VersionManager {
       if (!fs.existsSync(this.cacheDir)) {
         fs.mkdirSync(this.cacheDir, { recursive: true });
       }
-      
+
       fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
     } catch (e) {
       logger.warn('记录版本历史失败:', e.message);
@@ -201,7 +201,7 @@ class VersionManager {
   /**
    * 获取使用历史
    */
-  getUsageHistory() {
+  getUsageHistory () {
     try {
       const historyFile = path.join(this.cacheDir, 'version_history.json');
       if (fs.existsSync(historyFile)) {
@@ -216,7 +216,7 @@ class VersionManager {
   /**
    * 打印版本信息
    */
-  printVersion() {
+  printVersion () {
     console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║           Qidi Agent 版本信息                      ║
@@ -230,9 +230,9 @@ class VersionManager {
   /**
    * 打印更新信息
    */
-  async printUpdateInfo() {
+  async printUpdateInfo () {
     const updateInfo = await this.checkForUpdates();
-    
+
     console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║           Qidi Agent 更新检查                     ║
@@ -242,11 +242,11 @@ class VersionManager {
 ║  状态: ${updateInfo.hasUpdate ? '🎉 有可用更新' : '✅ 已是最新版本'.padEnd(40)}║
 ╚═══════════════════════════════════════════════════╝
     `);
-    
+
     if (updateInfo.hasUpdate && updateInfo.downloadUrl) {
       console.log(`\n📥 下载地址: ${updateInfo.downloadUrl}\n`);
     }
-    
+
     return updateInfo;
   }
 }

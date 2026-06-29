@@ -1,20 +1,20 @@
 /**
  * 执行模式管理器
- * 
+ *
  * 三种核心模式：
- * 
+ *
  * 1. 隐私模式 (privacy) - 安全第一
  *    - 拆分：本地 Ollama
  *    - 代码生成：云端工具各拿碎片（路由分发）
  *    - 质检：本地模型 AI 打分 + 本地工具链
  *    - 合并：接口契约拼装（唯一使用契约的模式）
- * 
+ *
  * 2. 高质量模式 (quality) - 质量第一
  *    - 拆分：云端 API（DeepSeek/Claude 等）
  *    - 代码生成：云端工具各拿碎片（能力匹配分发）
  *    - 质检：云端模型 AI 打分 + 本地工具链
  *    - 合并：AI 智能合并（不使用契约）
- * 
+ *
  * 3. 效率模式 (efficiency) - 分布式并行协作
  *    - 拆分：云端最强模型（最多20个子任务）
  *    - 代码生成：广播并行（所有工具同时尝试不同方案）
@@ -23,7 +23,7 @@
  */
 
 class ExecutionModeManager {
-  constructor() {
+  constructor () {
     this.modes = this._defineModes();
     this.currentMode = 'privacy';
     this.autoModeEnabled = true;
@@ -31,14 +31,15 @@ class ExecutionModeManager {
     this.modeSuccessRates = {
       privacy: { total: 0, success: 0, avgQuality: 0 },
       quality: { total: 0, success: 0, avgQuality: 0 },
-      efficiency: { total: 0, success: 0, avgQuality: 0 }
+      efficiency: { total: 0, success: 0, avgQuality: 0 },
+      multi: { total: 0, success: 0, avgQuality: 0 }
     };
   }
 
   /**
    * 定义两种完整模式配置
    */
-  _defineModes() {
+  _defineModes () {
     return {
       privacy: {
         name: 'privacy',
@@ -49,9 +50,9 @@ class ExecutionModeManager {
 
         // 拆分配置
         splitter: {
-          location: 'local',         // local | cloud
-          providerType: 'ollama',    // 使用本地 Ollama
-          enableSelfCheck: true,     // 开启自检（本地执行，不涉及隐私）
+          location: 'local', // local | cloud
+          providerType: 'ollama', // 使用本地 Ollama
+          enableSelfCheck: true, // 开启自检（本地执行，不涉及隐私）
           maxSubtasks: 12,
           enableCoverageCheck: true, // 覆盖度检查
           enableDependencyCheck: true // 依赖检查
@@ -59,35 +60,35 @@ class ExecutionModeManager {
 
         // 代码生成配置
         codeGeneration: {
-          location: 'cloud_tools',   // 云端工具执行
+          location: 'cloud_tools', // 云端工具执行
           routingStrategy: 'round_robin', // 轮询分发
-          broadcastMode: false,      // 不广播，各拿碎片
+          broadcastMode: false, // 不广播，各拿碎片
           providerParticipates: false, // Provider 不参与代码生成
-          toolOnlyMode: true,        // 仅工具执行
+          toolOnlyMode: true, // 仅工具执行
           maxRetries: 2
         },
 
         // 质量检查配置
         qualityCheck: {
-          location: 'local',         // local | cloud | hybrid
-          enableAI: true,           // ✅ 开启本地模型打分（代码不离开本地！）
-          aiProvider: 'ollama',     // 本地 Ollama 负责打分
-          enableStaticCheck: true,   // 本地静态分析
-          enableCompilation: true,   // 本地编译检查
-          enableLint: true,          // 本地 Lint
-          enableTest: false,         // 测试执行（可选）
+          location: 'local', // local | cloud | hybrid
+          enableAI: true, // ✅ 开启本地模型打分（代码不离开本地！）
+          aiProvider: 'ollama', // 本地 Ollama 负责打分
+          enableStaticCheck: true, // 本地静态分析
+          enableCompilation: true, // 本地编译检查
+          enableLint: true, // 本地 Lint
+          enableTest: false, // 测试执行（可选）
           minQualityScore: 60,
           dimensions: ['correctness', 'consistency', 'completeness', 'security']
         },
 
         // 合并配置
         merging: {
-          strategy: 'contract',      // contract | ai | hybrid
-          aiEnabled: false,          // 关闭云端 AI 合并
-          localModelAssist: true,    // ✅ 启用本地模型辅助契约提取
+          strategy: 'contract', // contract | ai | hybrid
+          aiEnabled: false, // 关闭云端 AI 合并
+          localModelAssist: true, // ✅ 启用本地模型辅助契约提取
           localModelProvider: 'ollama', // 本地 Ollama 辅助
-          contractStrict: true,      // 契约严格模式
-          autoAdapt: true,           // 自动适配
+          contractStrict: true, // 契约严格模式
+          autoAdapt: true, // 自动适配
           conflictResolution: 'first_wins' // 冲突解决策略
         },
 
@@ -101,11 +102,11 @@ class ExecutionModeManager {
         // 隐私相关设置
         privacy: {
           enabled: true,
-          dataRetention: 'minimal',  // 最小化数据留存
+          dataRetention: 'minimal', // 最小化数据留存
           contextSharing: 'isolated', // 上下文隔离
           providerSeesFullCode: false, // Provider 看不到完整代码
-          toolSeesFullTask: false,   // 工具看不到完整任务
-          logSensitiveData: false    // 不记录敏感数据
+          toolSeesFullTask: false, // 工具看不到完整任务
+          logSensitiveData: false // 不记录敏感数据
         },
 
         // 适用场景
@@ -126,9 +127,9 @@ class ExecutionModeManager {
 
         // 拆分配置
         splitter: {
-          location: 'cloud',         // 云端拆分
-          providerType: 'openai',    // 使用 OpenAI 兼容云端（DeepSeek/Claude 等）
-          enableSelfCheck: true,     // AI 自检
+          location: 'cloud', // 云端拆分
+          providerType: 'openai', // 使用 OpenAI 兼容云端（DeepSeek/Claude 等）
+          enableSelfCheck: true, // AI 自检
           maxSubtasks: 15,
           enableCoverageCheck: true,
           enableDependencyCheck: true
@@ -138,7 +139,7 @@ class ExecutionModeManager {
         codeGeneration: {
           location: 'cloud_tools',
           routingStrategy: 'capability', // 能力匹配分发
-          broadcastMode: false,      // 不广播，各拿碎片
+          broadcastMode: false, // 不广播，各拿碎片
           providerParticipates: true, // Provider 参与代码生成（可选）
           toolOnlyMode: false,
           maxRetries: 3
@@ -147,19 +148,19 @@ class ExecutionModeManager {
         // 质量检查配置
         qualityCheck: {
           location: 'cloud',
-          enableAI: true,            // 开启 AI 打分
-          enableStaticCheck: true,   // 静态分析
-          enableCompilation: true,   // 编译检查
-          enableLint: true,          // Lint
-          enableTest: true,          // 测试执行
-          minQualityScore: 75,       // 更高的质量要求
+          enableAI: true, // 开启 AI 打分
+          enableStaticCheck: true, // 静态分析
+          enableCompilation: true, // 编译检查
+          enableLint: true, // Lint
+          enableTest: true, // 测试执行
+          minQualityScore: 75, // 更高的质量要求
           dimensions: ['correctness', 'consistency', 'completeness', 'readability', 'security', 'maintainability']
         },
 
         // 合并配置
         merging: {
-          strategy: 'ai',            // AI 智能合并
-          aiEnabled: true,           // 启用 AI 合并
+          strategy: 'ai', // AI 智能合并
+          aiEnabled: true, // 启用 AI 合并
           contractStrict: false,
           autoAdapt: true,
           conflictResolution: 'ai_decides'
@@ -176,9 +177,9 @@ class ExecutionModeManager {
         privacy: {
           enabled: false,
           dataRetention: 'standard',
-          contextSharing: 'full',    // 完整上下文共享
+          contextSharing: 'full', // 完整上下文共享
           providerSeesFullCode: true, // Provider 可以看到完整代码
-          toolSeesFullTask: false,   // 工具仍然只看碎片（保护工具账号不泄露全貌）
+          toolSeesFullTask: false, // 工具仍然只看碎片（保护工具账号不泄露全貌）
           logSensitiveData: true
         },
 
@@ -200,19 +201,19 @@ class ExecutionModeManager {
 
         // 拆分配置
         splitter: {
-          location: 'cloud',         // 云端拆分（用最强模型拆解复杂任务）
-          providerType: 'openai',    // 使用 DeepSeek/Claude 等
+          location: 'cloud', // 云端拆分（用最强模型拆解复杂任务）
+          providerType: 'openai', // 使用 DeepSeek/Claude 等
           enableSelfCheck: true,
-          maxSubtasks: 20,           // 支持更多子任务
+          maxSubtasks: 20, // 支持更多子任务
           enableCoverageCheck: true,
           enableDependencyCheck: true
         },
 
         // 代码生成配置
         codeGeneration: {
-          location: 'broadcast',     // 广播模式 — 所有工具并行尝试
+          location: 'broadcast', // 广播模式 — 所有工具并行尝试
           routingStrategy: 'broadcast', // 广播分发
-          broadcastMode: true,       // 开启广播
+          broadcastMode: true, // 开启广播
           providerParticipates: true,
           toolOnlyMode: false,
           maxRetries: 3
@@ -220,9 +221,9 @@ class ExecutionModeManager {
 
         // 质量检查配置
         qualityCheck: {
-          location: 'hybrid',        // 混合质检
+          location: 'hybrid', // 混合质检
           enableAI: true,
-          aiProvider: 'ollama',      // 本地 Ollama 快速初筛
+          aiProvider: 'ollama', // 本地 Ollama 快速初筛
           enableStaticCheck: true,
           enableCompilation: true,
           enableLint: true,
@@ -233,9 +234,9 @@ class ExecutionModeManager {
 
         // 合并配置 — 效率模式不使用契约，直接 AI 合并
         merging: {
-          strategy: 'ai',            // AI 智能合并（不使用契约）
+          strategy: 'ai', // AI 智能合并（不使用契约）
           aiEnabled: true,
-          contractStrict: false,     // ❌ 不使用契约
+          contractStrict: false, // ❌ 不使用契约
           autoAdapt: true,
           conflictResolution: 'ai_decides'
         },
@@ -264,6 +265,84 @@ class ExecutionModeManager {
           '需要多种技术方案对比',
           '追求最高效率'
         ]
+      },
+
+      multi: {
+        name: 'multi',
+        displayName: '多模型并行模式',
+        slogan: '多Provider并行产出',
+        description: '在无外部编程工具时，用多个LLM Provider并行生成代码，重新激活合并能力。拆分→多Provider并行→质检→AI智能合并。',
+        icon: '🔀',
+
+        // 拆分配置
+        splitter: {
+          location: 'cloud',
+          providerType: 'openai',
+          enableSelfCheck: true,
+          maxSubtasks: 10,
+          enableCoverageCheck: true,
+          enableDependencyCheck: true
+        },
+
+        // 代码生成配置
+        codeGeneration: {
+          location: 'multi_provider',
+          routingStrategy: 'broadcast',
+          broadcastMode: true,
+          providerParticipates: true,
+          toolOnlyMode: false,
+          maxRetries: 3,
+          multiProviderMode: true,
+          parallelLimit: 3
+        },
+
+        // 质量检查配置
+        qualityCheck: {
+          location: 'hybrid',
+          enableAI: true,
+          aiProvider: 'ollama',
+          enableStaticCheck: true,
+          enableCompilation: true,
+          enableLint: true,
+          enableTest: true,
+          minQualityScore: 70,
+          dimensions: ['correctness', 'consistency', 'completeness', 'readability', 'security']
+        },
+
+        // 合并配置
+        merging: {
+          strategy: 'ai',
+          aiEnabled: true,
+          contractStrict: false,
+          autoAdapt: true,
+          conflictResolution: 'ai_decides',
+          enableMultiProviderMerge: true
+        },
+
+        // 路由配置
+        routing: {
+          defaultStrategy: 'broadcast',
+          strategies: ['broadcast', 'capability', 'round_robin', 'manual'],
+          privacyLevel: 'low'
+        },
+
+        // 隐私相关设置
+        privacy: {
+          enabled: false,
+          dataRetention: 'standard',
+          contextSharing: 'full',
+          providerSeesFullCode: true,
+          toolSeesFullTask: false,
+          logSensitiveData: true
+        },
+
+        // 适用场景
+        useCases: [
+          '无外部编程工具的单机环境',
+          '需要多方案对比',
+          '追求代码多样性',
+          '单软件编程增强场景'
+        ]
       }
     };
   }
@@ -271,7 +350,7 @@ class ExecutionModeManager {
   /**
    * 获取所有模式列表
    */
-  getAllModes() {
+  getAllModes () {
     return Object.values(this.modes).map(m => ({
       name: m.name,
       displayName: m.displayName,
@@ -286,24 +365,24 @@ class ExecutionModeManager {
   /**
    * 获取当前模式
    */
-  getCurrentMode() {
+  getCurrentMode () {
     return this.currentMode;
   }
 
   /**
    * 设置当前模式
    */
-  setMode(modeName) {
+  setMode (modeName) {
     if (!this.modes[modeName]) {
       throw new Error(`未知模式: ${modeName}。可选: ${Object.keys(this.modes).join(', ')}`);
     }
-    
+
     this.modeHistory.push({
       timestamp: Date.now(),
       from: this.currentMode,
       to: modeName
     });
-    
+
     this.currentMode = modeName;
     return this.modes[modeName];
   }
@@ -311,56 +390,56 @@ class ExecutionModeManager {
   /**
    * 获取模式完整配置
    */
-  getModeConfig(modeName = this.currentMode) {
+  getModeConfig (modeName = this.currentMode) {
     return this.modes[modeName] || this.modes.privacy;
   }
 
   /**
    * 获取拆分器配置
    */
-  getSplitterConfig(modeName = this.currentMode) {
+  getSplitterConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).splitter;
   }
 
   /**
    * 获取代码生成配置
    */
-  getCodeGenerationConfig(modeName = this.currentMode) {
+  getCodeGenerationConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).codeGeneration;
   }
 
   /**
    * 获取质量检查配置
    */
-  getQualityCheckConfig(modeName = this.currentMode) {
+  getQualityCheckConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).qualityCheck;
   }
 
   /**
    * 获取合并配置
    */
-  getMergingConfig(modeName = this.currentMode) {
+  getMergingConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).merging;
   }
 
   /**
    * 获取路由配置
    */
-  getRoutingConfig(modeName = this.currentMode) {
+  getRoutingConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).routing;
   }
 
   /**
    * 获取隐私配置
    */
-  getPrivacyConfig(modeName = this.currentMode) {
+  getPrivacyConfig (modeName = this.currentMode) {
     return this.getModeConfig(modeName).privacy;
   }
 
   /**
    * 比较两种模式差异
    */
-  compareModes(mode1 = 'privacy', mode2 = 'quality') {
+  compareModes (mode1 = 'privacy', mode2 = 'quality') {
     const m1 = this.modes[mode1];
     const m2 = this.modes[mode2];
 
@@ -415,7 +494,7 @@ class ExecutionModeManager {
   /**
    * 根据任务类型推荐模式
    */
-  recommendMode(taskDescription) {
+  recommendMode (taskDescription) {
     const lowerDesc = taskDescription.toLowerCase();
 
     const privacyKeywords = [
@@ -429,15 +508,22 @@ class ExecutionModeManager {
     ];
 
     const efficiencyKeywords = [
-      '效率', '并行', '并发', '分布式', '多工具', '多模型', '批量',
+      '效率', '并行', '并发', '分布式', '多工具', '批量',
       '大规模', '复杂任务', '大项目', '拆解', '分发',
       'efficiency', 'parallel', 'distributed', 'batch', 'large',
-      'complex task', 'multi-tool', 'multi-agent'
+      'complex task', 'multi-tool'
+    ];
+
+    const multiKeywords = [
+      '多模型', '多个模型', '多Provider', '并行产出', '方案对比',
+      '多样性', '单软件', '单机', '无工具',
+      'multi-model', 'multi-provider', 'multi agent'
     ];
 
     let privacyScore = 0;
     let qualityScore = 0;
     let efficiencyScore = 0;
+    let multiScore = 0;
 
     for (const kw of privacyKeywords) {
       if (lowerDesc.includes(kw)) privacyScore++;
@@ -451,9 +537,17 @@ class ExecutionModeManager {
       if (lowerDesc.includes(kw)) efficiencyScore++;
     }
 
-    // 优先级：隐私 > 效率 > 高质量
+    for (const kw of multiKeywords) {
+      if (lowerDesc.includes(kw)) multiScore++;
+    }
+
+    // 优先级：隐私 > 多模型 > 效率 > 高质量
     if (privacyScore > 0) {
       return { mode: 'privacy', confidence: privacyScore, reason: '检测到敏感关键词，推荐隐私模式' };
+    }
+
+    if (multiScore > 0) {
+      return { mode: 'multi', confidence: multiScore, reason: '检测到多模型关键词，推荐多模型并行模式' };
     }
 
     if (efficiencyScore > qualityScore) {
@@ -474,7 +568,7 @@ class ExecutionModeManager {
    * @param {Object} options - 选项
    * @returns {Object} 决策结果
    */
-  autoDecideMode(taskDescription, options = {}) {
+  autoDecideMode (taskDescription, options = {}) {
     if (!this.autoModeEnabled && !options.force) {
       return {
         mode: this.currentMode,
@@ -500,7 +594,7 @@ class ExecutionModeManager {
     return {
       mode: finalMode,
       changed,
-      reason: changed 
+      reason: changed
         ? `自动切换模式: ${recommendation.reason}${historicalFactor.shouldOverride ? '（历史性能覆盖）' : ''}`
         : `保持当前模式: ${this.modes[finalMode].displayName}`,
       autoModeEnabled: this.autoModeEnabled,
@@ -512,14 +606,14 @@ class ExecutionModeManager {
   /**
    * 评估历史性能，用于模式决策
    */
-  _evaluateHistoricalPerformance(candidateMode) {
+  _evaluateHistoricalPerformance (candidateMode) {
     const candidateStats = this.modeSuccessRates[candidateMode];
     if (!candidateStats || candidateStats.total < 3) {
       return { shouldOverride: false, bestMode: null, reason: '历史数据不足' };
     }
 
-    const successRate = candidateStats.total > 0 
-      ? candidateStats.success / candidateStats.total 
+    const successRate = candidateStats.total > 0
+      ? candidateStats.success / candidateStats.total
       : 0;
     const avgQuality = candidateStats.avgQuality;
 
@@ -532,10 +626,10 @@ class ExecutionModeManager {
 
     for (const [mode, stats] of Object.entries(this.modeSuccessRates)) {
       if (stats.total < 3) continue;
-      
+
       const modeSuccessRate = stats.success / stats.total;
       const modeScore = modeSuccessRate * 0.6 + (stats.avgQuality / 100) * 0.4;
-      
+
       if (modeScore > bestScore && modeSuccessRate >= 0.6) {
         bestScore = modeScore;
         bestMode = mode;
@@ -543,10 +637,10 @@ class ExecutionModeManager {
     }
 
     if (bestMode !== candidateMode) {
-      return { 
-        shouldOverride: true, 
-        bestMode, 
-        reason: `${this.modes[bestMode].displayName}历史表现更好(成功率:${Math.round(bestScore * 100)}%)` 
+      return {
+        shouldOverride: true,
+        bestMode,
+        reason: `${this.modes[bestMode].displayName}历史表现更好(成功率:${Math.round(bestScore * 100)}%)`
       };
     }
 
@@ -556,18 +650,18 @@ class ExecutionModeManager {
   /**
    * 记录任务执行结果，用于更新历史成功率
    */
-  recordTaskResult(mode, success, qualityScore) {
+  recordTaskResult (mode, success, qualityScore) {
     if (!this.modeSuccessRates[mode]) {
       this.modeSuccessRates[mode] = { total: 0, success: 0, avgQuality: 0 };
     }
 
     const stats = this.modeSuccessRates[mode];
     stats.total++;
-    
+
     if (success) {
       stats.success++;
     }
-    
+
     if (qualityScore) {
       stats.avgQuality = Math.round(
         (stats.avgQuality * (stats.total - 1) + qualityScore) / stats.total
@@ -580,11 +674,11 @@ class ExecutionModeManager {
   /**
    * 获取模式统计信息
    */
-  getModeStatistics() {
+  getModeStatistics () {
     const result = {};
     for (const [mode, stats] of Object.entries(this.modeSuccessRates)) {
-      const successRate = stats.total > 0 
-        ? Math.round((stats.success / stats.total) * 100) 
+      const successRate = stats.total > 0
+        ? Math.round((stats.success / stats.total) * 100)
         : 0;
       result[mode] = {
         ...stats,
@@ -599,7 +693,7 @@ class ExecutionModeManager {
   /**
    * 启用/禁用自动模式
    */
-  setAutoModeEnabled(enabled) {
+  setAutoModeEnabled (enabled) {
     this.autoModeEnabled = enabled;
     return { success: true, autoModeEnabled: enabled };
   }
@@ -607,7 +701,7 @@ class ExecutionModeManager {
   /**
    * 获取自动模式状态
    */
-  getAutoModeStatus() {
+  getAutoModeStatus () {
     return {
       autoModeEnabled: this.autoModeEnabled,
       currentMode: this.currentMode,
@@ -619,11 +713,12 @@ class ExecutionModeManager {
   /**
    * 重置历史统计
    */
-  resetStatistics() {
+  resetStatistics () {
     this.modeSuccessRates = {
       privacy: { total: 0, success: 0, avgQuality: 0 },
       quality: { total: 0, success: 0, avgQuality: 0 },
-      efficiency: { total: 0, success: 0, avgQuality: 0 }
+      efficiency: { total: 0, success: 0, avgQuality: 0 },
+      multi: { total: 0, success: 0, avgQuality: 0 }
     };
     this.modeHistory = [];
     return { success: true, message: '历史统计已重置' };

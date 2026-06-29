@@ -1,15 +1,15 @@
 /**
  * 契约拼装引擎（ContractAssembler）
- * 
+ *
  * 核心思路：
  * 1. 从各工具产出的代码中提取"契约"（函数签名、类定义、API接口、数据结构）
  * 2. 验证契约的一致性（参数类型、返回值类型是否匹配）
  * 3. 根据契约关系拼装最终代码
- * 
+ *
  * 与传统源码合并的区别：
  * - 传统合并：直接拼接源码，可能产生命名冲突、类型不匹配等问题
  * - 契约拼装：先提取接口定义，验证一致性，再按契约组装
- * 
+ *
  * 隐私保护优势：
  * - 各工具只产出自己的代码片段
  * - 契约拼装时只看接口定义，不泄露实现细节
@@ -22,7 +22,7 @@ const createLogger = require('../utils/Logger');
 const logger = createLogger('ContractAssembler');
 
 class ContractAssembler {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.options = {
       // 严格模式：契约不一致时报错而非警告
       strictMode: options.strictMode !== false,
@@ -39,7 +39,7 @@ class ContractAssembler {
     this.contracts = new Map(); // 存储提取的契约
     this.conflicts = []; // 契约冲突记录
     this.adaptations = []; // 自动适配层
-    
+
     // 初始化本地模型（如果配置了）
     if (this.options.localModel && this.options.enableAIAssist) {
       this._initLocalModel();
@@ -50,7 +50,7 @@ class ContractAssembler {
    * 从代码中提取契约（函数签名、类定义、API接口）
    * 支持静态分析 + 本地模型辅助
    */
-  async extractContracts(codeBlocks) {
+  async extractContracts (codeBlocks) {
     const contracts = [];
 
     for (const block of codeBlocks) {
@@ -59,7 +59,7 @@ class ContractAssembler {
 
       // 1. 首先用静态分析提取
       const staticExtracted = this._extractByLanguage(block.code, lang);
-      
+
       // 2. 如果启用本地模型辅助，处理复杂场景
       let aiExtracted = null;
       if (this.localModel && this.options.enableAIAssist) {
@@ -70,10 +70,10 @@ class ContractAssembler {
           logger.warn(`本地模型契约提取失败 (${block.filePath}):`, e.message);
         }
       }
-      
+
       // 3. 合并结果（AI 结果补充静态分析遗漏的部分）
       const merged = this._mergeExtracted(staticExtracted, aiExtracted);
-      
+
       contracts.push({
         source: block.filePath || 'unknown',
         language: lang,
@@ -93,21 +93,21 @@ class ContractAssembler {
 
     return contracts;
   }
-  
+
   /**
    * 初始化本地模型（Ollama）
    */
-  _initLocalModel() {
+  _initLocalModel () {
     try {
       const modelConfig = this.options.localModel;
-      
+
       // 如果传入的是 Provider 实例，直接使用
       if (modelConfig.chat && typeof modelConfig.chat === 'function') {
         this.localModel = modelConfig;
         logger.info('契约拼装引擎：使用已配置的本地模型');
         return;
       }
-      
+
       // 如果是配置对象，创建 Provider
       if (modelConfig.provider === 'ollama' || modelConfig.type === 'ollama') {
         this.localModel = ProviderFactory.create('ollama', {
@@ -121,13 +121,13 @@ class ContractAssembler {
       this.localModel = null;
     }
   }
-  
+
   /**
    * 使用本地模型辅助提取契约
    */
-  async _extractContractsByAI(code, lang, staticResult) {
+  async _extractContractsByAI (code, lang, staticResult) {
     if (!this.localModel) return null;
-    
+
     const prompt = `分析以下 ${lang} 代码，提取所有契约信息（函数签名、类定义、接口、结构体、类型定义）。
 
 代码：
@@ -160,11 +160,11 @@ ${code}
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 2000
       });
-      
+
       // 解析 AI 返回的 JSON
       const content = response.content || response.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      
+
       if (jsonMatch) {
         const aiResult = JSON.parse(jsonMatch[0]);
         return {
@@ -177,32 +177,32 @@ ${code}
     } catch (e) {
       logger.warn('AI 契约提取解析失败:', e.message);
     }
-    
+
     return null;
   }
-  
+
   /**
    * 合并静态分析和 AI 提取结果
    */
-  _mergeExtracted(staticResult, aiResult) {
+  _mergeExtracted (staticResult, aiResult) {
     if (!aiResult) return staticResult;
-    
+
     const merged = { ...staticResult };
-    
+
     // 初始化所有需要合并的字段
     const fieldsToMerge = [
-      'functions', 'classes', 'interfaces', 'structs', 'types', 
+      'functions', 'classes', 'interfaces', 'structs', 'types',
       'exports', 'traits', 'enums', 'modules'
     ];
-    
+
     for (const field of fieldsToMerge) {
       if (!merged[field]) merged[field] = [];
-      
+
       // 收集静态已有的名称
       const existingNames = new Set(
         (merged[field] || []).map(item => item.name || item.identifier)
       );
-      
+
       // 添加 AI 提取的新项
       for (const aiItem of aiResult[field] || []) {
         const name = aiItem.name || aiItem.identifier;
@@ -214,19 +214,19 @@ ${code}
         }
       }
     }
-    
+
     // 保存隐式契约（单独字段）
     if (aiResult.implicitContracts?.length > 0) {
       merged.implicitContracts = aiResult.implicitContracts;
     }
-    
+
     return merged;
   }
 
   /**
    * 根据语言提取契约
    */
-  _extractByLanguage(code, lang) {
+  _extractByLanguage (code, lang) {
     const extractors = {
       c: this._extractCContracts.bind(this),
       python: this._extractPythonContracts.bind(this),
@@ -244,7 +244,7 @@ ${code}
   /**
    * C语言契约提取
    */
-  _extractCContracts(code) {
+  _extractCContracts (code) {
     const contracts = { functions: [], structs: [], types: [], includes: [] };
 
     // 提取函数声明（包括返回类型、参数）
@@ -295,7 +295,7 @@ ${code}
   /**
    * Python契约提取
    */
-  _extractPythonContracts(code) {
+  _extractPythonContracts (code) {
     const contracts = { functions: [], classes: [], imports: [] };
 
     // 提取函数定义
@@ -332,7 +332,7 @@ ${code}
   /**
    * JavaScript契约提取
    */
-  _extractJSContracts(code) {
+  _extractJSContracts (code) {
     const contracts = { functions: [], classes: [], exports: [], imports: [] };
 
     // 提取函数声明
@@ -388,7 +388,7 @@ ${code}
   /**
    * TypeScript契约提取（增强版，包含类型信息）
    */
-  _extractTSContracts(code) {
+  _extractTSContracts (code) {
     const base = this._extractJSContracts(code);
     const contracts = {
       functions: base.functions,
@@ -400,7 +400,7 @@ ${code}
     };
 
     // TypeScript 函数签名（带类型）
-    const tsFuncPattern = /(?:function|const|let)\s+(\w+)\s*(?:<[^>]+>)?\s*\(([^)]*)\)\s*(?:\:\s*([^={;]+))?/gm;
+    const tsFuncPattern = /(?:function|const|let)\s+(\w+)\s*(?:<[^>]+>)?\s*\(([^)]*)\)\s*(?::\s*([^={;]+))?/gm;
     let match;
     while ((match = tsFuncPattern.exec(code)) !== null) {
       const existing = contracts.functions.find(f => f.name === match[1]);
@@ -441,7 +441,7 @@ ${code}
   /**
    * Java契约提取
    */
-  _extractJavaContracts(code) {
+  _extractJavaContracts (code) {
     const contracts = { functions: [], classes: [], interfaces: [], imports: [] };
 
     // 提取类定义
@@ -486,7 +486,7 @@ ${code}
   /**
    * Go契约提取
    */
-  _extractGoContracts(code) {
+  _extractGoContracts (code) {
     const contracts = { functions: [], structs: [], interfaces: [] };
 
     // 提取函数定义
@@ -533,7 +533,7 @@ ${code}
   /**
    * Rust契约提取
    */
-  _extractRustContracts(code) {
+  _extractRustContracts (code) {
     const contracts = { functions: [], structs: [], enums: [], traits: [] };
 
     // 提取函数定义
@@ -575,39 +575,41 @@ ${code}
   /**
    * 解析参数列表
    */
-  _parseParams(paramsStr, lang) {
+  _parseParams (paramsStr, lang) {
     if (!paramsStr || paramsStr.trim() === '') return [];
 
     const params = paramsStr.split(',').filter(p => p.trim());
     return params.map(p => {
       const parts = p.trim().split(/\s+/);
-      
+
       switch (lang) {
-        case 'c':
-          return { type: parts[0], name: parts[1] || parts[0] };
-        case 'python':
-          // 处理带类型注解的参数
-          const pyMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
-          return { name: pyMatch[1], type: pyMatch[2] || 'Any' };
-        case 'javascript':
-          return { name: parts[0] };
-        case 'typescript':
-          const tsMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
-          return { name: tsMatch[1], type: tsMatch[2] || 'any' };
-        case 'java':
-          return { type: parts[0], name: parts[1] };
-        case 'go':
-          // Go 的参数可能是 name type 或 name, name type
-          const goParts = p.trim().split(/\s+/);
-          if (goParts.length === 2) {
-            return { name: goParts[0], type: goParts[1] };
-          }
-          return { name: goParts[0] };
-        case 'rust':
-          const rustMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
-          return { name: rustMatch[1], type: rustMatch[2] || 'unknown' };
-        default:
-          return { name: parts[0] };
+      case 'c':
+        return { type: parts[0], name: parts[1] || parts[0] };
+      case 'python': {
+        const pyMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
+        return { name: pyMatch[1], type: pyMatch[2] || 'Any' };
+      }
+      case 'javascript':
+        return { name: parts[0] };
+      case 'typescript': {
+        const tsMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
+        return { name: tsMatch[1], type: tsMatch[2] || 'any' };
+      }
+      case 'java':
+        return { type: parts[0], name: parts[1] };
+      case 'go': {
+        const goParts = p.trim().split(/\s+/);
+        if (goParts.length === 2) {
+          return { name: goParts[0], type: goParts[1] };
+        }
+        return { name: goParts[0] };
+      }
+      case 'rust': {
+        const rustMatch = p.match(/(\w+)(?:\s*:\s*(\w+))?/);
+        return { name: rustMatch[1], type: rustMatch[2] || 'unknown' };
+      }
+      default:
+        return { name: parts[0] };
       }
     });
   }
@@ -615,7 +617,7 @@ ${code}
   /**
    * 验证契约一致性
    */
-  validateContracts(contracts) {
+  validateContracts (contracts) {
     const issues = [];
 
     // 按函数名分组，检查是否有同名函数的签名不一致
@@ -639,7 +641,7 @@ ${code}
         // 检查签名是否一致
         const signatures = defs.map(d => d.signature);
         const uniqueSigs = [...new Set(signatures)];
-        
+
         if (uniqueSigs.length > 1) {
           issues.push({
             type: 'function_conflict',
@@ -694,7 +696,7 @@ ${code}
   /**
    * 建议解决方案
    */
-  _suggestResolution(name, defs) {
+  _suggestResolution (name, defs) {
     const suggestions = [];
 
     // 如果参数数量不同，可能需要适配层
@@ -702,7 +704,7 @@ ${code}
     if ([...new Set(paramCounts)].length > 1) {
       suggestions.push({
         type: 'adapter',
-        description: `创建适配函数，统一参数签名`,
+        description: '创建适配函数，统一参数签名',
         targetSignature: this._chooseBestSignature(defs)
       });
     }
@@ -712,7 +714,7 @@ ${code}
     if ([...new Set(returnTypes)].length > 1) {
       suggestions.push({
         type: 'conversion',
-        description: `添加返回值转换层`,
+        description: '添加返回值转换层',
         targetReturnType: this._chooseBestReturnType(defs)
       });
     }
@@ -723,9 +725,9 @@ ${code}
   /**
    * 选择最佳签名
    */
-  _chooseBestSignature(defs) {
+  _chooseBestSignature (defs) {
     // 选择参数最多的版本（通常是功能最完整的）
-    return defs.reduce((best, d) => 
+    return defs.reduce((best, d) =>
       (d.params?.length || 0) > (best.params?.length || 0) ? d : best
     ).signature;
   }
@@ -733,9 +735,9 @@ ${code}
   /**
    * 选择最佳返回类型
    */
-  _chooseBestReturnType(defs) {
+  _chooseBestReturnType (defs) {
     // 避免选择 'any' 或 'unknown'
-    const preferred = defs.find(d => 
+    const preferred = defs.find(d =>
       d.returnType && !['any', 'unknown', 'void'].includes(d.returnType.toLowerCase())
     );
     return preferred?.returnType || defs[0]?.returnType || 'unknown';
@@ -745,7 +747,7 @@ ${code}
    * 拼装代码：根据契约关系组装最终代码
    * 支持异步契约提取（如果启用本地模型辅助）
    */
-  async assemble(contractResultsOrCodeBlocks, options = {}) {
+  async assemble (contractResultsOrCodeBlocks, options = {}) {
     const language = options.language || 'c';
     const strictMode = options.strictMode !== false;
 
@@ -753,7 +755,7 @@ ${code}
     // 1. 已提取的契约列表（旧接口兼容）
     // 2. 代码块列表（需要先提取契约）
     let contractResults = contractResultsOrCodeBlocks;
-    
+
     // 如果输入是代码块，先提取契约
     if (contractResultsOrCodeBlocks[0]?.code && !contractResultsOrCodeBlocks[0]?.functions) {
       contractResults = await this.extractContracts(contractResultsOrCodeBlocks);
@@ -820,7 +822,7 @@ ${code}
   /**
    * 契约去重
    */
-  _deduplicateContracts(contracts) {
+  _deduplicateContracts (contracts) {
     const dedup = {
       functions: [],
       classes: [],
@@ -883,7 +885,7 @@ ${code}
   /**
    * 按依赖关系排序
    */
-  _orderByDependencies(contracts) {
+  _orderByDependencies (contracts) {
     // 简单排序：结构体 -> 接口 -> 类 -> 函数
     return {
       includes: contracts.includes,
@@ -899,7 +901,7 @@ ${code}
   /**
    * 生成拼装代码
    */
-  _generateCode(ordered, lang, validation) {
+  _generateCode (ordered, lang, validation) {
     const generators = {
       c: this._generateCCode.bind(this),
       python: this._generatePythonCode.bind(this),
@@ -917,7 +919,7 @@ ${code}
   /**
    * 生成 C 语言代码
    */
-  _generateCCode(ordered, validation) {
+  _generateCCode (ordered, validation) {
     let code = '';
 
     // includes
@@ -938,7 +940,7 @@ ${code}
       for (const f of s.fields) {
         code += `    ${f.type} ${f.name};\n`;
       }
-      code += `};\n\n`;
+      code += '};\n\n';
     }
 
     // function declarations
@@ -963,7 +965,7 @@ ${code}
   /**
    * 生成 Python 代码
    */
-  _generatePythonCode(ordered, validation) {
+  _generatePythonCode (ordered, validation) {
     let code = '';
 
     // imports
@@ -975,13 +977,13 @@ ${code}
     // classes
     for (const c of ordered.classes) {
       code += `class ${c.name}${c.inherits?.length > 0 ? `(${c.inherits.join(', ')})` : ''}:\n`;
-      code += `    pass  # TODO: 实现类方法\n\n`;
+      code += '    pass  # TODO: 实现类方法\n\n';
     }
 
     // functions
     for (const f of ordered.functions) {
       code += `def ${f.name}(${f.params?.map(p => p.name).join(', ') || ''})${f.returnType !== 'Any' ? ` -> ${f.returnType}` : ''}:\n`;
-      code += `    pass  # TODO: 实现\n\n`;
+      code += '    pass  # TODO: 实现\n\n';
     }
 
     return code;
@@ -990,7 +992,7 @@ ${code}
   /**
    * 生成 JavaScript/TypeScript 代码
    */
-  _generateJSCode(ordered, validation) {
+  _generateJSCode (ordered, validation) {
     let code = '';
 
     // imports
@@ -1002,20 +1004,20 @@ ${code}
     // classes
     for (const c of ordered.classes) {
       code += `class ${c.name}${c.inherits ? ` extends ${c.inherits}` : ''} {\n`;
-      code += `  constructor() {}\n`;
-      code += `}\n\n`;
+      code += '  constructor() {}\n';
+      code += '}\n\n';
     }
 
     // functions
     for (const f of ordered.functions) {
       if (f.isArrow) {
         code += `const ${f.name} = (${f.params?.map(p => p.name).join(', ') || ''}) => {\n`;
-        code += `  // TODO: 实现\n`;
-        code += `};\n\n`;
+        code += '  // TODO: 实现\n';
+        code += '};\n\n';
       } else {
         code += `function ${f.name}(${f.params?.map(p => p.name).join(', ') || ''}) {\n`;
-        code += `  // TODO: 实现\n`;
-        code += `}\n\n`;
+        code += '  // TODO: 实现\n';
+        code += '}\n\n';
       }
     }
 
@@ -1030,7 +1032,7 @@ ${code}
   /**
    * 生成 TypeScript 代码（带类型）
    */
-  _generateTSCode(ordered, validation) {
+  _generateTSCode (ordered, validation) {
     let code = '';
 
     // imports
@@ -1045,7 +1047,7 @@ ${code}
       for (const p of i.properties) {
         code += `  ${p.name}: ${p.type};\n`;
       }
-      code += `}\n\n`;
+      code += '}\n\n';
     }
 
     // types
@@ -1056,16 +1058,16 @@ ${code}
     // classes
     for (const c of ordered.classes) {
       code += `class ${c.name}${c.inherits ? ` extends ${c.inherits}` : ''} {\n`;
-      code += `  constructor() {}\n`;
-      code += `}\n\n`;
+      code += '  constructor() {}\n';
+      code += '}\n\n';
     }
 
     // functions
     for (const f of ordered.functions) {
       const params = f.params?.map(p => `${p.name}: ${p.type || 'any'}`).join(', ') || '';
       code += `function ${f.name}(${params}): ${f.returnType || 'any'} {\n`;
-      code += `  // TODO: 实现\n`;
-      code += `}\n\n`;
+      code += '  // TODO: 实现\n';
+      code += '}\n\n';
     }
 
     return code;
@@ -1074,11 +1076,11 @@ ${code}
   /**
    * 生成 Java 代码
    */
-  _generateJavaCode(ordered, validation) {
+  _generateJavaCode (ordered, validation) {
     let code = '';
 
     // package declaration (placeholder)
-    code += `package com.generated;\n\n`;
+    code += 'package com.generated;\n\n';
 
     // imports
     for (const imp of ordered.imports || []) {
@@ -1089,14 +1091,14 @@ ${code}
     // interfaces
     for (const i of ordered.interfaces) {
       code += `${i.visibility} interface ${i.name}${i.extends?.length > 0 ? ` extends ${i.extends.join(', ')}` : ''} {\n`;
-      code += `}\n\n`;
+      code += '}\n\n';
     }
 
     // classes
     for (const c of ordered.classes) {
       code += `${c.visibility} class ${c.name}${c.extends ? ` extends ${c.extends}` : ''}${c.implements?.length > 0 ? ` implements ${c.implements.join(', ')}` : ''} {\n`;
       code += `  public ${c.name}() {}\n`;
-      code += `}\n\n`;
+      code += '}\n\n';
     }
 
     return code;
@@ -1105,16 +1107,16 @@ ${code}
   /**
    * 生成 Go 代码
    */
-  _generateGoCode(ordered, validation) {
-    let code = `package main\n\n`;
+  _generateGoCode (ordered, validation) {
+    let code = 'package main\n\n';
 
     // imports
     if (ordered.imports?.length > 0) {
-      code += `import (\n`;
+      code += 'import (\n';
       for (const imp of ordered.imports) {
         code += `  "${imp}"\n`;
       }
-      code += `)\n\n`;
+      code += ')\n\n';
     }
 
     // interfaces
@@ -1123,7 +1125,7 @@ ${code}
       for (const m of i.methods) {
         code += `  ${m}\n`;
       }
-      code += `}\n\n`;
+      code += '}\n\n';
     }
 
     // structs
@@ -1132,15 +1134,15 @@ ${code}
       for (const f of s.fields) {
         code += `  ${f.name} ${f.type}\n`;
       }
-      code += `}\n\n`;
+      code += '}\n\n';
     }
 
     // functions
     for (const f of ordered.functions) {
       const params = f.params?.map(p => `${p.name} ${p.type}`).join(', ') || '';
       code += `func ${f.name}(${params}) ${f.returnType} {\n`;
-      code += `  // TODO: 实现\n`;
-      code += `}\n\n`;
+      code += '  // TODO: 实现\n';
+      code += '}\n\n';
     }
 
     return code;
@@ -1149,29 +1151,29 @@ ${code}
   /**
    * 生成 Rust 代码
    */
-  _generateRustCode(ordered, validation) {
+  _generateRustCode (ordered, validation) {
     let code = '';
 
     // structs
     for (const s of ordered.structs) {
       code += `${s.visibility === 'pub' ? 'pub ' : ''}struct ${s.name} {\n`;
-      code += `  // fields\n`;
-      code += `}\n\n`;
+      code += '  // fields\n';
+      code += '}\n\n';
     }
 
     // traits
     for (const t of ordered.traits) {
       code += `${t.visibility === 'pub' ? 'pub ' : ''}trait ${t.name} {\n`;
-      code += `  // methods\n`;
-      code += `}\n\n`;
+      code += '  // methods\n';
+      code += '}\n\n';
     }
 
     // functions
     for (const f of ordered.functions) {
       const params = f.params?.map(p => `${p.name}: ${p.type}`).join(', ') || '';
       code += `${f.visibility === 'pub' ? 'pub ' : ''}fn ${f.name}(${params})${f.returnType !== 'void' ? ` -> ${f.returnType}` : ''} {\n`;
-      code += `  // TODO: 实现\n`;
-      code += `}\n\n`;
+      code += '  // TODO: 实现\n';
+      code += '}\n\n';
     }
 
     return code;
@@ -1180,7 +1182,7 @@ ${code}
   /**
    * 获取拼装报告
    */
-  getAssemblyReport() {
+  getAssemblyReport () {
     return {
       contractsExtracted: this.contracts.size,
       conflictsDetected: this.conflicts.length,

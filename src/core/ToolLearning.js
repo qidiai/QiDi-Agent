@@ -6,14 +6,14 @@ const logger = createLogger('ToolLearning');
 
 /**
  * 工具学习模块 - 记录每个工具的执行效果，持续优化任务分配
- * 
+ *
  * 核心功能：
  * 1. 记录每次任务执行的结果（成功/失败、质量评分、耗时）
  * 2. 分析每个工具擅长处理的任务类型
  * 3. 提供基于历史的学习建议，优化 TaskRouter 的 capability 匹配
  */
 class ToolLearning {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.learningDir = options.learningDir || './config/tool_learning';
     this.dataFile = path.join(this.learningDir, 'history.json');
     this.minSamples = options.minSamples || 3;
@@ -26,7 +26,7 @@ class ToolLearning {
     this._load();
   }
 
-  _load() {
+  _load () {
     try {
       if (fs.existsSync(this.dataFile)) {
         const data = JSON.parse(fs.readFileSync(this.dataFile, 'utf-8'));
@@ -43,7 +43,7 @@ class ToolLearning {
     }
   }
 
-  _save() {
+  _save () {
     try {
       if (!fs.existsSync(this.learningDir)) {
         fs.mkdirSync(this.learningDir, { recursive: true });
@@ -66,7 +66,7 @@ class ToolLearning {
    * @param {object} taskInfo - 任务信息 { type, language, complexity, frameworks, role }
    * @param {object} result - 执行结果 { success, qualityScore, duration, error }
    */
-  recordExecution(toolName, taskInfo, result) {
+  recordExecution (toolName, taskInfo, result) {
     const entry = {
       id: `exec_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       timestamp: new Date().toISOString(),
@@ -91,7 +91,7 @@ class ToolLearning {
     return entry;
   }
 
-  _updateToolProfile(toolName, entry) {
+  _updateToolProfile (toolName, entry) {
     if (!this.toolProfiles[toolName]) {
       this.toolProfiles[toolName] = {
         name: toolName,
@@ -136,7 +136,7 @@ class ToolLearning {
     this._analyzeStrengthWeakness(profile);
   }
 
-  _updateLanguageStats(profile, entry) {
+  _updateLanguageStats (profile, entry) {
     const lang = entry.language;
     if (!profile.languageStats[lang]) {
       profile.languageStats[lang] = { attempts: 0, successes: 0, avgQuality: 0, totalQuality: 0 };
@@ -150,7 +150,7 @@ class ToolLearning {
     }
   }
 
-  _updateTaskTypeStats(profile, entry) {
+  _updateTaskTypeStats (profile, entry) {
     const type = entry.taskType;
     if (!profile.taskTypeStats[type]) {
       profile.taskTypeStats[type] = { attempts: 0, successes: 0, avgQuality: 0, totalQuality: 0 };
@@ -164,7 +164,7 @@ class ToolLearning {
     }
   }
 
-  _updateComplexityStats(profile, entry) {
+  _updateComplexityStats (profile, entry) {
     const complexity = entry.complexity;
     if (!profile.complexityStats[complexity]) {
       profile.complexityStats[complexity] = { attempts: 0, successes: 0, avgQuality: 0, totalQuality: 0 };
@@ -178,7 +178,7 @@ class ToolLearning {
     }
   }
 
-  _updateRoleStats(profile, entry) {
+  _updateRoleStats (profile, entry) {
     const role = entry.role;
     if (!profile.roleStats[role]) {
       profile.roleStats[role] = { attempts: 0, successes: 0, avgQuality: 0, totalQuality: 0 };
@@ -192,7 +192,7 @@ class ToolLearning {
     }
   }
 
-  _analyzeStrengthWeakness(profile) {
+  _analyzeStrengthWeakness (profile) {
     const languageScores = [];
     for (const [lang, stats] of Object.entries(profile.languageStats)) {
       if (stats.attempts >= this.minSamples) {
@@ -219,7 +219,7 @@ class ToolLearning {
     profile.worstTaskTypes = taskTypeScores.slice(-2).map(s => s.taskType);
   }
 
-  _updateTaskTypeProfile(entry) {
+  _updateTaskTypeProfile (entry) {
     const key = `${entry.taskType}_${entry.language}`;
     if (!this.taskTypeProfiles[key]) {
       this.taskTypeProfiles[key] = {
@@ -252,7 +252,7 @@ class ToolLearning {
    * @param {object} taskInfo - 任务信息
    * @returns {number} 推荐分数 (-10 到 +10)
    */
-  getToolRecommendation(toolName, taskInfo) {
+  getToolRecommendation (toolName, taskInfo) {
     const profile = this.toolProfiles[toolName];
     if (!profile || profile.totalExecutions < this.minSamples) {
       return 0;
@@ -294,7 +294,7 @@ class ToolLearning {
    * @param {string[]} availableTools - 可用工具列表
    * @returns {{ tool: string, score: number, reasons: string[] }}
    */
-  recommendBestTool(taskInfo, availableTools) {
+  recommendBestTool (taskInfo, availableTools) {
     const recommendations = [];
 
     for (const toolName of availableTools) {
@@ -327,14 +327,14 @@ class ToolLearning {
   /**
    * 获取工具画像
    */
-  getToolProfile(toolName) {
+  getToolProfile (toolName) {
     return this.toolProfiles[toolName] || null;
   }
 
   /**
    * 获取所有工具画像摘要
    */
-  getAllToolProfiles() {
+  getAllToolProfiles () {
     return Object.values(this.toolProfiles).map(p => ({
       name: p.name,
       totalExecutions: p.totalExecutions,
@@ -350,7 +350,7 @@ class ToolLearning {
   /**
    * 获取学习统计
    */
-  getLearningStats() {
+  getLearningStats () {
     return {
       totalRecords: this.history.length,
       toolCount: Object.keys(this.toolProfiles).length,
@@ -364,7 +364,7 @@ class ToolLearning {
   /**
    * 重置学习数据
    */
-  reset() {
+  reset () {
     this.history = [];
     this.toolProfiles = {};
     this.taskTypeProfiles = {};
@@ -376,7 +376,7 @@ class ToolLearning {
   /**
    * 导出学习数据
    */
-  export() {
+  export () {
     return {
       history: this.history,
       toolProfiles: this.toolProfiles,
@@ -388,7 +388,7 @@ class ToolLearning {
   /**
    * 从导出数据导入
    */
-  import(data) {
+  import (data) {
     if (data.history) this.history = data.history.slice(-this.maxHistory);
     if (data.toolProfiles) this.toolProfiles = data.toolProfiles;
     if (data.taskTypeProfiles) this.taskTypeProfiles = data.taskTypeProfiles;

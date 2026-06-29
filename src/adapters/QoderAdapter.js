@@ -4,7 +4,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 
 class QoderAdapter extends BaseToolAdapter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super({
       name: 'qoder',
       displayName: 'Qoder',
@@ -14,7 +14,7 @@ class QoderAdapter extends BaseToolAdapter {
     });
   }
 
-  async detect() {
+  async detect () {
     this.detected = false;
     this.status = 'offline';
 
@@ -75,12 +75,12 @@ class QoderAdapter extends BaseToolAdapter {
     return false;
   }
 
-  _getFileVersion(filePath) {
+  _getFileVersion (filePath) {
     try {
       if (process.platform === 'win32') {
         const result = spawnSync(
           'powershell.exe',
-          ['-NoProfile', '-Command', `(Get-Item '${filePath.replace(/'/g, "''")}').VersionInfo.ProductVersion`],
+          ['-NoProfile', '-Command', `(Get-Item '${filePath.replace(/'/g, '\'\'')}').VersionInfo.ProductVersion`],
           { timeout: 5000, encoding: 'utf-8', windowsHide: true }
         );
         if (result.status === 0 && result.stdout) {
@@ -97,18 +97,18 @@ class QoderAdapter extends BaseToolAdapter {
     return 'unknown';
   }
 
-  async checkVersion() {
+  async checkVersion () {
     if (this.installPath && fs.existsSync(this.installPath)) {
       return this._getFileVersion(this.installPath);
     }
     return null;
   }
 
-  async connect(options = {}) {
+  async connect (options = {}) {
     if (!this.detected) {
       await this.detect();
     }
-    
+
     if (!this.detected) {
       throw new Error('Qoder 未安装或未找到');
     }
@@ -122,9 +122,9 @@ class QoderAdapter extends BaseToolAdapter {
     return { success: false, message: 'Qoder 不可用' };
   }
 
-  async execute(task, options = {}) {
+  async execute (task, options = {}) {
     const startTime = Date.now();
-    
+
     if (!this.isAvailable()) {
       const result = this._normalizeResult({
         taskId: options.taskId || `task_${Date.now()}`,
@@ -139,7 +139,7 @@ class QoderAdapter extends BaseToolAdapter {
 
     const taskId = options.taskId || `task_${Date.now()}`;
     const outputDir = options.outputDir || `./workspace/qoder/${taskId}`;
-    
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -220,10 +220,10 @@ class QoderAdapter extends BaseToolAdapter {
     return unifiedResult;
   }
 
-  async collectOutput(taskId) {
+  async collectOutput (taskId) {
     const outputDir = `./workspace/qoder/${taskId}`;
     const outputFile = path.join(outputDir, 'output.md');
-    
+
     if (fs.existsSync(outputFile)) {
       const content = fs.readFileSync(outputFile, 'utf-8');
       return {
@@ -232,10 +232,9 @@ class QoderAdapter extends BaseToolAdapter {
         files: fs.readdirSync(outputDir).map(f => path.join(outputDir, f))
       };
     }
-    
+
     return null;
   }
-
 }
 
 module.exports = QoderAdapter;

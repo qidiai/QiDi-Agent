@@ -17,7 +17,7 @@ const FileManager = require('../utils/FileManager');
  * 管理 TUI 的状态和与 TaskOrchestrator 的交互
  */
 class TUISession extends EventEmitter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super();
 
     this.workspaceDir = options.workspaceDir || './workspace';
@@ -43,7 +43,7 @@ class TUISession extends EventEmitter {
     this._ensureDirs();
   }
 
-  _ensureDirs() {
+  _ensureDirs () {
     try {
       if (!fs.existsSync(this.workspaceDir)) {
         fs.mkdirSync(this.workspaceDir, { recursive: true });
@@ -56,7 +56,7 @@ class TUISession extends EventEmitter {
   /**
    * 启动会话
    */
-  async start() {
+  async start () {
     this.emit('start', { mode: this.mode });
     return this;
   }
@@ -64,7 +64,7 @@ class TUISession extends EventEmitter {
   /**
    * 扫描工具
    */
-  async scan() {
+  async scan () {
     if (this.scanned) return this.registeredTools;
 
     this.emit('scan:start');
@@ -88,7 +88,7 @@ class TUISession extends EventEmitter {
   /**
    * 连接 Provider
    */
-  async connectProvider() {
+  async connectProvider () {
     if (this.provider) return this.provider;
 
     this.emit('provider:connecting', { provider: this.providerName });
@@ -113,7 +113,7 @@ class TUISession extends EventEmitter {
    * 运行任务
    * @param {string} taskDescription - 任务描述
    */
-  async run(taskDescription) {
+  async run (taskDescription) {
     if (!taskDescription) return null;
 
     this.emit('task:start', { description: taskDescription, mode: this.mode });
@@ -172,7 +172,6 @@ class TUISession extends EventEmitter {
 
       this.emit('task:complete', result);
       return result;
-
     } catch (err) {
       this.emit('task:error', { error: err.message, task: taskDescription });
       throw err;
@@ -182,7 +181,7 @@ class TUISession extends EventEmitter {
   /**
    * 附加 TUI 事件适配器
    */
-  _attachEventAdapter() {
+  _attachEventAdapter () {
     if (!this.orchestrator) return;
 
     // 转发所有事件到 TUI
@@ -208,7 +207,7 @@ class TUISession extends EventEmitter {
   /**
    * 切换模式
    */
-  setMode(mode) {
+  setMode (mode) {
     if (mode !== 'privacy' && mode !== 'quality') {
       throw new Error(`Invalid mode: ${mode}. Use 'privacy' or 'quality'`);
     }
@@ -222,7 +221,7 @@ class TUISession extends EventEmitter {
   /**
    * 切换 Provider
    */
-  async setProvider(providerName) {
+  async setProvider (providerName) {
     this.providerName = providerName;
     this.provider = null; // 触发重连
 
@@ -237,7 +236,7 @@ class TUISession extends EventEmitter {
   /**
    * 保存 checkpoint
    */
-  saveCheckpoint() {
+  saveCheckpoint () {
     if (this.orchestrator && this.orchestrator.saveCheckpoint) {
       return this.orchestrator.saveCheckpoint();
     }
@@ -247,7 +246,7 @@ class TUISession extends EventEmitter {
   /**
    * 重置上下文
    */
-  resetContext() {
+  resetContext () {
     this.recentTasks = [];
     this.recentReportIds = [];
     this.emit('context:reset');
@@ -256,7 +255,7 @@ class TUISession extends EventEmitter {
   /**
    * 获取状态
    */
-  getStatus() {
+  getStatus () {
     return {
       mode: this.mode,
       provider: this.providerName,

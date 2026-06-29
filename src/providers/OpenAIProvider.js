@@ -3,7 +3,7 @@ const http = require('http');
 const BaseProvider = require('./BaseProvider');
 
 class OpenAIProvider extends BaseProvider {
-  constructor(config = {}) {
+  constructor (config = {}) {
     super(config);
     this.name = 'openai';
     this.apiKey = config.apiKey || process.env.OPENAI_API_KEY || '';
@@ -11,7 +11,7 @@ class OpenAIProvider extends BaseProvider {
     this.model = config.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
   }
 
-  _request(path, data, timeout = 300000) {
+  _request (path, data, timeout = 300000) {
     return new Promise((resolve, reject) => {
       const url = new URL(path, this.baseUrl);
       const postData = JSON.stringify(data);
@@ -27,14 +27,14 @@ class OpenAIProvider extends BaseProvider {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
         },
-        timeout: timeout
+        timeout
       };
 
       if (this.apiKey) {
-        options.headers['Authorization'] = `Bearer ${this.apiKey}`;
+        options.headers.Authorization = `Bearer ${this.apiKey}`;
       }
 
-      let settled = false;  // 🚨 安全：确保 Promise 只 settle 一次
+      let settled = false; // 🚨 安全：确保 Promise 只 settle 一次
 
       const settleOnce = (isResolve, value) => {
         if (!settled) {
@@ -49,7 +49,9 @@ class OpenAIProvider extends BaseProvider {
 
       const req = httpModule.request(options, (res) => {
         let body = '';
-        res.on('data', (chunk) => { body += chunk; });
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
         res.on('end', () => {
           try {
             settleOnce(true, JSON.parse(body));
@@ -73,11 +75,11 @@ class OpenAIProvider extends BaseProvider {
     });
   }
 
-  async chat(messages, options = {}) {
+  async chat (messages, options = {}) {
     const model = options.model || this.model;
     const payload = {
-      model: model,
-      messages: messages,
+      model,
+      messages,
       temperature: options.temperature !== undefined ? options.temperature : 0.7,
       max_tokens: options.maxTokens || 2048
     };
@@ -106,12 +108,12 @@ class OpenAIProvider extends BaseProvider {
     }
   }
 
-  async generate(prompt, options = {}) {
+  async generate (prompt, options = {}) {
     const messages = [{ role: 'user', content: prompt }];
     return this.chat(messages, options);
   }
 
-  async listModels() {
+  async listModels () {
     try {
       const result = await this._request('/models', {}, 'GET');
       return result.data || [];

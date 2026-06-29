@@ -3,34 +3,34 @@ const OpenAIProvider = require('./OpenAIProvider');
 const AnthropicProvider = require('./AnthropicProvider');
 
 class ProviderFactory {
-  static create(type = null, config = {}) {
+  static create (type = null, config = {}) {
     const providerType = type || process.env.MODEL_PROVIDER || 'ollama';
 
     switch (providerType.toLowerCase()) {
-      case 'ollama':
-        return new OllamaProvider(config);
-      case 'openai':
-      case 'openai_compatible':
-        return new OpenAIProvider(config);
-      case 'anthropic':
-      case 'claude':
-        return new AnthropicProvider(config);
-      default:
-        throw new Error(`未知的模型提供商: ${providerType}。支持: ollama, openai, anthropic`);
+    case 'ollama':
+      return new OllamaProvider(config);
+    case 'openai':
+    case 'openai_compatible':
+      return new OpenAIProvider(config);
+    case 'anthropic':
+    case 'claude':
+      return new AnthropicProvider(config);
+    default:
+      throw new Error(`未知的模型提供商: ${providerType}。支持: ollama, openai, anthropic`);
     }
   }
 
-  static async detectAvailable() {
+  static async detectAvailable () {
     const available = [];
 
     // 检测 Ollama
     try {
       const ollama = new OllamaProvider();
       if (await ollama.checkConnection()) {
-        available.push({ 
-          type: 'ollama', 
-          name: 'Ollama (本地)', 
-          provider: ollama 
+        available.push({
+          type: 'ollama',
+          name: 'Ollama (本地)',
+          provider: ollama
         });
       }
     } catch (e) {
@@ -47,8 +47,8 @@ class ProviderFactory {
       const anthropic = new AnthropicProvider();
       const result = await anthropic.checkConnection();
       if (result.success) {
-        available.push({ 
-          type: 'anthropic', 
+        available.push({
+          type: 'anthropic',
           name: 'Anthropic Claude',
           model: result.model
         });
@@ -61,7 +61,7 @@ class ProviderFactory {
   /**
    * 获取所有支持的 Provider 类型
    */
-  static getSupportedTypes() {
+  static getSupportedTypes () {
     return [
       {
         type: 'ollama',

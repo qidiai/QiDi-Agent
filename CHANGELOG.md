@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] — 2026-06-29
+
+### Added — 单软件编程增强方案（Handoff Enhancement）
+
+- **多Provider并行模式** (`src/core/ExecutionModeManager.js`)
+  - 新增 `multi` 模式：无外部编程工具时，用多个LLM Provider并行生成代码
+  - 模式配置：`broadcast` 路由策略、`multiProviderMode: true`、`parallelLimit: 3`
+  - 完整配置：codeGeneration、qualityCheck、merge、routing、security
+
+- **TaskExecutor多Provider执行** (`src/core/TaskExecutor.js`)
+  - 新增 `_executeMultiProviderMode()` 方法：多Provider并行生成代码
+  - 新增 `_mergeMultiProviderOutputs()` 方法：使用MergeEngine合并多Provider结果
+  - 支持 `providers` 参数和 `multiProviderMode` 标志
+  - 精修能力：`_executeCodeTask()` 检测 `lastQualityFeedback` 自动调用 `refineCode()`
+
+- **CodeWriterAgent多文件结构化增强** (`src/agents/CodeWriterAgent.js`)
+  - 支持JSON格式输出（`{"files": [{"filePath": "...", "code": "..."}]}`）
+  - 支持代码块文件路径标注（`// 文件路径: xxx.js`）
+  - 新增 `refineCode()` 方法：基于质检反馈的diff级精修
+  - 新增 `_applyDiff()` 方法：标准diff格式应用
+
+- **AgentHub多Provider创建** (`src/core/AgentHub.js`)
+  - 新增 `createAllProviders()` 方法：从配置读取所有启用的Agent并创建Provider列表
+  - 新增 `createFromConfig()` 静态方法：便捷初始化
+
+- **TaskOrchestrator多Provider支持** (`src/core/TaskOrchestrator.js`)
+  - 新增 `providers` 属性：支持多Provider列表
+  - 根据执行模式自动设置 `multiProviderMode`
+
+### Fixed — 质量检查循环修复
+
+- **Bug B1** (`src/agents/QualityCheckerAgent.js`)
+  - `_runQualityGates()` 中引用未定义的 `codeInfo` 变量
+  - 修复：在方法开头添加 `const codeInfo = this._extractCode(code);`
+
+- **Bug B2** (`src/core/TaskScheduler.js`)
+  - `executeLoop()` 中无条件标记任务为 `completed`，即使需要修订
+  - 修复：检查 `result.needsRevision` 状态，`needs_revision` 任务不标记完成
+  - `_getReadyTasks()` 新增 `needs_revision` 状态支持
+
+- **needs_revision超限保护** (`src/core/TaskExecutor.js`)
+  - 当重试次数达到 `maxRetries` 仍需要修订时，添加 `qualityWarning` 标记
+  - 输出警告信息说明代码质量未达标但强制完成
+
+### Fixed — 安全与配置
+
+- **API密钥硬编码修复** (`config/agents.json`)
+  - DeepSeek API密钥从硬编码改为环境变量 `${DEEPSEEK_API_KEY}`
+
+- **依赖缺失修复** (`package.json`)
+  - 安装缺失的 `ajv` 依赖
+
+### Changed — 测试
+
+- **测试用例更新** (`test/comprehensive_test.js`)
+  - ExecutionModeManager测试更新为4种模式
+  - 新增multi模式检查
+
+- **测试通过率**：53/53（100%，等级 S）
+
+---
+
 ## [1.2.0] — 2026-06-29
 
 ### Added — P0: 工具学习系统（择优匹配）

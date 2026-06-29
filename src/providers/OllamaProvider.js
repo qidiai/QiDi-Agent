@@ -2,7 +2,7 @@ const http = require('http');
 const BaseProvider = require('./BaseProvider');
 
 class OllamaProvider extends BaseProvider {
-  constructor(config = {}) {
+  constructor (config = {}) {
     super(config);
     this.name = 'ollama';
     this.baseUrl = config.baseUrl || config.baseURL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
@@ -10,7 +10,7 @@ class OllamaProvider extends BaseProvider {
     this.modelSmall = config.modelSmall || process.env.OLLAMA_MODEL_SMALL || this.model;
   }
 
-  _request(path, data, timeout = 300000) {
+  _request (path, data, timeout = 300000) {
     return new Promise((resolve, reject) => {
       const url = new URL(path, this.baseUrl);
       const postData = JSON.stringify(data);
@@ -24,12 +24,14 @@ class OllamaProvider extends BaseProvider {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
         },
-        timeout: timeout
+        timeout
       };
 
       const req = http.request(options, (res) => {
         let body = '';
-        res.on('data', (chunk) => { body += chunk; });
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
         res.on('end', () => {
           try {
             resolve(JSON.parse(body));
@@ -53,11 +55,11 @@ class OllamaProvider extends BaseProvider {
     });
   }
 
-  async chat(messages, options = {}) {
+  async chat (messages, options = {}) {
     const model = options.useSmallModel ? this.modelSmall : this.model;
     const payload = {
-      model: model,
-      messages: messages,
+      model,
+      messages,
       stream: false,
       options: {
         temperature: options.temperature !== undefined ? options.temperature : 0.7,
@@ -85,11 +87,11 @@ class OllamaProvider extends BaseProvider {
     }
   }
 
-  async generate(prompt, options = {}) {
+  async generate (prompt, options = {}) {
     const model = options.useSmallModel ? this.modelSmall : this.model;
     const payload = {
-      model: model,
-      prompt: prompt,
+      model,
+      prompt,
       stream: false,
       options: {
         temperature: options.temperature !== undefined ? options.temperature : 0.7,
@@ -113,7 +115,7 @@ class OllamaProvider extends BaseProvider {
     }
   }
 
-  async listModels() {
+  async listModels () {
     return new Promise((resolve, reject) => {
       const url = new URL('/api/tags', this.baseUrl);
       const options = {
@@ -126,7 +128,9 @@ class OllamaProvider extends BaseProvider {
 
       const req = http.request(options, (res) => {
         let body = '';
-        res.on('data', (chunk) => { body += chunk; });
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
         res.on('end', () => {
           try {
             const data = JSON.parse(body);
@@ -138,7 +142,9 @@ class OllamaProvider extends BaseProvider {
       });
 
       req.on('error', () => resolve([]));
-      req.on('timeout', () => { req.destroy(); resolve([]); });
+      req.on('timeout', () => {
+        req.destroy(); resolve([]);
+      });
       req.end();
     });
   }

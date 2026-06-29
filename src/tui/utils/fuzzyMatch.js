@@ -25,7 +25,7 @@ try {
  * @param {number} limit - 返回结果数量限制
  * @returns {string[]} 匹配结果（按得分排序）
  */
-function fuzzyMatch(input, candidates, limit = 10) {
+function fuzzyMatch (input, candidates, limit = 10) {
   if (!input || !candidates || candidates.length === 0) {
     return candidates || [];
   }
@@ -46,7 +46,7 @@ function fuzzyMatch(input, candidates, limit = 10) {
  * @param {string[]} candidates - 候选列表
  * @returns {Object} 准备好的候选列表
  */
-function prepareCandidates(candidates) {
+function prepareCandidates (candidates) {
   if (!candidates || candidates.length === 0) {
     return null;
   }
@@ -65,7 +65,7 @@ function prepareCandidates(candidates) {
  * @param {number} limit - 返回结果数量限制
  * @returns {string[]} 匹配结果
  */
-function fuzzyMatchPrepared(input, prepared, limit = 10) {
+function fuzzyMatchPrepared (input, prepared, limit = 10) {
   if (!input || !prepared) {
     return [];
   }
@@ -82,7 +82,7 @@ function fuzzyMatchPrepared(input, prepared, limit = 10) {
  * 简单的内置模糊匹配（不依赖 fuzzysort）
  * 仅用于 fallback
  */
-function simpleFuzzyMatch(input, candidates, limit = 10) {
+function simpleFuzzyMatch (input, candidates, limit = 10) {
   if (!input || !candidates || candidates.length === 0) {
     return candidates || [];
   }
@@ -106,7 +106,7 @@ function simpleFuzzyMatch(input, candidates, limit = 10) {
 /**
  * 计算模糊匹配得分
  */
-function calculateScore(input, target) {
+function calculateScore (input, target) {
   let inputIndex = 0;
   let targetIndex = 0;
   let score = 0;
@@ -149,7 +149,7 @@ function calculateScore(input, target) {
 /**
  * 判断是否为单词边界
  */
-function isWordBoundary(char) {
+function isWordBoundary (char) {
   return /[\s\-_.:]/.test(char);
 }
 

@@ -1,6 +1,6 @@
 # 启迪 Agent (Qidi) 操作指令大全
 
-> 版本 v1.0.0 | 更新日期 2026-06-28
+> 版本 v1.3.0 | 更新日期 2026-06-29
 
 ---
 
@@ -19,6 +19,9 @@ npx qidi run -t "用Python写一个Web服务器"
 # 执行任务（高质量模式）
 npx qidi run -t "写一个贪吃蛇游戏" --mode quality
 
+# 执行任务（多模型并行模式）
+npx qidi run -t "创建待办事项应用" --mode multi
+
 # 启动 Web UI
 npx qidi web
 
@@ -33,7 +36,7 @@ npx qidi help
 | 命令 | 说明 | 常用示例 |
 |------|------|---------|
 | `run` | 运行单个代码任务 | `qidi run -t "任务" --mode privacy` |
-| `multi` | 多 Agent 并行分派 | `qidi multi -t "任务" -m parallel` |
+| `multi` | 多模型并行模式（v1.3.0新增） | `qidi run -t "任务" --mode multi` |
 | `interactive` | 交互式编程界面（REPL） | `qidi interactive --mode quality` |
 | `scan` | 扫描本机 AI 编程工具 | `qidi scan --connect --save` |
 | `connect` | 连接 AI 编程工具 | `qidi connect --auto` |
@@ -63,7 +66,7 @@ qidi run -t "任务描述" [选项]
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
 | `-t, --task <desc>` | 任务描述 | — |
-| `-m, --mode <mode>` | 执行模式：`privacy` \| `quality` | `privacy` |
+| `-m, --mode <mode>` | 执行模式：`privacy` \| `quality` \| `multi` | `privacy` |
 | `-p, --provider <name>` | 模型提供商：`ollama` \| `openai` \| `anthropic` | `ollama` |
 | `-w, --workspace <dir>` | 工作目录 | `./workspace` |
 | `-v, --verbose` | 显示详细日志 | 关闭 |
@@ -76,6 +79,9 @@ qidi run -t "用Python写一个合并两个有序数组的函数"
 # 高质量模式（云端最强模型拆分+质检+AI合并）
 qidi run -t "写一个贪吃蛇游戏" --mode quality
 
+# 多模型并行模式（多Provider并行生成+MergeEngine合并）
+qidi run -t "创建待办事项应用" --mode multi
+
 # 指定 OpenAI 作为拆分/质检 Provider
 qidi run -t "实现一个REST API" --mode quality -p openai
 
@@ -85,37 +91,51 @@ qidi run -t "写一个爬虫" --verbose
 
 ---
 
-### 3.2 `multi` — 多 Agent 并行分派
+### 3.2 `multi` — 多模型并行模式（v1.3.0 新增）
+
+**多模型并行模式**通过多个 LLM Provider 并行生成代码，使用 MergeEngine 智能合并结果，提升代码质量。适用于无外部编程工具时的编程场景。
 
 ```bash
-qidi multi -t "任务描述" [选项]
+# 使用方式：通过 --mode multi 启用
+qidi run -t "任务描述" --mode multi
+qidi interactive --mode multi
 ```
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-t, --task <desc>` | 任务描述 | — |
-| `-m, --mode <mode>` | 分派模式（见下表） | `parallel` |
-| `-a, --agents <list>` | 指定 Agent 列表（逗号分隔） | 全部 |
-| `-w, --workspace <dir>` | 工作目录 | `./workspace` |
-| `-v, --verbose` | 显示详细日志 | 关闭 |
+**工作流程**：
+```
+用户任务 → 智能拆分 → 多Provider并行生成 → MergeEngine合并 → 质量检查 → 精修循环 → 最终输出
+```
 
-**7 种分派模式**：
+**配置要求**：需要在 `config/agents.json` 中启用多个 Agent（至少 2 个）：
 
-| 模式 | 说明 |
+```json
+{
+  "agents": {
+    "ollama": { "enabled": true, "provider": "ollama", "config": {...} },
+    "deepseek": { "enabled": true, "provider": "openai", "config": {...} }
+  }
+}
+```
+
+**特性**：
+
+| 特性 | 说明 |
 |------|------|
-| `parallel` | 并行派发，所有工具同时执行 |
-| `sequential` | 顺序派发，逐个执行 |
-| `select` | 选最优结果 |
-| `cascade` | 级联（前一结果喂给下一个） |
-| `merge` | 全部产出合并 |
-| `privacy` | 隐私模式（本地拆分+质检+契约拼装） |
-| `quality` | 高质量模式（云端拆分+质检+AI合并） |
+| 代码生成 | 广播到所有启用的 Provider 并行生成 |
+| 结果合并 | MergeEngine 智能合并，取各模型之长 |
+| 质量检查 | 本地工具链 + 静态代码分析 |
+| 精修循环 | 质量不通过时自动精修（最多 2 次） |
+| 路由策略 | broadcast（广播） |
+| 并行限制 | 默认 3 个 Provider |
 
 **示例**：
 ```bash
-qidi multi -t "实现一个前端页面" -m parallel
-qidi multi -t "写一个微服务" -m privacy
-qidi multi -t "实现算法" -m cascade -a "claude-code,qoder"
+# 多模型并行模式执行任务
+qidi run -t "创建待办事项应用" --mode multi
+
+# 交互式界面中切换到多模型并行模式
+qidi interactive
+qidi> mode multi
 ```
 
 ---
@@ -365,6 +385,30 @@ qidi help
 ```
 
 **适用场景**：追求最佳代码质量、开源项目、非敏感业务
+
+### 🔀 多模型并行模式 (multi) — v1.3.0 新增
+
+```
+任务拆分 → 云端最强模型
+代码生成 → 多 Provider 并行生成（广播）
+质量检查 → 本地工具链 + 静态分析
+代码合并 → MergeEngine 智能合并
+精修循环 → 质量不通过自动精修（最多 2 次）
+```
+
+**适用场景**：无外部编程工具、需要提升代码质量、多模型协作
+
+**配置要求**：需要在 `config/agents.json` 中启用多个 Agent（至少 2 个）。
+
+**模式对比**：
+
+| 特性 | 🔒 隐私模式 | ✨ 高质量模式 | 🔀 多模型并行 |
+|------|------------|--------------|---------------|
+| 代码生成 | 本地 Ollama | 云端 API | 多 Provider 并行 |
+| 数据安全性 | 最高 | 中等 | 中等 |
+| 代码质量 | 中等 | 最高 | 高 |
+| Token 消耗 | 无 | 高 | 中等 |
+| 适用场景 | 敏感代码 | 复杂项目 | 无外部工具 |
 
 ---
 

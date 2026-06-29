@@ -68,7 +68,7 @@ const TASK_SPLITTER_PROMPT = `你是一位资深的AI系统架构师与项目总
 注意：只输出 JSON，不要其他文字。`;
 
 class TaskSplitterAgent extends BaseAgent {
-  constructor(provider, options = {}) {
+  constructor (provider, options = {}) {
     super(provider, {
       name: 'TaskSplitter',
       role: '项目总工程师',
@@ -100,9 +100,9 @@ class TaskSplitterAgent extends BaseAgent {
     };
   }
 
-  async splitTask(taskDescription, context = {}) {
+  async splitTask (taskDescription, context = {}) {
     let projectAnalysis = null;
-    
+
     if (this.enableContractAnalysis && context.existingFiles) {
       projectAnalysis = await this._analyzeProjectContext(context);
     }
@@ -114,7 +114,7 @@ class TaskSplitterAgent extends BaseAgent {
     }
 
     let prompt = `请拆分以下编程任务：\n\n${taskDescription}\n\n`;
-    prompt += `【任务复杂度分析参考】\n`;
+    prompt += '【任务复杂度分析参考】\n';
     prompt += `- 文本长度: ${complexity.length} 字\n`;
     prompt += `- 代码块数量: ${complexity.codeBlocks} 个\n`;
     prompt += `- 语言提及数: ${complexity.languages.length} 个（${complexity.languages.join(', ')}）\n`;
@@ -123,14 +123,14 @@ class TaskSplitterAgent extends BaseAgent {
     prompt += `- AST节点数估算: ${complexity.astNodeCount}\n`;
     prompt += `- 依赖深度: ${complexity.dependencyDepth}\n`;
     prompt += `- 已有契约数: ${complexity.existingContractCount}\n\n`;
-    prompt += `【当前拆分策略】\n`;
+    prompt += '【当前拆分策略】\n';
     prompt += `- 粒度模式: ${this.splitPatterns.granularity}\n`;
     prompt += `- 依赖权重: ${this.splitPatterns.dependencyWeight}\n`;
     prompt += `- 复杂度偏向: ${this.splitPatterns.complexityBias}\n\n`;
-    prompt += `请基于以上复杂度和策略，确定合理的子任务数量和粒度。`;
+    prompt += '请基于以上复杂度和策略，确定合理的子任务数量和粒度。';
 
     if (projectAnalysis) {
-      prompt += `\n\n【项目契约分析】\n`;
+      prompt += '\n\n【项目契约分析】\n';
       prompt += `- 已有函数: ${projectAnalysis.functions.length} 个\n`;
       prompt += `- 已有类/结构体: ${projectAnalysis.structs.length + projectAnalysis.classes.length} 个\n`;
       prompt += `- 已有接口: ${projectAnalysis.interfaces.length} 个\n`;
@@ -197,10 +197,10 @@ class TaskSplitterAgent extends BaseAgent {
     return parsed;
   }
 
-  async _analyzeProjectContext(context) {
+  async _analyzeProjectContext (context) {
     try {
       const codeBlocks = [];
-      
+
       if (context.existingFiles) {
         const files = context.existingFiles.split('\n').filter(f => f.trim());
         for (const filePath of files) {
@@ -221,7 +221,7 @@ class TaskSplitterAgent extends BaseAgent {
       if (codeBlocks.length === 0) return null;
 
       const contracts = await this.contractAssembler.extractContracts(codeBlocks);
-      
+
       const allFunctions = [];
       const allStructs = [];
       const allClasses = [];
@@ -250,14 +250,14 @@ class TaskSplitterAgent extends BaseAgent {
     }
   }
 
-  _analyzeComplexity(taskDescription, projectAnalysis = null) {
+  _analyzeComplexity (taskDescription, projectAnalysis = null) {
     const length = taskDescription.length;
     const codeBlocks = (taskDescription.match(/```/g) || []).length / 2;
     const languages = this._extractLanguages(taskDescription);
     const keywords = ['实现', '开发', '构建', '系统', '架构', '集成', '模块', '接口', '数据库', 'API', '微服务', '算法', '优化', '重构', '安全', '性能', '多线程', '服务器', '路由', '中间件', '日志', '缓存', '并发', '分布式', '高可用'];
     const keywordCount = keywords.filter(k => taskDescription.includes(k)).length;
     const ambiguity = keywordCount > 8 ? 'high' : keywordCount > 4 ? 'medium' : 'low';
-    
+
     let level = 'low';
     if (length > 500 || keywordCount >= 5) {
       level = 'high';
@@ -267,30 +267,38 @@ class TaskSplitterAgent extends BaseAgent {
 
     const astNodeCount = this._estimateASTNodes(taskDescription);
     const dependencyDepth = projectAnalysis ? Math.min(5, Math.ceil(projectAnalysis.functions.length / 5)) : 1;
-    const existingContractCount = projectAnalysis ? 
-      projectAnalysis.functions.length + projectAnalysis.structs.length + projectAnalysis.classes.length : 0;
+    const existingContractCount = projectAnalysis
+      ? projectAnalysis.functions.length + projectAnalysis.structs.length + projectAnalysis.classes.length
+      : 0;
 
-    return { 
-      length, codeBlocks, languages, ambiguity, keywordCount, level,
-      astNodeCount, dependencyDepth, existingContractCount
+    return {
+      length,
+      codeBlocks,
+      languages,
+      ambiguity,
+      keywordCount,
+      level,
+      astNodeCount,
+      dependencyDepth,
+      existingContractCount
     };
   }
 
-  _estimateASTNodes(text) {
+  _estimateASTNodes (text) {
     const functionPattern = /(function|def|fn|int|void|char|float|double|static|extern)\s+\w+\s*\(/g;
     const classPattern = /class\s+\w+/g;
     const structPattern = /struct\s+\w+/g;
     const interfacePattern = /interface\s+\w+/g;
-    
+
     const funcCount = (text.match(functionPattern) || []).length;
     const classCount = (text.match(classPattern) || []).length;
     const structCount = (text.match(structPattern) || []).length;
     const interfaceCount = (text.match(interfacePattern) || []).length;
-    
+
     return funcCount * 5 + classCount * 10 + structCount * 8 + interfaceCount * 6;
   }
 
-  _extractLanguages(text) {
+  _extractLanguages (text) {
     const langPatterns = [
       { pattern: /javascript|js/i, name: 'JavaScript' },
       { pattern: /typescript|ts/i, name: 'TypeScript' },
@@ -313,16 +321,22 @@ class TaskSplitterAgent extends BaseAgent {
     return [...new Set(found)];
   }
 
-  _fallbackSplit(taskDescription, complexity) {
+  _fallbackSplit (taskDescription, complexity) {
     const language = complexity.languages[0] || 'python';
     const subtasks = [];
 
     if (complexity.level === 'low') {
       subtasks.push({
-        id: 'T1', title: '实现任务', description: taskDescription,
-        role: 'code_writer', dependsOn: [],
-        acceptanceCriteria: '代码实现正确，可编译运行', estimatedComplexity: 'low', estimatedHours: 0.5,
-        requiredContracts: [], producesContracts: []
+        id: 'T1',
+        title: '实现任务',
+        description: taskDescription,
+        role: 'code_writer',
+        dependsOn: [],
+        acceptanceCriteria: '代码实现正确，可编译运行',
+        estimatedComplexity: 'low',
+        estimatedHours: 0.5,
+        requiredContracts: [],
+        producesContracts: []
       });
     } else if (complexity.level === 'medium') {
       subtasks.push(
@@ -357,12 +371,16 @@ class TaskSplitterAgent extends BaseAgent {
     };
   }
 
-  _normalizeResult(parsed, taskDescription) {
+  _normalizeResult (parsed, taskDescription) {
     if (!parsed.constraints) {
       const languageMatch = taskDescription.match(/(C语言|C\+\+|Python|JavaScript|Java|Go|Rust|TypeScript|HTML|CSS)/i);
       parsed.constraints = {
         language: languageMatch ? languageMatch[0].toLowerCase() : 'python',
-        techStack: 'console', platform: 'windows', framework: 'None', style: 'standard', fileExtension: languageMatch ? languageMatch[0].toLowerCase() : 'py'
+        techStack: 'console',
+        platform: 'windows',
+        framework: 'None',
+        style: 'standard',
+        fileExtension: languageMatch ? languageMatch[0].toLowerCase() : 'py'
       };
     }
     if (!parsed.dependencyGraph) {
@@ -374,16 +392,16 @@ class TaskSplitterAgent extends BaseAgent {
     if (!parsed.contractAnalysis) {
       parsed.contractAnalysis = { existingContracts: [], newContractsNeeded: [], contractConflicts: [] };
     }
-    
+
     for (const t of parsed.subtasks) {
       if (!t.requiredContracts) t.requiredContracts = [];
       if (!t.producesContracts) t.producesContracts = [];
     }
-    
+
     return parsed;
   }
 
-  async _selfCheck(parsed, originalTask, context) {
+  async _selfCheck (parsed, originalTask, context) {
     const checkPrompt = `请检查以下任务分解是否完整、合理：\n\n原始任务：${originalTask}\n\n分解结果：\n${JSON.stringify(parsed.subtasks, null, 2)}\n\n请回答：\n1. 是否所有原始需求都被覆盖？\n2. 依赖关系是否合理？\n3. 是否有遗漏或冗余的子任务？\n4. 复杂度估算是否合理？\n5. 契约依赖是否完整？\n\n输出JSON格式：{ "covered": true, "issues": ["问题1"], "suggestions": ["建议1"] }`;
 
     try {
@@ -401,7 +419,7 @@ class TaskSplitterAgent extends BaseAgent {
     return parsed;
   }
 
-  _validateDependencies(subtasks) {
+  _validateDependencies (subtasks) {
     const graph = {};
     const inDegree = {};
     const idSet = new Set(subtasks.map(t => t.id));
@@ -445,7 +463,7 @@ class TaskSplitterAgent extends BaseAgent {
     return { valid: cycles.length === 0, cycles };
   }
 
-  _fixCircularDependencies(subtasks, cycles) {
+  _fixCircularDependencies (subtasks, cycles) {
     for (const cycle of cycles) {
       const lastTask = subtasks.find(t => t.id === cycle[cycle.length - 2]);
       if (lastTask && lastTask.dependsOn) {
@@ -456,7 +474,7 @@ class TaskSplitterAgent extends BaseAgent {
     return subtasks;
   }
 
-  _validateCoverage(subtasks, originalTask) {
+  _validateCoverage (subtasks, originalTask) {
     const issues = [];
     const complexity = this._analyzeComplexity(originalTask);
 
@@ -533,7 +551,7 @@ class TaskSplitterAgent extends BaseAgent {
     };
   }
 
-  _buildDependencyGraph(subtasks) {
+  _buildDependencyGraph (subtasks) {
     const graph = {};
     for (const t of subtasks) {
       graph[t.id] = t.dependsOn || [];
@@ -541,7 +559,7 @@ class TaskSplitterAgent extends BaseAgent {
     return graph;
   }
 
-  async _resplitWithFeedback(taskDescription, context, previousResult, coverage) {
+  async _resplitWithFeedback (taskDescription, context, previousResult, coverage) {
     const feedbackPrompt = `之前的任务拆解存在以下问题，请重新拆解：
 
 原始任务：${taskDescription}
@@ -598,7 +616,7 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     }
   }
 
-  recordExecution(taskId, subtaskId, result) {
+  recordExecution (taskId, subtaskId, result) {
     this.executionHistory.push({
       taskId,
       subtaskId,
@@ -612,20 +630,20 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     this._updateTaskStats(result);
   }
 
-  _updateTaskStats(result) {
+  _updateTaskStats (result) {
     this.taskStats.total++;
     if (result.success) {
       this.taskStats.successful++;
     } else {
       this.taskStats.failed++;
     }
-    
+
     if (result.qualityScore) {
       this.taskStats.averageQuality = Math.round(
         (this.taskStats.averageQuality * (this.taskStats.total - 1) + result.qualityScore) / this.taskStats.total
       );
     }
-    
+
     if (result.actualTime) {
       this.taskStats.avgSplitTime = Math.round(
         (this.taskStats.avgSplitTime * (this.taskStats.total - 1) + result.actualTime) / this.taskStats.total
@@ -633,11 +651,11 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     }
   }
 
-  suggestAdjustment(taskDescription, previousResult) {
-    const failedSubtasks = previousResult.subtasks.filter(t => 
+  suggestAdjustment (taskDescription, previousResult) {
+    const failedSubtasks = previousResult.subtasks.filter(t =>
       this.executionHistory.some(e => e.subtaskId === t.id && !e.success)
     );
-    
+
     if (failedSubtasks.length === 0) return null;
 
     return {
@@ -648,17 +666,17 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     };
   }
 
-  _determineAdjustmentType(failedSubtasks, previousResult) {
+  _determineAdjustmentType (failedSubtasks, previousResult) {
     const failureRate = failedSubtasks.length / previousResult.subtasks.length;
-    
+
     if (failureRate >= 0.5) return 'redesign';
     if (failureRate >= 0.3) return 'merge';
     if (failedSubtasks.some(t => t.estimatedComplexity === 'high')) return 'split';
-    
+
     return 'adjust';
   }
 
-  _adjustStrategyBasedOnFeedback() {
+  _adjustStrategyBasedOnFeedback () {
     const recentHistory = this.executionHistory.slice(-this.adaptiveThreshold);
     const successRate = recentHistory.filter(e => e.success).length / recentHistory.length;
     const avgQuality = recentHistory.reduce((sum, e) => sum + (e.qualityScore || 0), 0) / recentHistory.length;
@@ -679,14 +697,14 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     }
   }
 
-  _handleLowSuccessRate(recentHistory) {
+  _handleLowSuccessRate (recentHistory) {
     const adjustments = [];
     const failedComplexities = recentHistory
       .filter(e => !e.success)
       .map(e => e.estimatedComplexity);
-    
+
     const highFailRate = failedComplexities.filter(c => c === 'high').length / failedComplexities.length;
-    
+
     if (highFailRate > 0.5) {
       adjustments.push({ field: 'granularity', old: this.splitPatterns.granularity, new: 'finer' });
       this.splitPatterns.granularity = 'finer';
@@ -698,9 +716,9 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     return adjustments;
   }
 
-  _handleLowQuality(recentHistory) {
+  _handleLowQuality (recentHistory) {
     const adjustments = [];
-    
+
     if (this.splitPatterns.complexityBias !== 'conservative') {
       adjustments.push({ field: 'complexityBias', old: this.splitPatterns.complexityBias, new: 'conservative' });
       this.splitPatterns.complexityBias = 'conservative';
@@ -709,9 +727,9 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     return adjustments;
   }
 
-  _handleHighPerformance(recentHistory) {
+  _handleHighPerformance (recentHistory) {
     const adjustments = [];
-    
+
     if (this.splitPatterns.granularity === 'finer') {
       adjustments.push({ field: 'granularity', old: this.splitPatterns.granularity, new: 'normal' });
       this.splitPatterns.granularity = 'normal';
@@ -725,7 +743,7 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     return adjustments;
   }
 
-  getStrategyReport() {
+  getStrategyReport () {
     return {
       splitPatterns: { ...this.splitPatterns },
       taskStats: { ...this.taskStats },
@@ -735,7 +753,7 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     };
   }
 
-  resetStrategy() {
+  resetStrategy () {
     this.splitPatterns = {
       granularity: 'normal',
       dependencyWeight: 1.0,
@@ -751,7 +769,7 @@ ${coverage.potentialGaps.map(g => `- ${g}`).join('\n')}
     this.executionHistory = [];
   }
 
-  async adaptiveResplit(taskDescription, previousResult, executionResults) {
+  async adaptiveResplit (taskDescription, previousResult, executionResults) {
     if (!this.feedbackLoopEnabled) {
       return await this.splitTask(taskDescription, {
         historicalData: JSON.stringify(executionResults)

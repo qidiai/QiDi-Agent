@@ -15,36 +15,38 @@ const results = [];
 const TIMEOUT = 30000;
 const startTime = Date.now();
 
-function test(name, fn) {
-  return new Promise(async (resolve) => {
-    const tStart = Date.now();
-    try {
-      await fn();
-      const duration = Date.now() - tStart;
-      const result = { name, passed: true, duration, error: null };
-      results.push(result);
-      console.log(chalk.green(`  ✅ ${name} (${duration}ms)`));
-    } catch (e) {
-      const duration = Date.now() - tStart;
-      const result = { name, passed: false, duration, error: e.message };
-      results.push(result);
-      console.log(chalk.red(`  ❌ ${name} (${duration}ms): ${e.message}`));
-    }
-    resolve();
+function test (name, fn) {
+  return new Promise((resolve) => {
+    (async () => {
+      const tStart = Date.now();
+      try {
+        await fn();
+        const duration = Date.now() - tStart;
+        const result = { name, passed: true, duration, error: null };
+        results.push(result);
+        console.log(chalk.green(`  ✅ ${name} (${duration}ms)`));
+      } catch (e) {
+        const duration = Date.now() - tStart;
+        const result = { name, passed: false, duration, error: e.message };
+        results.push(result);
+        console.log(chalk.red(`  ❌ ${name} (${duration}ms): ${e.message}`));
+      }
+      resolve();
+    })();
   });
 }
 
-function assert(condition, message) {
+function assert (condition, message) {
   if (!condition) throw new Error(message || '断言失败');
 }
 
-function assertEqual(actual, expected, message) {
+function assertEqual (actual, expected, message) {
   if (actual !== expected) {
     throw new Error(`${message || '值不相等'}: 期望 ${JSON.stringify(expected)}, 实际 ${JSON.stringify(actual)}`);
   }
 }
 
-function assertDeepEqual(actual, expected, path = '') {
+function assertDeepEqual (actual, expected, path = '') {
   if (typeof actual !== typeof expected) {
     throw new Error(`类型不匹配 ${path}: ${typeof actual} vs ${typeof expected}`);
   }
@@ -65,7 +67,7 @@ function assertDeepEqual(actual, expected, path = '') {
 // ════════════════════════════════════════════════
 // 1. 模块导入完整性测试
 // ════════════════════════════════════════════════
-async function testModuleImports() {
+async function testModuleImports () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  1. 模块导入完整性测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -159,7 +161,7 @@ async function testModuleImports() {
 // ════════════════════════════════════════════════
 // 2. Provider 功能测试
 // ════════════════════════════════════════════════
-async function testProviders() {
+async function testProviders () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  2. Provider 功能测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -263,7 +265,7 @@ async function testProviders() {
 // ════════════════════════════════════════════════
 // 3. TaskRouter 核心功能测试（新增）
 // ════════════════════════════════════════════════
-async function testTaskRouter() {
+async function testTaskRouter () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  3. TaskRouter 路由引擎测试（新增）'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -360,9 +362,9 @@ async function testTaskRouter() {
     const router = new TaskRouter(adapters, {
       strategy: 'manual',
       manualRouting: {
-        'architect': 'claude-code',
-        'code_writer': 'qoder',
-        'tester': 'openclaw'
+        architect: 'claude-code',
+        code_writer: 'qoder',
+        tester: 'openclaw'
       }
     });
 
@@ -454,7 +456,7 @@ async function testTaskRouter() {
 // ════════════════════════════════════════════════
 // 4. ExecutionModeManager 测试（新增）
 // ════════════════════════════════════════════════
-async function testExecutionModeManager() {
+async function testExecutionModeManager () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  4. ExecutionModeManager 模式管理测试（新增）'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -517,10 +519,11 @@ async function testExecutionModeManager() {
     const modes = mgr.getAllModes();
 
     assert(Array.isArray(modes), 'modes 应为数组');
-    assertEqual(modes.length, 3, '应有3种模式');
+    assertEqual(modes.length, 4, '应有4种模式');
     assert(modes.find(m => m.name === 'privacy'), '缺少 privacy 模式');
     assert(modes.find(m => m.name === 'quality'), '缺少 quality 模式');
     assert(modes.find(m => m.name === 'efficiency'), '缺少 efficiency 模式');
+    assert(modes.find(m => m.name === 'multi'), '缺少 multi 模式');
     modes.forEach(m => {
       assert(m.displayName, `模式 ${m.name} 缺少 displayName`);
       assert(m.description, `模式 ${m.name} 缺少 description`);
@@ -571,7 +574,7 @@ async function testExecutionModeManager() {
 // ════════════════════════════════════════════════
 // 5. ContractAssembler 测试（新增）
 // ════════════════════════════════════════════════
-async function testContractAssembler() {
+async function testContractAssembler () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  5. ContractAssembler 契约拼装测试（新增）'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -765,7 +768,7 @@ pub fn start_server(config: Config) -> Result<(), String> {
 // ════════════════════════════════════════════════
 // 6. MergeEngine 合并测试
 // ════════════════════════════════════════════════
-async function testMergeEngine() {
+async function testMergeEngine () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  6. MergeEngine 合并引擎测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -783,7 +786,7 @@ async function testMergeEngine() {
     const engine = new MergeEngine(null);
 
     const result = await engine.merge({
-      'agent1': {
+      agent1: {
         success: true,
         result: {
           codeBlocks: [
@@ -803,7 +806,7 @@ async function testMergeEngine() {
     const engine = new MergeEngine(null);
 
     const result = await engine.merge({
-      'agent1': {
+      agent1: {
         success: true,
         result: {
           codeBlocks: [
@@ -811,7 +814,7 @@ async function testMergeEngine() {
           ]
         }
       },
-      'agent2': {
+      agent2: {
         success: true,
         result: {
           codeBlocks: [
@@ -829,7 +832,7 @@ async function testMergeEngine() {
 // ════════════════════════════════════════════════
 // 7. TaskOrchestrator 集成测试
 // ════════════════════════════════════════════════
-async function testTaskOrchestrator() {
+async function testTaskOrchestrator () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  7. TaskOrchestrator 编排器集成测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -897,14 +900,15 @@ async function testTaskOrchestrator() {
     const orchestrator = new TaskOrchestrator(provider, { workspaceDir: './test_workspace' });
     const modes = orchestrator.getExecutionModes();
     assert(Array.isArray(modes), 'modes 应为数组');
-    assertEqual(modes.length, 3, '应有3种模式');
+    assertEqual(modes.length, 4, '应有4种模式');
+    assert(modes.find(m => m.name === 'multi'), '缺少 multi 模式');
   });
 }
 
 // ════════════════════════════════════════════════
 // 8. 工具适配器功能测试
 // ════════════════════════════════════════════════
-async function testAdapters() {
+async function testAdapters () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  8. 工具适配器功能测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -956,7 +960,7 @@ async function testAdapters() {
 // ════════════════════════════════════════════════
 // 9. CLI 命令注册测试
 // ════════════════════════════════════════════════
-async function testCLI() {
+async function testCLI () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  9. CLI 命令注册测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -964,22 +968,22 @@ async function testCLI() {
   await test('CLI 所有命令已注册', async () => {
     const fs = require('fs');
     const path = require('path');
-    
+
     // 验证 CLI 文件存在且可加载
     const cliPath = path.join(__dirname, '../src/cli/index.js');
     assert(fs.existsSync(cliPath), 'CLI 文件不存在');
-    
+
     // 读取 CLI 源文件中注册的命令列表
     const cliContent = fs.readFileSync(cliPath, 'utf-8');
     const expectedCommands = ['run', 'check', 'list', 'reports', 'report', 'context', 'multi', 'agents', 'scan', 'connect', 'web', 'help'];
-    
+
     for (const cmd of expectedCommands) {
       assert(
-        cliContent.includes(`.command('${cmd}')`) || cliContent.includes(`.command(\"${cmd}\")`),
+        cliContent.includes(`.command('${cmd}')`) || cliContent.includes(`.command("${cmd}")`),
         `CLI 缺少 ${cmd} 命令注册`
       );
     }
-    
+
     // 验证 CLI 模块导出的是 Commander 实例
     const { Command } = require('commander');
     assert(typeof Command === 'function', 'Commander 可加载');
@@ -989,7 +993,7 @@ async function testCLI() {
 // ════════════════════════════════════════════════
 // 10. 配置文件完整性测试
 // ════════════════════════════════════════════════
-async function testConfig() {
+async function testConfig () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
   console.log(chalk.bold.cyan('  10. 配置文件完整性测试'));
   console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
@@ -1032,7 +1036,7 @@ async function testConfig() {
 // ════════════════════════════════════════════════
 // 主入口
 // ════════════════════════════════════════════════
-async function main() {
+async function main () {
   console.log(chalk.bold.green('\n╔═══════════════════════════════════════════╗'));
   console.log(chalk.bold.green('║    启迪 Agent 全面专业测试套件       ║'));
   console.log(chalk.bold.green('║    ai-orchestrator Comprehensive Test Suite  ║'));
@@ -1136,7 +1140,6 @@ async function main() {
     const reportPath = path.join(reportDir, `comprehensive_test_${Date.now()}.json`);
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf-8');
     console.log(chalk.gray(`  报告已保存: ${reportPath}\n`));
-
   } catch (e) {
     console.error(chalk.red(`\n测试框架异常: ${e.message}`));
     console.error(e.stack);

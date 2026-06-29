@@ -6,18 +6,18 @@ const fs = require('fs');
  * 安全：路径转义函数
  * 所有命令统一使用 shell: false 执行，路径参数仍需转义以防特殊字符问题
  */
-function escapeShellArg(arg) {
+function escapeShellArg (arg) {
   if (process.platform === 'win32') {
     // Windows: 用双引号包裹并转义内部的双引号
     return `"${String(arg).replace(/"/g, '\\"')}"`;
   } else {
     // Unix: 用单引号包裹并转义内部的单引号
-    return `'${String(arg).replace(/'/g, "'\\''")}'`;
+    return `'${String(arg).replace(/'/g, '\'\\\'\'')}'`;
   }
 }
 
 class BaseToolAdapter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.options = options;
     this.name = options.name || 'unknown';
     this.displayName = options.displayName || 'Unknown Tool';
@@ -31,22 +31,22 @@ class BaseToolAdapter {
     this.executionHistory = [];
   }
 
-  async detect() {
+  async detect () {
     throw new Error('detect() must be implemented');
   }
 
-  async connect(options = {}) {
+  async connect (options = {}) {
     throw new Error('connect() must be implemented');
   }
 
-  async execute(task, options = {}) {
+  async execute (task, options = {}) {
     const startTime = Date.now();
     const taskId = options.taskId || `task_${Date.now()}`;
     const workspaceDir = options.workspaceDir || this.workspaceDir;
-    
+
     const startFiles = this._scanWorkspace(workspaceDir);
-    
-    let result = {
+
+    const result = {
       taskId,
       tool: this.name,
       success: false,
@@ -72,13 +72,13 @@ class BaseToolAdapter {
 
     try {
       this._log(result, `开始执行任务: ${task.substring(0, 50)}...`);
-      
+
       if (!this.isAvailable()) {
         throw new Error(`${this.displayName} 不可用，请先连接`);
       }
 
       const cmdResult = await this._runToolCommand(task, options);
-      
+
       result.rawOutput = cmdResult.stdout || '';
       result.stderr = cmdResult.stderr || '';
       result.exitCode = cmdResult.code;
@@ -88,11 +88,11 @@ class BaseToolAdapter {
       if (cmdResult.codeBlocks) {
         result.codeBlocks = cmdResult.codeBlocks;
       }
-      
+
       if (cmdResult.generatedFiles) {
         result.generatedFiles = cmdResult.generatedFiles;
       }
-      
+
       if (cmdResult.outputFile) {
         result.outputFile = cmdResult.outputFile;
       }
@@ -105,7 +105,6 @@ class BaseToolAdapter {
       } else {
         this._log(result, '命令执行成功');
       }
-
     } catch (e) {
       result.error = e.message;
       result.success = false;
@@ -119,7 +118,7 @@ class BaseToolAdapter {
       const endFiles = this._scanWorkspace(workspaceDir);
       result.generatedFiles = this._diffFiles(startFiles, endFiles);
     }
-    
+
     this._log(result, `生成文件数: ${result.generatedFiles.length}`);
     for (const f of result.generatedFiles) {
       this._log(result, `  - ${f.path} (${f.size} bytes)`);
@@ -129,7 +128,7 @@ class BaseToolAdapter {
     return result;
   }
 
-  _normalizeResult(result) {
+  _normalizeResult (result) {
     const defaultResult = {
       taskId: result.taskId || `task_${Date.now()}`,
       tool: result.tool || this.name,
@@ -155,18 +154,18 @@ class BaseToolAdapter {
     };
 
     defaultResult.duration = defaultResult.endTime - defaultResult.startTime;
-    
+
     return defaultResult;
   }
 
-  async _runToolCommand(task, options) {
+  async _runToolCommand (task, options) {
     throw new Error('_runToolCommand() must be implemented');
   }
 
-  async collectOutput(taskId) {
+  async collectOutput (taskId) {
     const history = this.executionHistory.find(h => h.taskId === taskId);
     if (!history) return null;
-    
+
     const output = {
       taskId: history.taskId,
       tool: history.tool,
@@ -192,15 +191,15 @@ class BaseToolAdapter {
     return output;
   }
 
-  async checkVersion() {
+  async checkVersion () {
     throw new Error('checkVersion() must be implemented');
   }
 
-  isAvailable() {
+  isAvailable () {
     return this.detected && this.status === 'online';
   }
 
-  getInfo() {
+  getInfo () {
     return {
       name: this.name,
       displayName: this.displayName,
@@ -214,7 +213,7 @@ class BaseToolAdapter {
     };
   }
 
-  async _runCommand(cmd, args = [], options = {}) {
+  async _runCommand (cmd, args = [], options = {}) {
     const safeArgs = args.map(arg => {
       if (typeof arg === 'string' && (arg.includes(' ') || arg.includes('"'))) {
         return escapeShellArg(arg);
@@ -318,13 +317,13 @@ class BaseToolAdapter {
     });
   }
 
-  async _findCommandInPath(command) {
+  async _findCommandInPath (command) {
     const paths = process.env.PATH.split(path.delimiter);
-    
+
     for (const p of paths) {
       const cmdPath = path.join(p, command);
       const cmdPathExe = `${cmdPath}.exe`;
-      
+
       try {
         if (fs.existsSync(cmdPath)) {
           return cmdPath;
@@ -335,11 +334,11 @@ class BaseToolAdapter {
       } catch (e) {
       }
     }
-    
+
     return null;
   }
 
-  async _checkWindowsRegistry(keyPath) {
+  async _checkWindowsRegistry (keyPath) {
     try {
       const result = await this._runCommand('reg', ['query', keyPath]);
       if (result.success) {
@@ -350,7 +349,7 @@ class BaseToolAdapter {
     return null;
   }
 
-  _parseVersion(output) {
+  _parseVersion (output) {
     const versionMatch = output.match(/version\s*[:=]\s*([\d.]+)/i);
     if (versionMatch) {
       return versionMatch[1];
@@ -358,7 +357,7 @@ class BaseToolAdapter {
     return null;
   }
 
-  _scanWorkspace(dir) {
+  _scanWorkspace (dir) {
     const files = new Map();
     try {
       const items = fs.readdirSync(dir, { recursive: true });
@@ -379,7 +378,7 @@ class BaseToolAdapter {
     return files;
   }
 
-  _diffFiles(before, after) {
+  _diffFiles (before, after) {
     const newFiles = [];
     for (const [key, value] of after) {
       const beforeValue = before.get(key);
@@ -392,31 +391,34 @@ class BaseToolAdapter {
     return newFiles;
   }
 
-  _log(result, message) {
+  _log (result, message) {
     const timestamp = new Date().toISOString();
     result.logs.push({ timestamp, message });
   }
 
-  async runShellCommand(cmd, options = {}) {
+  async runShellCommand (cmd, options = {}) {
     return this._runCommand(cmd, [], options);
   }
 
-  async runScript(scriptContent, options = {}) {
+  async runScript (scriptContent, options = {}) {
     const tempFile = path.join(this.workspaceDir, `script_${Date.now()}.sh`);
     try {
       fs.writeFileSync(tempFile, scriptContent, 'utf-8');
       fs.chmodSync(tempFile, 0o755);
-      
+
       const result = await this._runCommand(tempFile, [], options);
       return result;
     } finally {
-      try { fs.unlinkSync(tempFile); } catch (e) {}
+      try {
+        fs.unlinkSync(tempFile);
+      } catch (e) {}
     }
   }
+
   /**
    * 从文本中提取代码块（通用实现，子类可覆写）
    */
-  _extractCodeBlocks(text) {
+  _extractCodeBlocks (text) {
     const blocks = [];
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let match;

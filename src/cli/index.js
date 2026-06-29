@@ -31,7 +31,7 @@ program
   .command('run')
   .description('运行一个代码任务')
   .option('-t, --task <task>', '任务描述')
-  .option('-m, --mode <mode>', '执行模式: privacy|quality', 'privacy')
+  .option('-m, --mode <mode>', '执行模式: privacy|quality|multi', 'privacy')
   .option('-p, --provider <provider>', '模型提供商: ollama|openai', process.env.MODEL_PROVIDER || 'ollama')
   .option('-w, --workspace <dir>', '工作目录', './workspace')
   .option('-v, --verbose', '显示详细日志')
@@ -53,7 +53,11 @@ program
     }
 
     // 显示执行模式
-    const modeDisplay = options.mode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式';
+    const modeDisplay = options.mode === 'privacy'
+      ? '🔒 隐私模式'
+      : options.mode === 'multi'
+        ? '🔀 多模型并行模式'
+        : '✨ 高质量模式';
     console.log(chalk.cyan(`执行模式: ${modeDisplay}`));
 
     let provider;
@@ -105,11 +109,30 @@ program
       console.log(chalk.yellow(`⚠️  工具扫描失败: ${scanErr.message}，仅使用 Provider`));
     }
 
+    // ===== multi 模式:加载所有已启用的 Provider =====
+    let extraProviders = [];
+    if (options.mode === 'multi') {
+      try {
+        const AgentHub = require('../core/AgentHub');
+        const hub = new AgentHub({ configDir: path.join(__dirname, '../../config') });
+        await hub.initialize();
+        const enabled = hub.getEnabledAgents();
+        extraProviders = enabled
+          .map(a => ({ name: a.name, provider: a.provider }))
+          .filter(p => p.provider);
+        console.log(chalk.cyan(`🔀 多模型模式: 已加载 ${extraProviders.length} 个 Provider`));
+        extraProviders.forEach(p => console.log(chalk.gray(`   - ${p.name}`)));
+      } catch (e) {
+        console.log(chalk.yellow(`⚠️  多 Provider 加载失败: ${e.message},退化为单 Provider`));
+      }
+    }
+
     const orchestrator = new TaskOrchestrator(provider, {
       workspaceDir: options.workspace,
       verbose: options.verbose,
       toolAdapters: registeredTools,
-      executionMode: options.mode  // 传入执行模式
+      executionMode: options.mode,
+      providers: extraProviders.length > 0 ? extraProviders.map(p => p.provider) : undefined
     });
 
     // 设置执行模式
@@ -195,9 +218,9 @@ program
   .action((options) => {
     const orchestrator = new TaskOrchestrator(null, {});
     const reports = orchestrator.listReports();
-    
+
     console.log(chalk.bold.cyan('\n📋 实验报告列表:\n'));
-    
+
     if (reports.length === 0) {
       console.log(chalk.gray('   (暂无报告)'));
     } else {
@@ -223,12 +246,12 @@ program
   .action((id) => {
     const orchestrator = new TaskOrchestrator(null, {});
     const report = orchestrator.loadReport(id);
-    
+
     if (!report) {
       console.log(chalk.red(`\n❌ 报告 ${id} 不存在\n`));
       process.exit(1);
     }
-    
+
     console.log(chalk.bold.cyan('\n'));
     console.log(report.content);
   });
@@ -240,13 +263,13 @@ program
   .action((options) => {
     const orchestrator = new TaskOrchestrator(null, {});
     const context = orchestrator.getHistoricalContext(parseInt(options.count));
-    
+
     console.log(chalk.bold.cyan('\n📚 历史上下文:\n'));
     console.log(context);
     console.log('');
   });
 
-function setupEventListeners(orchestrator, verbose) {
+function setupEventListeners (orchestrator, verbose) {
   orchestrator.on('splitting', () => {
     ora().info('📋 正在分析并拆分任务...');
   });
@@ -285,7 +308,7 @@ function setupEventListeners(orchestrator, verbose) {
     if (verbose) {
       console.log(chalk.yellow(`   🔍 质量评分: ${data.quality.qualityScore}/100`));
       if (data.needsRevision) {
-        console.log(chalk.yellow(`   ⚠️ 需要返工`));
+        console.log(chalk.yellow('   ⚠️ 需要返工'));
       }
     }
   });
@@ -329,7 +352,7 @@ function setupEventListeners(orchestrator, verbose) {
     if (data && data.length > 1) {
       const lines = data.filter(d => d.success).map(d => `     ${chalk.cyan(d.tool.padEnd(12))} ${d.blocks} 个代码块`);
       if (lines.length > 0) {
-        console.log(chalk.gray(`   📊 工具产出对比:`));
+        console.log(chalk.gray('   📊 工具产出对比:'));
         lines.forEach(l => console.log(l));
       }
     }
@@ -344,7 +367,7 @@ function setupEventListeners(orchestrator, verbose) {
   });
 }
 
-function printSummary(result) {
+function printSummary (result) {
   console.log(chalk.bold.cyan('═══════════════════════════════════════════'));
   console.log(chalk.bold.cyan('           📊 任务执行总结'));
   console.log(chalk.bold.cyan('═══════════════════════════════════════════\n'));
@@ -417,7 +440,7 @@ program
     }
 
     const agents = options.agents ? options.agents.split(',').map(a => a.trim()) : [];
-    
+
     console.log(chalk.bold('\n📋 可用的 Agent:\n'));
     const allAgents = await dispatcher.listAgents();
     for (const agent of allAgents) {
@@ -430,12 +453,12 @@ program
 
     const availableAgents = allAgents.filter(a => a.enabled).map(a => a.name);
     const targetAgents = agents.filter(a => availableAgents.includes(a));
-    
+
     if (targetAgents.length === 0) {
       console.log(chalk.yellow('⚠️  未指定有效 Agent 或没有可用的 Agent'));
       console.log(chalk.gray(`   可用 Agent: ${availableAgents.join(', ')}`));
       console.log(chalk.gray('   使用 -a 参数指定，如: -a ollama,deepseek\n'));
-      
+
       const { selectedAgents } = await inquirer.prompt([
         {
           type: 'checkbox',
@@ -491,13 +514,13 @@ program
         const agent = allAgents.find(a => a.name === agentName);
         const statusIcon = agentResult.success ? '✅' : '❌';
         const statusText = agentResult.success ? chalk.green('成功') : chalk.red('失败');
-        
+
         console.log(`  ${statusIcon} ${chalk.cyan(agent?.name_display || agentName)}: ${statusText}`);
-        
+
         if (agentResult.reportId) {
           console.log(`     📋 报告: ${chalk.gray(agentResult.reportId)}`);
         }
-        
+
         if (options.verbose && agentResult.result) {
           const successRate = agentResult.result.successRate || 0;
           console.log(`     📊 成功率: ${successRate}%`);
@@ -513,7 +536,6 @@ program
       }
 
       console.log(chalk.blue('💡 查看详细报告: aio reports\n'));
-
     } catch (e) {
       resultSpinner.fail(`分派失败: ${e.message}`);
       if (options.verbose) {
@@ -539,15 +561,17 @@ program
 
     if (options.check) {
       console.log(chalk.bold.cyan('\n🔍 检查 Agent 连接状态...\n'));
-      
+
       const results = await dispatcher.checkAgents();
-      
+
       for (const [name, result] of Object.entries(results)) {
         const statusIcon = result.status === 'online' ? '✅' : result.status === 'offline' ? '⚠️' : '❌';
-        const statusText = result.status === 'online' ? chalk.green('在线') : 
-                          result.status === 'offline' ? chalk.yellow('离线') : 
-                          chalk.red('错误');
-        
+        const statusText = result.status === 'online'
+          ? chalk.green('在线')
+          : result.status === 'offline'
+            ? chalk.yellow('离线')
+            : chalk.red('错误');
+
         console.log(`  ${statusIcon} ${chalk.cyan(name)}: ${statusText}`);
         if (result.message) {
           console.log(`     ${chalk.gray(result.message)}`);
@@ -579,11 +603,11 @@ program
 
     console.log(chalk.bold.cyan('\n📋 Agent 列表:\n'));
     const agents = await dispatcher.listAgents();
-    
+
     for (const agent of agents) {
       const statusIcon = agent.enabled ? '✅' : '❌';
       const statusColor = agent.enabled ? chalk.green : chalk.red;
-      
+
       console.log(`  ${statusIcon} ${chalk.cyan(agent.name_display || agent.name)}`);
       console.log(`     ${chalk.gray(agent.description)}`);
       console.log(`     提供商: ${agent.provider} | 状态: ${statusColor(agent.status)}`);
@@ -591,7 +615,7 @@ program
     }
   });
 
-function getRoleIcon(role) {
+function getRoleIcon (role) {
   const icons = {
     code_writer: '💻',
     code_reviewer: '🔍',
@@ -601,7 +625,7 @@ function getRoleIcon(role) {
   return icons[role] || '📋';
 }
 
-function getComplexityColor(complexity) {
+function getComplexityColor (complexity) {
   const colors = {
     low: chalk.green('低'),
     medium: chalk.yellow('中'),
@@ -618,24 +642,24 @@ program
   .action(async (options) => {
     printLogo({ mini: true });
     console.log(chalk.bold.cyan('🔍 AI 工具扫描器\n'));
-    
+
     const scanner = new ToolScanner();
     scanner.registerAdapters(AdapterFactory.createAll());
-    
+
     await scanner.scan();
-    
+
     const report = scanner.getScanReport();
     console.log(report);
-    
+
     if (options.save) {
       const filePath = scanner.saveResults();
       console.log(chalk.green(`\n✅ 扫描结果已保存到: ${filePath}`));
     }
-    
+
     if (options.connect) {
       console.log(chalk.blue('\n🔗 正在自动连接已发现的工具...\n'));
       await scanner.connectAll();
-      
+
       const registered = scanner.getRegisteredTools();
       if (registered.length > 0) {
         console.log(chalk.green(`\n✅ 已注册 ${registered.length} 个工具:`));
@@ -657,23 +681,23 @@ program
   .action(async (options) => {
     printLogo({ mini: true });
     console.log(chalk.bold.cyan('🔗 AI 工具连接\n'));
-    
+
     const scanner = new ToolScanner();
     scanner.registerAdapters(AdapterFactory.createAll());
-    
+
     if (options.scan || !options.tool) {
       await scanner.scan();
     }
-    
+
     if (options.auto) {
       console.log('🚀 自动接入所有已发现的工具...\n');
       await scanner.connectAll();
-      
+
       const registered = scanner.getRegisteredTools();
       console.log(chalk.bold.cyan('\n═══════════════════════════════════════════'));
       console.log(chalk.bold.cyan('           📊 连接结果'));
       console.log(chalk.bold.cyan('═══════════════════════════════════════════\n'));
-      
+
       if (registered.length > 0) {
         console.log(chalk.green(`✅ 成功接入 ${registered.length} 个工具:\n`));
         for (const tool of registered) {
@@ -695,7 +719,7 @@ program
     } else if (options.tool) {
       try {
         const result = await scanner.connect(options.tool);
-        
+
         if (result.success) {
           console.log(chalk.green(`\n✅ ${result.displayName || options.tool} 连接成功\n`));
         } else {
@@ -706,13 +730,13 @@ program
       }
     } else {
       const available = scanner.getAvailableTools();
-      
+
       if (available.length === 0) {
         console.log(chalk.yellow('⚠️  没有发现可用的工具'));
         console.log(chalk.gray('   先运行: aio scan\n'));
         return;
       }
-      
+
       const { selectedTools } = await inquirer.prompt([
         {
           type: 'checkbox',
@@ -725,7 +749,7 @@ program
           }))
         }
       ]);
-      
+
       console.log('\n');
       for (const toolName of selectedTools) {
         try {
@@ -739,10 +763,10 @@ program
           console.log(chalk.red(`❌ ${toolName} 连接失败: ${e.message}`));
         }
       }
-      
+
       console.log('\n');
     }
-    
+
     scanner.saveResults();
   });
 
@@ -767,7 +791,7 @@ program
 
     try {
       await server.start();
-      
+
       console.log(chalk.cyan.bold('\n  💡 使用提示:'));
       console.log(chalk.gray('   - 在浏览器中打开上面的地址访问 Web UI'));
       console.log(chalk.gray('   - 按 Ctrl+C 停止服务器'));
@@ -779,7 +803,6 @@ program
         console.log(chalk.green('  服务器已停止\n'));
         process.exit(0);
       });
-
     } catch (e) {
       console.log(chalk.red(`\n  ❌ 启动失败: ${e.message}`));
       if (e.code === 'EADDRINUSE') {
@@ -816,7 +839,7 @@ program
   .option('-l, --changelog', '显示更新日志')
   .action(async (options) => {
     const versionManager = new VersionManager();
-    
+
     if (options.changelog) {
       console.log(chalk.cyan('\n📋 正在获取更新日志...\n'));
       const changelog = await versionManager.getChangelog();
@@ -836,13 +859,13 @@ program
   .option('-c, --clean', '清理旧日志')
   .action((options) => {
     const logger = new Logger({ name: 'qidi-agent' });
-    
+
     if (options.clean) {
       const cleaned = logger.clean(7); // 保留7天
       console.log(chalk.green(`\n✅ 已清理 ${cleaned} 个旧日志文件\n`));
       return;
     }
-    
+
     const stats = logger.getStats();
     console.log(chalk.cyan('\n📋 日志统计:\n'));
     console.log(`  文件: ${stats.file || '无'}`);
@@ -906,73 +929,73 @@ program
     console.log(chalk.bold.cyan('╚══════════════════════════════════════════════════════════╝\n'));
 
     console.log(chalk.bold.yellow('📋 核心任务命令'));
-    console.log(chalk.cyan('  qidi run')     + chalk.gray('     运行单个代码任务'));
-    console.log(                '    ' + chalk.white('--mode <mode>')     + chalk.gray('  执行模式: privacy(默认)|quality'));
-    console.log(                '    ' + chalk.white('-t, --task <desc>') + chalk.gray('  任务描述'));
-    console.log(                '    ' + chalk.white('-p, --provider')    + chalk.gray('  模型提供商: ollama|openai|anthropic'));
-    console.log(                '    ' + chalk.white('-w, --workspace')   + chalk.gray('  工作目录 (默认 ./workspace)'));
-    console.log(                '    ' + chalk.white('-v, --verbose')     + chalk.gray('  显示详细日志'));
+    console.log(chalk.cyan('  qidi run') + chalk.gray('     运行单个代码任务'));
+    console.log('    ' + chalk.white('--mode <mode>') + chalk.gray('  执行模式: privacy(默认)|quality'));
+    console.log('    ' + chalk.white('-t, --task <desc>') + chalk.gray('  任务描述'));
+    console.log('    ' + chalk.white('-p, --provider') + chalk.gray('  模型提供商: ollama|openai|anthropic'));
+    console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录 (默认 ./workspace)'));
+    console.log('    ' + chalk.white('-v, --verbose') + chalk.gray('  显示详细日志'));
     console.log('');
-    console.log(chalk.cyan('  qidi multi')  + chalk.gray('   多 Agent 并行分派'));
-    console.log(                '    ' + chalk.white('-t, --task <desc>') + chalk.gray('  任务描述'));
-    console.log(                '    ' + chalk.white('-m, --mode <mode>') + chalk.gray('  分派模式: parallel|sequential|select|cascade|merge|privacy|quality'));
-    console.log(                '    ' + chalk.white('-a, --agents <list>')+ chalk.gray('  指定 Agent 列表(逗号分隔)'));
-    console.log(                '    ' + chalk.white('-w, --workspace')   + chalk.gray('  工作目录'));
+    console.log(chalk.cyan('  qidi multi') + chalk.gray('   多 Agent 并行分派'));
+    console.log('    ' + chalk.white('-t, --task <desc>') + chalk.gray('  任务描述'));
+    console.log('    ' + chalk.white('-m, --mode <mode>') + chalk.gray('  分派模式: parallel|sequential|select|cascade|merge|privacy|quality'));
+    console.log('    ' + chalk.white('-a, --agents <list>') + chalk.gray('  指定 Agent 列表(逗号分隔)'));
+    console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录'));
     console.log('');
 
     console.log(chalk.bold.yellow('🔍 工具扫描与管理'));
-    console.log(chalk.cyan('  qidi scan')    + chalk.gray('    扫描本机已安装的 AI 编程工具'));
-    console.log(                '    ' + chalk.white('-s, --save')        + chalk.gray('  保存扫描结果到配置文件'));
-    console.log(                '    ' + chalk.white('-c, --connect')     + chalk.gray('  扫描后自动连接'));
+    console.log(chalk.cyan('  qidi scan') + chalk.gray('    扫描本机已安装的 AI 编程工具'));
+    console.log('    ' + chalk.white('-s, --save') + chalk.gray('  保存扫描结果到配置文件'));
+    console.log('    ' + chalk.white('-c, --connect') + chalk.gray('  扫描后自动连接'));
     console.log('');
     console.log(chalk.cyan('  qidi connect') + chalk.gray('  连接 AI 编程工具'));
-    console.log(                '    ' + chalk.white('-a, --auto')        + chalk.gray('  自动接入所有已发现的工具'));
-    console.log(                '    ' + chalk.white('-t, --tool <name>') + chalk.gray('  连接指定工具'));
-    console.log(                '    ' + chalk.white('-s, --scan')        + chalk.gray('  先扫描再连接'));
+    console.log('    ' + chalk.white('-a, --auto') + chalk.gray('  自动接入所有已发现的工具'));
+    console.log('    ' + chalk.white('-t, --tool <name>') + chalk.gray('  连接指定工具'));
+    console.log('    ' + chalk.white('-s, --scan') + chalk.gray('  先扫描再连接'));
     console.log('');
-    console.log(chalk.cyan('  qidi agents')  + chalk.gray('   查看/管理 Agent'));
-    console.log(                '    ' + chalk.white('-l, --list')        + chalk.gray('  列出所有 Agent'));
-    console.log(                '    ' + chalk.white('-e, --enable <name>')+chalk.gray('  启用 Agent'));
-    console.log(                '    ' + chalk.white('-d, --disable <name>')+chalk.gray('  禁用 Agent'));
-    console.log(                '    ' + chalk.white('-c, --check')       + chalk.gray('  检查所有 Agent 连接状态'));
+    console.log(chalk.cyan('  qidi agents') + chalk.gray('   查看/管理 Agent'));
+    console.log('    ' + chalk.white('-l, --list') + chalk.gray('  列出所有 Agent'));
+    console.log('    ' + chalk.white('-e, --enable <name>') + chalk.gray('  启用 Agent'));
+    console.log('    ' + chalk.white('-d, --disable <name>') + chalk.gray('  禁用 Agent'));
+    console.log('    ' + chalk.white('-c, --check') + chalk.gray('  检查所有 Agent 连接状态'));
     console.log('');
 
     console.log(chalk.bold.yellow('📊 报告与历史'));
     console.log(chalk.cyan('  qidi reports') + chalk.gray('  列出实验报告'));
-    console.log(                '    ' + chalk.white('-c, --count <n>')   + chalk.gray('  显示数量 (默认 10)'));
+    console.log('    ' + chalk.white('-c, --count <n>') + chalk.gray('  显示数量 (默认 10)'));
     console.log('');
-    console.log(chalk.cyan('  qidi report')  + chalk.gray('  查看指定报告'));
-    console.log(                '    ' + chalk.white('<id>')              + chalk.gray('  报告 ID'));
+    console.log(chalk.cyan('  qidi report') + chalk.gray('  查看指定报告'));
+    console.log('    ' + chalk.white('<id>') + chalk.gray('  报告 ID'));
     console.log('');
     console.log(chalk.cyan('  qidi context') + chalk.gray('  查看历史上下文'));
-    console.log(                '    ' + chalk.white('-c, --count <n>')   + chalk.gray('  显示最近报告数量 (默认 3)'));
+    console.log('    ' + chalk.white('-c, --count <n>') + chalk.gray('  显示最近报告数量 (默认 3)'));
     console.log('');
 
     console.log(chalk.bold.yellow('🔧 系统管理'));
-    console.log(chalk.cyan('  qidi check')   + chalk.gray('   检查 AI 模型连接状态'));
-    console.log(                '    ' + chalk.white('-p, --provider')    + chalk.gray('  模型提供商: ollama|openai|anthropic'));
+    console.log(chalk.cyan('  qidi check') + chalk.gray('   检查 AI 模型连接状态'));
+    console.log('    ' + chalk.white('-p, --provider') + chalk.gray('  模型提供商: ollama|openai|anthropic'));
     console.log('');
-    console.log(chalk.cyan('  qidi list')    + chalk.gray('    列出工作目录文件'));
-    console.log(                '    ' + chalk.white('-w, --workspace')   + chalk.gray('  工作目录'));
-    console.log(                '    ' + chalk.white('-d, --depth <n>')   + chalk.gray('  显示深度 (默认 3)'));
+    console.log(chalk.cyan('  qidi list') + chalk.gray('    列出工作目录文件'));
+    console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录'));
+    console.log('    ' + chalk.white('-d, --depth <n>') + chalk.gray('  显示深度 (默认 3)'));
     console.log('');
-    console.log(chalk.cyan('  qidi config')  + chalk.gray('   配置管理'));
-    console.log(                '    ' + chalk.white('-s, --show')        + chalk.gray('  显示当前配置'));
-    console.log(                '    ' + chalk.white('-l, --level <lvl>') + chalk.gray('  日志级别: debug|info|warn|error'));
+    console.log(chalk.cyan('  qidi config') + chalk.gray('   配置管理'));
+    console.log('    ' + chalk.white('-s, --show') + chalk.gray('  显示当前配置'));
+    console.log('    ' + chalk.white('-l, --level <lvl>') + chalk.gray('  日志级别: debug|info|warn|error'));
     console.log('');
-    console.log(chalk.cyan('  qidi web')     + chalk.gray('     启动 Web UI 管理界面'));
-    console.log(                '    ' + chalk.white('-p, --port <port>') + chalk.gray('  端口号 (默认 3000)'));
-    console.log(                '    ' + chalk.white('-H, --host <host>') + chalk.gray('  主机地址 (默认 127.0.0.1)'));
-    console.log(                '    ' + chalk.white('-w, --workspace')   + chalk.gray('  工作目录'));
+    console.log(chalk.cyan('  qidi web') + chalk.gray('     启动 Web UI 管理界面'));
+    console.log('    ' + chalk.white('-p, --port <port>') + chalk.gray('  端口号 (默认 3000)'));
+    console.log('    ' + chalk.white('-H, --host <host>') + chalk.gray('  主机地址 (默认 127.0.0.1)'));
+    console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录'));
     console.log('');
 
     console.log(chalk.bold.yellow('💡 快速示例'));
-    console.log(chalk.green('  qidi scan')                    + chalk.gray('                          # 扫描本机 AI 工具'));
-    console.log(chalk.green('  qidi run -t "写一个爬虫"')     + chalk.gray('              # 隐私模式执行'));
+    console.log(chalk.green('  qidi scan') + chalk.gray('                          # 扫描本机 AI 工具'));
+    console.log(chalk.green('  qidi run -t "写一个爬虫"') + chalk.gray('              # 隐私模式执行'));
     console.log(chalk.green('  qidi run -t "写贪吃蛇" --mode quality') + chalk.gray('  # 高质量模式'));
     console.log(chalk.green('  qidi multi -t "REST API" -m parallel') + chalk.gray('  # 多Agent并行'));
-    console.log(chalk.green('  qidi web -p 8080')             + chalk.gray('               # Web UI 指定端口'));
-    console.log(chalk.green('  qidi help')                    + chalk.gray('                          # 显示本指南'));
+    console.log(chalk.green('  qidi web -p 8080') + chalk.gray('               # Web UI 指定端口'));
+    console.log(chalk.green('  qidi help') + chalk.gray('                          # 显示本指南'));
     console.log('');
   });
 
@@ -984,7 +1007,7 @@ program
   .option('-l, --level <level>', '设置日志级别: debug|info|warn|error')
   .action((options) => {
     const configFile = path.join(__dirname, '../../config/agents.json');
-    
+
     if (options.show) {
       try {
         const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));

@@ -10,7 +10,7 @@ const results = {
   summary: {}
 };
 
-function test(name, fn) {
+function test (name, fn) {
   return async () => {
     const start = Date.now();
     try {
@@ -26,7 +26,7 @@ function test(name, fn) {
   };
 }
 
-async function runTests() {
+async function runTests () {
   console.log('\n🚀 AI Orchestrator 冒烟测试\n');
   console.log('='.repeat(50));
   console.log('');
@@ -189,7 +189,7 @@ async function runTests() {
       if (!AnthropicProvider.validateApiKey('sk-ant-api01-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')) {
         throw new Error('API Key 格式验证失败');
       }
-      
+
       if (AnthropicProvider.validateApiKey('')) {
         throw new Error('空 API Key 应验证失败');
       }
@@ -263,7 +263,7 @@ async function runTests() {
 
     test('12. 配置文件模板检查', async () => {
       const envContent = fs.readFileSync(path.join(__dirname, '../.env.example'), 'utf-8');
-      
+
       const requiredConfigs = [
         'MODEL_PROVIDER',
         'OLLAMA_BASE_URL',
@@ -281,7 +281,7 @@ async function runTests() {
 
     test('13. package.json 依赖检查', async () => {
       const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
-      
+
       const requiredDeps = ['chalk', 'commander', 'dotenv', 'inquirer', 'ora'];
       requiredDeps.forEach(dep => {
         if (!pkg.dependencies[dep]) {
@@ -293,7 +293,7 @@ async function runTests() {
     test('14. 工具适配器 - 所有适配器创建', async () => {
       const adapters = require('../src/adapters');
       const allAdapters = adapters.createAll();
-      
+
       if (allAdapters.length !== 8) {
         throw new Error(`适配器数量应为8，实际为${allAdapters.length}`);
       }
@@ -302,7 +302,7 @@ async function runTests() {
         'claude-code', 'open-code', 'openclaw',
         'qoder', 'hermes-agent', 'atom-code', 'mimo-code', 'trae'
       ];
-      
+
       expectedNames.forEach(name => {
         if (!allAdapters.find(a => a.name === name)) {
           throw new Error(`缺少适配器: ${name}`);
@@ -312,7 +312,7 @@ async function runTests() {
 
     test('15. 工具适配器 - 单个适配器创建', async () => {
       const adapters = require('../src/adapters');
-      
+
       const qoder = adapters.create('qoder');
       if (!qoder || qoder.name !== 'qoder') {
         throw new Error('Qoder 适配器创建失败');
@@ -326,7 +326,7 @@ async function runTests() {
 
     test('16. 工具适配器 - BaseToolAdapter 基础功能', async () => {
       const { BaseToolAdapter } = require('../src/adapters');
-      
+
       const adapter = new BaseToolAdapter({
         name: 'test',
         displayName: 'Test Tool',
@@ -336,14 +336,14 @@ async function runTests() {
       if (adapter.name !== 'test') throw new Error('name 不正确');
       if (adapter.displayName !== 'Test Tool') throw new Error('displayName 不正确');
       if (adapter.isAvailable() !== false) throw new Error('初始状态应为不可用');
-      
+
       const info = adapter.getInfo();
       if (info.name !== 'test') throw new Error('getInfo 返回不正确');
     }),
 
     test('17. MultiAgentDispatcher - 模块加载和模式列表', async () => {
       const MultiAgentDispatcher = require('../src/core/MultiAgentDispatcher');
-      
+
       const dispatcher = new MultiAgentDispatcher({
         configDir: path.join(__dirname, '../config')
       });
@@ -364,13 +364,13 @@ async function runTests() {
 
     test('18. QualityCheckerAgent - 静态代码检查', async () => {
       const { default: QualityCheckerAgent } = await import('../src/agents/QualityCheckerAgent.js');
-      
+
       const mockProvider = {
         chat: async () => ({ content: '{"qualityScore": 85, "status": "completed"}', role: 'assistant' })
       };
 
       const checker = new QualityCheckerAgent(mockProvider);
-      
+
       if (checker.name !== 'QualityChecker') {
         throw new Error('Agent name 不正确');
       }
@@ -386,13 +386,13 @@ async function runTests() {
 
     test('19. QualityCheckerAgent - C语言安全检测', async () => {
       const { default: QualityCheckerAgent } = await import('../src/agents/QualityCheckerAgent.js');
-      
+
       const mockProvider = {
         chat: async () => ({ content: '{}', role: 'assistant' })
       };
 
       const checker = new QualityCheckerAgent(mockProvider);
-      
+
       const cCodeWithIssues = `
         #include <stdio.h>
         int main() {
@@ -405,7 +405,7 @@ async function runTests() {
       `;
 
       const result = checker._checkCSecurity(cCodeWithIssues);
-      
+
       const hasGets = result.some(i => i.includes('gets()'));
       const hasStrcpy = result.some(i => i.includes('strcpy()'));
       const hasMalloc = result.some(i => i.includes('内存泄漏'));
@@ -417,13 +417,13 @@ async function runTests() {
 
     test('20. QualityCheckerAgent - 代码指标计算', async () => {
       const { default: QualityCheckerAgent } = await import('../src/agents/QualityCheckerAgent.js');
-      
+
       const mockProvider = {
         chat: async () => ({ content: '{}', role: 'assistant' })
       };
 
       const checker = new QualityCheckerAgent(mockProvider);
-      
+
       const testCode = `
         // 这是注释
         #include <stdio.h>
@@ -439,7 +439,7 @@ async function runTests() {
       `;
 
       const metrics = checker._calculateMetrics(testCode);
-      
+
       if (metrics.linesOfCode <= 0) throw new Error('行数计算错误');
       if (metrics.functionCount < 2) throw new Error('函数数计算错误');
       if (metrics.commentLines < 2) throw new Error('注释行计算错误');
@@ -447,7 +447,7 @@ async function runTests() {
 
     test('21. ExperimentReportGenerator - 基本功能', async () => {
       const { default: ExperimentReportGenerator } = await import('../src/utils/ExperimentReportGenerator.js');
-      
+
       const testReportDir = path.join(TEST_DIR, 'reports');
       const generator = new ExperimentReportGenerator({
         reportDir: testReportDir,
@@ -469,7 +469,7 @@ async function runTests() {
 
     test('22. ExperimentReportGenerator - 报告生成和保存', async () => {
       const { default: ExperimentReportGenerator } = await import('../src/utils/ExperimentReportGenerator.js');
-      
+
       const testReportDir = path.join(TEST_DIR, 'reports2');
       const generator = new ExperimentReportGenerator({
         reportDir: testReportDir,
@@ -506,7 +506,7 @@ async function runTests() {
 
     test('23. ExperimentReportGenerator - 报告列表和搜索', async () => {
       const { default: ExperimentReportGenerator } = await import('../src/utils/ExperimentReportGenerator.js');
-      
+
       const testReportDir = path.join(TEST_DIR, 'reports3');
       const generator = new ExperimentReportGenerator({
         reportDir: testReportDir,
@@ -544,7 +544,7 @@ async function runTests() {
 
     test('24. ExperimentReportGenerator - 智能上下文检索', async () => {
       const { default: ExperimentReportGenerator } = await import('../src/utils/ExperimentReportGenerator.js');
-      
+
       const testReportDir = path.join(TEST_DIR, 'reports4');
       const generator = new ExperimentReportGenerator({
         reportDir: testReportDir,
@@ -563,7 +563,7 @@ async function runTests() {
       });
 
       const context = generator.getContextForNewTask('C语言贪吃蛇', { count: 1 });
-      
+
       if (!context || context === '无历史报告') {
         throw new Error('智能上下文检索失败');
       }
@@ -578,7 +578,7 @@ async function runTests() {
       const ProviderFactory = require('../src/providers');
       const provider = ProviderFactory.create('ollama');
       const engine = new MergeEngine(provider);
-      
+
       if (!engine.name || engine.name !== 'MergeEngine') {
         throw new Error('MergeEngine 名称不正确');
       }
@@ -595,7 +595,7 @@ async function runTests() {
       const ProviderFactory = require('../src/providers');
       const provider = ProviderFactory.create('ollama');
       const engine = new MergeEngine(provider);
-      
+
       const result = await engine.merge({}, {});
       if (!result.error) {
         throw new Error('空结果合并应返回错误');
@@ -605,10 +605,10 @@ async function runTests() {
     test('28. MultiAgentDispatcher - 包含 merge / privacy / quality 模式', async () => {
       const MultiAgentDispatcher = require('../src/core/MultiAgentDispatcher');
       const dispatcher = new MultiAgentDispatcher();
-      
+
       const modes = dispatcher.getModes();
       const modeNames = modes.map(m => m.name);
-      
+
       if (!modeNames.includes('merge')) {
         throw new Error('MultiAgentDispatcher 缺少 merge 模式');
       }
@@ -628,9 +628,9 @@ async function runTests() {
       const ProviderFactory = require('../src/providers');
       const provider = ProviderFactory.create('ollama');
       const splitter = new TaskSplitterAgent(provider);
-      
+
       const complexity = splitter._analyzeComplexity('用C++实现一个支持多线程的HTTP服务器，包含路由、中间件、日志模块');
-      
+
       if (!complexity.level || complexity.level !== 'high') {
         throw new Error(`高复杂度任务应返回 high，实际为 ${complexity.level}`);
       }
@@ -647,7 +647,7 @@ async function runTests() {
       const ProviderFactory = require('../src/providers');
       const provider = ProviderFactory.create('ollama');
       const splitter = new TaskSplitterAgent(provider);
-      
+
       // 无循环依赖
       const validDeps = [
         { id: 'T1', dependsOn: [] },
@@ -658,7 +658,7 @@ async function runTests() {
       if (!check1.valid) {
         throw new Error('无循环依赖应返回 valid');
       }
-      
+
       // 有循环依赖
       const invalidDeps = [
         { id: 'T1', dependsOn: ['T3'] },
@@ -679,17 +679,17 @@ async function runTests() {
       const ProviderFactory = require('../src/providers');
       const provider = ProviderFactory.create('ollama');
       const checker = new QualityCheckerAgent(provider);
-      
+
       if (!checker.toolRunner) {
         throw new Error('QualityCheckerAgent 缺少 toolRunner');
       }
-      
+
       // 检测工具可用性（不依赖实际安装）
       const hasNode = checker.toolRunner.hasTool('node');
       const hasPython = checker.toolRunner.hasTool('python') || checker.toolRunner.hasTool('python3');
-      
+
       console.log(`   检测到 Node: ${hasNode}, Python: ${hasPython}`);
-      
+
       // 测试代码指标计算
       const code = 'int main() {\n  // hello\n  printf("hello");\n  return 0;\n}';
       const metrics = checker._calculateMetrics(code);
@@ -710,7 +710,7 @@ async function runTests() {
   console.log('='.repeat(50));
 }
 
-async function main() {
+async function main () {
   await runTests();
 
   const passed = results.tests.filter(t => t.status === 'PASS').length;

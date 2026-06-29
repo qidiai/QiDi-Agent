@@ -9,13 +9,13 @@ const ToolExecutor = require('../src/core/ToolExecutor');
 const fs = require('fs');
 const path = require('path');
 
-async function testMultipleTools() {
+async function testMultipleTools () {
   console.log('🧪 多工具端到端测试\n');
   console.log('='.repeat(60));
 
   const results = {};
   const testWorkspace = './test_multi_tool_workspace';
-  
+
   if (!fs.existsSync(testWorkspace)) {
     fs.mkdirSync(testWorkspace, { recursive: true });
   }
@@ -35,7 +35,7 @@ async function testMultipleTools() {
   for (const { name, adapter } of adapters) {
     console.log(`   正在检测 ${name}...`);
     const detected = await adapter.detect();
-    
+
     if (detected) {
       console.log(`   ✅ ${name} 已检测到`);
       console.log(`      安装路径: ${adapter.installPath}`);
@@ -90,9 +90,9 @@ async function testMultipleTools() {
 
     console.log(`\n   正在执行 ${name}...`);
     console.log(`   任务: ${task}`);
-    
+
     const startTime = Date.now();
-    
+
     try {
       const execResult = await adapter.execute(task, {
         taskId: `multi_tool_test_${name.toLowerCase().replace(' ', '_')}`,
@@ -101,10 +101,10 @@ async function testMultipleTools() {
       });
 
       const duration = Date.now() - startTime;
-      
+
       if (execResult.success) {
         console.log(`   ✅ ${name} 执行成功（${Math.round(duration / 1000)}秒）`);
-        
+
         if (execResult.codeBlocks && execResult.codeBlocks.length > 0) {
           console.log(`   📦 代码块数量: ${execResult.codeBlocks.length}`);
           for (let i = 0; i < Math.min(execResult.codeBlocks.length, 2); i++) {
@@ -117,7 +117,6 @@ async function testMultipleTools() {
         results[name].executionSuccess = true;
         results[name].codeBlocks = execResult.codeBlocks;
         results[name].duration = duration;
-        
       } else {
         console.log(`   ❌ ${name} 执行失败`);
         console.log(`      错误: ${execResult.stderr || execResult.error || '未知'}`);
@@ -143,16 +142,16 @@ async function testMultipleTools() {
   });
 
   const availableAdapters = adapters.filter(a => results[a.name].detected && results[a.name].connected);
-  
+
   if (availableAdapters.length === 0) {
     console.log('   ❌ 没有可用的工具');
   } else {
     for (const { name, adapter } of availableAdapters) {
       executor.registerAdapter(adapter);
     }
-    
+
     console.log(`   已注册工具: ${executor.getRegisteredTools().join(', ')}`);
-    
+
     const subtask = {
       id: 'T1',
       title: '写一个简单的 JavaScript 函数',
@@ -163,7 +162,7 @@ async function testMultipleTools() {
 
     console.log('\n   正在并行执行...');
     const startTime = Date.now();
-    
+
     const toolNames = availableAdapters.map(a => a.adapter.name);
     const multiResult = await executor.executeWithTools(
       [subtask],
@@ -173,12 +172,12 @@ async function testMultipleTools() {
 
     const duration = Date.now() - startTime;
     console.log(`   执行完成（${Math.round(duration / 1000)}秒）`);
-    
+
     for (const result of multiResult.results) {
       const adapterName = availableAdapters.find(a => a.adapter.name === result.tool)?.name || result.tool;
       console.log(`   ${result.success ? '✅' : '❌'} ${adapterName}: ${result.success ? '成功' : result.error}`);
     }
-    
+
     if (multiResult.bestResult) {
       console.log(`\n   最佳结果: ${multiResult.bestResult.tool}（评分: ${multiResult.bestScore}）`);
     }
@@ -190,7 +189,7 @@ async function testMultipleTools() {
   console.log('\n' + '='.repeat(60));
   console.log('📊 多工具测试总结');
   console.log('-'.repeat(40));
-  
+
   for (const { name } of adapters) {
     const r = results[name];
     console.log(`\n   ${name}:`);
@@ -208,12 +207,12 @@ async function testMultipleTools() {
       }
     }
   }
-  
+
   const successCount = Object.values(results).filter(r => r.executionSuccess).length;
   const totalCount = adapters.length;
-  
+
   console.log(`\n   总计: ${successCount}/${totalCount} 工具执行成功`);
-  
+
   if (successCount === totalCount) {
     console.log('   🎉 所有工具测试通过！');
   } else if (successCount > 0) {
@@ -221,7 +220,7 @@ async function testMultipleTools() {
   } else {
     console.log('   ❌ 所有工具测试失败');
   }
-  
+
   console.log('='.repeat(60));
 
   return { success: successCount > 0, results };

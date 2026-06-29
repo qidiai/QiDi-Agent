@@ -2,7 +2,7 @@ const Ajv = require('ajv');
 const ajv = new Ajv();
 
 class BaseAgent {
-  constructor(provider, options = {}) {
+  constructor (provider, options = {}) {
     this.provider = provider;
     this.name = options.name || 'BaseAgent';
     this.role = options.role || 'assistant';
@@ -74,7 +74,7 @@ class BaseAgent {
     };
   }
 
-  _buildSystemPrompt() {
+  _buildSystemPrompt () {
     let prompt = this.systemPrompt;
     if (this.enableThinkingChain) {
       prompt += `
@@ -97,12 +97,12 @@ ${JSON.stringify(this.schema, null, 2)}
     return prompt;
   }
 
-  async send(message, options = {}) {
+  async send (message, options = {}) {
     const messages = [...this.history, { role: 'user', content: message }];
     const systemPrompt = this._buildSystemPrompt();
 
     const result = await this.provider.chat(messages, {
-      systemPrompt: systemPrompt,
+      systemPrompt,
       temperature: options.temperature !== undefined ? options.temperature : this.temperature,
       maxTokens: options.maxTokens || this.maxTokens,
       useSmallModel: options.useSmallModel || false
@@ -116,11 +116,11 @@ ${JSON.stringify(this.schema, null, 2)}
     return result;
   }
 
-  async sendOnce(message, options = {}) {
+  async sendOnce (message, options = {}) {
     return this.send(message, { ...options, keepHistory: false });
   }
 
-  async sendWithRetry(message, options = {}) {
+  async sendWithRetry (message, options = {}) {
     const maxAttempts = options.maxRetries || this.maxRetries;
     const modelName = options.modelName || (this.provider && this.provider.model) || null;
     const modelOpt = this.getModelOptimization(modelName);
@@ -133,7 +133,7 @@ ${JSON.stringify(this.schema, null, 2)}
     } else {
       temperatures = [this.temperature, 0.2, 0.5];
     }
-    
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const optimizedOptions = this.buildOptimizedOptions(modelName, {
@@ -163,17 +163,17 @@ ${JSON.stringify(this.schema, null, 2)}
     throw new Error(`发送失败，已重试 ${maxAttempts} 次`);
   }
 
-  async sendStructured(message, schema, options = {}) {
+  async sendStructured (message, schema, options = {}) {
     const originalSchema = this.schema;
     this.schema = schema;
-    
+
     try {
       const result = await this.sendWithRetry(message, options);
-      
+
       if (result.parsed) {
         return result.parsed;
       }
-      
+
       const parsed = this._extractJson(result.content);
       if (parsed) {
         return parsed;
@@ -192,7 +192,7 @@ ${JSON.stringify(this.schema, null, 2)}
     }
   }
 
-  async _repairOutput(content, schema) {
+  async _repairOutput (content, schema) {
     try {
       const repairPrompt = `以下输出不符合预期的JSON Schema，请修复：
 
@@ -211,14 +211,14 @@ ${JSON.stringify(schema, null, 2)}
     }
   }
 
-  clearHistory() {
+  clearHistory () {
     this.history = [];
   }
 
-  detectModelFamily(modelName) {
+  detectModelFamily (modelName) {
     if (!modelName) return null;
     const lower = modelName.toLowerCase();
-    
+
     if (lower.includes('haiku')) return 'haiku';
     if (lower.includes('sonnet')) return 'sonnet';
     if (lower.includes('opus')) return 'opus';
@@ -227,11 +227,11 @@ ${JSON.stringify(schema, null, 2)}
     if (lower.includes('qwen')) return 'qwen';
     if (lower.includes('llama')) return 'llama';
     if (lower.includes('mistral')) return 'mistral';
-    
+
     return null;
   }
 
-  getModelOptimization(modelName) {
+  getModelOptimization (modelName) {
     const family = this.detectModelFamily(modelName);
     if (family && this.modelOptimizationConfig[family]) {
       return this.modelOptimizationConfig[family];
@@ -239,12 +239,12 @@ ${JSON.stringify(schema, null, 2)}
     return null;
   }
 
-  buildOptimizedOptions(modelName, options = {}) {
+  buildOptimizedOptions (modelName, options = {}) {
     const opt = this.getModelOptimization(modelName);
     if (!opt) return options;
 
     const optimized = { ...options };
-    
+
     if (opt.strategy === 'skip') {
       optimized.temperature = opt.temperature;
       optimized.thinkingEnabled = false;
@@ -263,9 +263,9 @@ ${JSON.stringify(schema, null, 2)}
     return optimized;
   }
 
-  _extractJson(text) {
+  _extractJson (text) {
     const thinkingMatch = text.match(/<thinking>[\s\S]*?<\/thinking>/);
-    let cleanText = thinkingMatch ? text.replace(thinkingMatch[0], '') : text;
+    const cleanText = thinkingMatch ? text.replace(thinkingMatch[0], '') : text;
 
     const jsonMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
@@ -291,12 +291,12 @@ ${JSON.stringify(schema, null, 2)}
     return null;
   }
 
-  _extractThinking(text) {
+  _extractThinking (text) {
     const thinkingMatch = text.match(/<thinking>([\s\S]*?)<\/thinking>/);
     return thinkingMatch ? thinkingMatch[1].trim() : null;
   }
 
-  async generateThinkingChain(prompt) {
+  async generateThinkingChain (prompt) {
     const thinkingPrompt = `请分析以下问题并输出思考过程：
 
 ${prompt}

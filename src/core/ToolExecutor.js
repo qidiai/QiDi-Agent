@@ -1,6 +1,6 @@
 /**
  * @module ToolExecutor
- * 
+ *
  * 工具执行器 - 统一执行层的核心组件。
  * 负责管理所有 ToolAdapter 实例，选择最佳工具执行任务，
  * 处理并发控制、超时、错误重试，收集执行结果。
@@ -14,14 +14,14 @@ const path = require('path');
  * 工具执行器类
  */
 class ToolExecutor extends EventEmitter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super();
-    
+
     this.workspaceDir = options.workspaceDir || process.cwd();
     this.maxConcurrent = options.maxConcurrent || 3;
     this.defaultTimeout = options.defaultTimeout || 120000; // 2分钟
     this.maxRetries = options.maxRetries || 2;
-    
+
     this.adapters = new Map(); // toolName -> adapter
     this.executionHistory = [];
     this.toolStatus = new Map(); // toolName -> status
@@ -30,11 +30,11 @@ class ToolExecutor extends EventEmitter {
   /**
    * 注册工具适配器
    */
-  registerAdapter(adapter) {
+  registerAdapter (adapter) {
     if (!adapter || !adapter.name) {
       throw new Error('无效的适配器');
     }
-    
+
     this.adapters.set(adapter.name, adapter);
     this.toolStatus.set(adapter.name, {
       registered: true,
@@ -43,7 +43,7 @@ class ToolExecutor extends EventEmitter {
       successCount: 0,
       failCount: 0
     });
-    
+
     this.emit('adapterRegistered', { name: adapter.name, adapter });
     return this;
   }
@@ -51,7 +51,7 @@ class ToolExecutor extends EventEmitter {
   /**
    * 批量注册适配器
    */
-  registerAdapters(adapters) {
+  registerAdapters (adapters) {
     for (const adapter of adapters) {
       this.registerAdapter(adapter);
     }
@@ -64,17 +64,17 @@ class ToolExecutor extends EventEmitter {
    * @param {Object} options - 执行选项
    * @returns {Promise<Object>} 执行结果
    */
-  async executeTask(subtask, options = {}) {
+  async executeTask (subtask, options = {}) {
     const {
-      preferredTools = null,    // 优先使用的工具列表
-      fallbackEnabled = true,  // 是否启用降级
+      preferredTools = null, // 优先使用的工具列表
+      fallbackEnabled = true, // 是否启用降级
       timeout = this.defaultTimeout,
       workspace = this.workspaceDir
     } = options;
 
     // 1. 选择最佳工具
     const selectedTool = this.selectBestTool(subtask, preferredTools);
-    
+
     if (!selectedTool) {
       return {
         success: false,
@@ -119,11 +119,11 @@ class ToolExecutor extends EventEmitter {
   /**
    * 使用指定适配器执行任务
    */
-  async _executeWithAdapter(adapter, subtask, options) {
+  async _executeWithAdapter (adapter, subtask, options) {
     const startTime = Date.now();
     const { timeout = this.defaultTimeout, workspace = this.workspaceDir } = options;
-    
-    let result = {
+
+    const result = {
       success: false,
       tool: adapter.name,
       subtask: subtask.id,
@@ -170,12 +170,11 @@ class ToolExecutor extends EventEmitter {
         success: result.success,
         duration: result.duration
       });
-
     } catch (e) {
       result.error = e.message;
       result.success = false;
       this._updateToolStatus(adapter.name, false);
-      
+
       this.emit('executionError', {
         tool: adapter.name,
         subtask: subtask.id,
@@ -185,17 +184,17 @@ class ToolExecutor extends EventEmitter {
 
     result.endTime = Date.now();
     result.duration = result.endTime - result.startTime;
-    
+
     // 记录历史
     this.executionHistory.push(result);
-    
+
     return result;
   }
 
   /**
    * 带超时的执行
    */
-  _executeWithTimeout(adapter, subtask, options) {
+  _executeWithTimeout (adapter, subtask, options) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`执行超时 (${options.timeout}ms)`));
@@ -206,49 +205,49 @@ class ToolExecutor extends EventEmitter {
         workspaceDir: options.workspace,
         timeout: options.timeout
       }))
-      .then(result => {
-        clearTimeout(timer);
-        resolve(result);
-      })
-      .catch(e => {
-        clearTimeout(timer);
-        reject(e);
-      });
+        .then(result => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch(e => {
+          clearTimeout(timer);
+          reject(e);
+        });
     });
   }
 
   /**
    * 构建任务描述
    */
-  _buildTaskDescription(subtask) {
+  _buildTaskDescription (subtask) {
     const parts = [];
-    
+
     if (subtask.title) {
       parts.push(`## 任务: ${subtask.title}`);
     }
-    
+
     if (subtask.description) {
       parts.push(`\n${subtask.description}`);
     }
-    
+
     if (subtask.acceptanceCriteria) {
       parts.push(`\n### 验收标准\n${subtask.acceptanceCriteria}`);
     }
-    
+
     if (subtask.constraints) {
       parts.push(`\n### 约束\n${JSON.stringify(subtask.constraints, null, 2)}`);
     }
-    
+
     return parts.join('\n');
   }
 
   /**
    * 降级执行：当首选工具不可用时
    */
-  async _fallbackExecute(subtask, options, excludedTool) {
+  async _fallbackExecute (subtask, options, excludedTool) {
     const availableTools = this.getAvailableTools();
     const fallbackTools = availableTools.filter(t => t !== excludedTool);
-    
+
     if (fallbackTools.length === 0) {
       return {
         success: false,
@@ -261,7 +260,7 @@ class ToolExecutor extends EventEmitter {
     // 尝试下一个最佳工具
     const nextTool = fallbackTools[0];
     const adapter = this.adapters.get(nextTool);
-    
+
     this.emit('fallback', {
       original: excludedTool,
       fallback: nextTool,
@@ -277,9 +276,9 @@ class ToolExecutor extends EventEmitter {
   /**
    * 多工具并行执行
    */
-  async executeWithTools(tasks, toolNames, options = {}) {
+  async executeWithTools (tasks, toolNames, options = {}) {
     const {
-      mode = 'parallel',      // parallel | sequential | select
+      mode = 'parallel', // parallel | sequential | select
       timeout = this.defaultTimeout,
       workspace = this.workspaceDir
     } = options;
@@ -302,7 +301,6 @@ class ToolExecutor extends EventEmitter {
           results.push({ tool: toolNames[i], success: false, error: settled[i].reason?.message });
         }
       }
-
     } else if (mode === 'sequential') {
       // 顺序执行
       for (const toolName of toolNames) {
@@ -311,14 +309,13 @@ class ToolExecutor extends EventEmitter {
           results.push({ tool: toolName, success: false, error: '适配器未找到' });
           continue;
         }
-        
+
         const result = await this._executeWithAdapter(adapter, tasks[0], { timeout, workspace });
         results.push({ tool: toolName, ...result });
-        
+
         // 如果成功则停止
         if (result.success) break;
       }
-
     } else if (mode === 'select') {
       // 选择最佳结果
       const promises = toolNames.map(toolName => {
@@ -334,7 +331,7 @@ class ToolExecutor extends EventEmitter {
       for (let i = 0; i < settled.length; i++) {
         const result = settled[i].status === 'fulfilled' ? settled[i].value : { tool: toolNames[i], success: false, error: settled[i].reason?.message };
         const score = this._scoreResult(result);
-        
+
         if (score > bestScore) {
           bestScore = score;
           bestResult = result;
@@ -343,7 +340,6 @@ class ToolExecutor extends EventEmitter {
       }
 
       return { results, bestResult, bestScore };
-
     }
 
     return { results };
@@ -352,9 +348,9 @@ class ToolExecutor extends EventEmitter {
   /**
    * 选择最佳工具
    */
-  selectBestTool(subtask, preferredTools = null) {
+  selectBestTool (subtask, preferredTools = null) {
     const availableTools = this.getAvailableTools();
-    
+
     if (availableTools.length === 0) return null;
 
     // 如果有优先列表且有可用的
@@ -369,7 +365,7 @@ class ToolExecutor extends EventEmitter {
 
     // 简单任务用轻量工具
     if (complexity === 'low' || role === 'architect') {
-      const lightweight = availableTools.find(t => 
+      const lightweight = availableTools.find(t =>
         ['qoder', 'opencode', 'atomcode', 'mimocode'].includes(t)
       );
       if (lightweight) return lightweight;
@@ -390,9 +386,9 @@ class ToolExecutor extends EventEmitter {
   /**
    * 获取所有可用的工具
    */
-  getAvailableTools() {
+  getAvailableTools () {
     const available = [];
-    
+
     for (const [name, adapter] of this.adapters) {
       if (adapter.isAvailable && adapter.isAvailable()) {
         const status = this.toolStatus.get(name);
@@ -401,23 +397,23 @@ class ToolExecutor extends EventEmitter {
         }
       }
     }
-    
+
     return available;
   }
 
   /**
    * 获取所有已注册的工具
    */
-  getRegisteredTools() {
+  getRegisteredTools () {
     return Array.from(this.adapters.keys());
   }
 
   /**
    * 获取工具状态
    */
-  getToolStatus() {
+  getToolStatus () {
     const status = {};
-    
+
     for (const [name, info] of this.toolStatus) {
       const adapter = this.adapters.get(name);
       status[name] = {
@@ -426,14 +422,14 @@ class ToolExecutor extends EventEmitter {
         adapter: adapter ? adapter.displayName || name : null
       };
     }
-    
+
     return status;
   }
 
   /**
    * 更新工具状态
    */
-  _updateToolStatus(toolName, success) {
+  _updateToolStatus (toolName, success) {
     const status = this.toolStatus.get(toolName);
     if (status) {
       status.lastUsed = new Date().toISOString();
@@ -448,20 +444,20 @@ class ToolExecutor extends EventEmitter {
   /**
    * 扫描工作目录
    */
-  _scanWorkspace(workspaceDir) {
+  _scanWorkspace (workspaceDir) {
     const files = new Map();
-    
+
     try {
       const scanDir = (dir, basePath = '') => {
         const items = fs.readdirSync(dir, { withFileTypes: true });
-        
+
         for (const item of items) {
           const fullPath = path.join(dir, item.name);
           const relativePath = path.join(basePath, item.name);
-          
+
           // 跳过 node_modules 和隐藏目录
           if (item.name === 'node_modules' || item.name.startsWith('.')) continue;
-          
+
           if (item.isDirectory()) {
             scanDir(fullPath, relativePath);
           } else {
@@ -475,22 +471,22 @@ class ToolExecutor extends EventEmitter {
           }
         }
       };
-      
+
       scanDir(workspaceDir);
     } catch (e) {}
-    
+
     return files;
   }
 
   /**
    * 对比文件差异
    */
-  _diffFiles(before, after) {
+  _diffFiles (before, after) {
     const diff = [];
-    
+
     for (const [filePath, afterInfo] of after) {
       const beforeInfo = before.get(filePath);
-      
+
       // 新文件或修改的文件
       if (!beforeInfo || afterInfo.mtime > beforeInfo.mtime) {
         diff.push({
@@ -500,41 +496,41 @@ class ToolExecutor extends EventEmitter {
         });
       }
     }
-    
+
     return diff;
   }
 
   /**
    * 评分结果
    */
-  _scoreResult(result) {
+  _scoreResult (result) {
     if (!result.success) return 0;
-    
+
     let score = 50; // 基础分
-    
+
     // 成功加30分
     score += 30;
-    
+
     // 有输出加10分
     if (result.output && result.output.length > 100) score += 10;
-    
+
     // 有生成文件加10分
     if (result.generatedFiles && result.generatedFiles.length > 0) score += 10;
-    
+
     return score;
   }
 
   /**
    * 获取执行历史
    */
-  getExecutionHistory(count = 10) {
+  getExecutionHistory (count = 10) {
     return this.executionHistory.slice(-count);
   }
 
   /**
    * 清除执行历史
    */
-  clearHistory() {
+  clearHistory () {
     this.executionHistory = [];
   }
 }

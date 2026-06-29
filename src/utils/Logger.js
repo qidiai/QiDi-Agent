@@ -28,7 +28,7 @@ const MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 let _logStream = null;
 
 /** 确保日志目录和文件流存在 */
-function _ensureLogFile() {
+function _ensureLogFile () {
   if (_logStream) return _logStream;
   try {
     if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -48,12 +48,12 @@ function _ensureLogFile() {
 }
 
 /** 将结构化对象序列化为单行 JSON（用于文件日志） */
-function _toStructured(entry) {
+function _toStructured (entry) {
   return JSON.stringify(entry);
 }
 
 /** 格式化人类可读的行 */
-function _formatLine(tag, level, ...args) {
+function _formatLine (tag, level, ...args) {
   const ts = new Date().toISOString();
   const parts = args.map(a => {
     if (a && typeof a === 'object') {
@@ -74,20 +74,21 @@ class Logger {
    * @param {boolean} options.fileLog - 是否写入文件
    * @param {boolean} options.colorize - 终端输出是否带颜色
    */
-  constructor({ name = 'qidi', level = null, fileLog = true, colorize = true } = {}) {
+  constructor ({ name = 'qidi', level = null, fileLog = true, colorize = true } = {}) {
     this.name = name;
     this.tag = name;
-    this.level = level != null ? (typeof level === 'string' ? LEVELS[level] ?? LEVELS.info : level)
+    this.level = level != null
+      ? (typeof level === 'string' ? LEVELS[level] ?? LEVELS.info : level)
       : (LEVELS[process.env.LOG_LEVEL?.toLowerCase()] ?? LEVELS.info);
     this._fileLog = fileLog;
     this._colorize = colorize;
   }
 
-  _shouldLog(levelName) {
+  _shouldLog (levelName) {
     return this.level <= LEVELS[levelName];
   }
 
-  _writeToStd(levelName, ...args) {
+  _writeToStd (levelName, ...args) {
     if (!this._shouldLog(levelName)) return;
     const formatted = _formatLine(this.tag, levelName, ...args);
     if (this._colorize) {
@@ -100,7 +101,7 @@ class Logger {
     }
   }
 
-  _writeToFile(levelName, ...args) {
+  _writeToFile (levelName, ...args) {
     if (!this._fileLog || !this._shouldLog(levelName)) return;
     const stream = _ensureLogFile();
     if (!stream) return;
@@ -108,28 +109,28 @@ class Logger {
     stream.write(line);
   }
 
-  debug(...args) {
+  debug (...args) {
     this._writeToStd('debug', ...args);
     this._writeToFile('debug', ...args);
   }
 
-  info(...args) {
+  info (...args) {
     this._writeToStd('info', ...args);
     this._writeToFile('info', ...args);
   }
 
-  warn(...args) {
+  warn (...args) {
     this._writeToStd('warn', ...args);
     this._writeToFile('warn', ...args);
   }
 
-  error(...args) {
+  error (...args) {
     this._writeToStd('error', ...args);
     this._writeToFile('error', ...args);
   }
 
   /** 结构化日志：写入 JSON 行到文件，同时输出到终端 */
-  structured(levelName, obj) {
+  structured (levelName, obj) {
     if (!this._shouldLog(levelName)) return;
     const entry = { ...obj, tag: this.tag, ts: new Date().toISOString() };
     // 终端：格式化显示
@@ -139,17 +140,17 @@ class Logger {
   }
 
   /** 便捷方法：记录任务事件 */
-  taskEvent(eventName, data) {
+  taskEvent (eventName, data) {
     this.structured('info', { event: eventName, ...data });
   }
 
   /** 便捷方法：记录错误事件 */
-  taskError(eventName, error, data) {
+  taskError (eventName, error, data) {
     this.structured('error', { event: eventName, error: error.message || String(error), stack: error.stack, ...(data || {}) });
   }
 
   /** 获取日志文件统计 */
-  getStats() {
+  getStats () {
     if (!fs.existsSync(LOG_FILE)) {
       return { file: '无', size: 0, sizeFormatted: '0 B', lines: 0, lastModified: '未知' };
     }
@@ -166,7 +167,7 @@ class Logger {
   }
 
   /** 清理 N 天前的日志 */
-  clean(days) {
+  clean (days) {
     if (!fs.existsSync(LOG_DIR)) return 0;
     const cutoff = Date.now() - days * 86400000;
     let removed = 0;
@@ -181,14 +182,14 @@ class Logger {
     return removed;
   }
 
-  _fmtSize(bytes) {
+  _fmtSize (bytes) {
     if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
     if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return bytes + ' B';
   }
 
   /** 关闭日志流 */
-  close() {
+  close () {
     if (_logStream) {
       _logStream.end();
       _logStream = null;
@@ -198,9 +199,13 @@ class Logger {
 
 // ─── 惰性 chalk 引用（避免 chalk 未安装时报错） ─────────────────
 let _chalkCached = null;
-function _getChalk() {
+function _getChalk () {
   if (_chalkCached) return _chalkCached;
-  try { _chalkCached = require('chalk'); } catch { _chalkCached = null; }
+  try {
+    _chalkCached = require('chalk');
+  } catch {
+    _chalkCached = null;
+  }
   return _chalkCached;
 }
 

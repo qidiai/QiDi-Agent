@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 class MemoryStore {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.store = {
       global: {},
       tasks: {},
@@ -11,23 +11,23 @@ class MemoryStore {
     this.persistDir = options.persistDir || './memory';
     this.persistFile = options.persistFile || 'session.json';
     this.maxHistory = options.maxHistory || 100;
-    
+
     // 标签反向索引: tag -> Set<taskId>
     this._tagIndex = new Map();
-    
+
     this._ensureDir(this.persistDir);
     this._load();
     this._saveTimer = null;
     this._pendingSave = false;
   }
 
-  _ensureDir(dir) {
+  _ensureDir (dir) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
 
-  _load() {
+  _load () {
     try {
       const filePath = path.join(this.persistDir, this.persistFile);
       if (fs.existsSync(filePath)) {
@@ -43,7 +43,7 @@ class MemoryStore {
   /**
    * 重建标签索引
    */
-  _rebuildTagIndex() {
+  _rebuildTagIndex () {
     this._tagIndex.clear();
     for (const [taskId, taskData] of Object.entries(this.store.tasks)) {
       if (taskData.tags && Array.isArray(taskData.tags)) {
@@ -57,7 +57,7 @@ class MemoryStore {
     }
   }
 
-  _save() {
+  _save () {
     try {
       const filePath = path.join(this.persistDir, this.persistFile);
       fs.writeFileSync(filePath, JSON.stringify(this.store, null, 2));
@@ -65,21 +65,21 @@ class MemoryStore {
     }
   }
 
-  setGlobal(key, value) {
+  setGlobal (key, value) {
     this.store.global[key] = value;
     this._debouncedSave();
     return this;
   }
 
-  getGlobal(key, defaultValue = null) {
+  getGlobal (key, defaultValue = null) {
     return this.store.global[key] !== undefined ? this.store.global[key] : defaultValue;
   }
 
-  getAllGlobals() {
+  getAllGlobals () {
     return { ...this.store.global };
   }
 
-  put(taskId, key, value) {
+  put (taskId, key, value) {
     if (!this.store.tasks[taskId]) {
       this.store.tasks[taskId] = {};
     }
@@ -88,17 +88,17 @@ class MemoryStore {
     return this;
   }
 
-  get(taskId, key, defaultValue = null) {
-    return this.store.tasks[taskId]?.[key] !== undefined 
-      ? this.store.tasks[taskId][key] 
+  get (taskId, key, defaultValue = null) {
+    return this.store.tasks[taskId]?.[key] !== undefined
+      ? this.store.tasks[taskId][key]
       : defaultValue;
   }
 
-  getAll(taskId) {
+  getAll (taskId) {
     return this.store.tasks[taskId] || {};
   }
 
-  append(taskId, key, value) {
+  append (taskId, key, value) {
     if (!this.store.tasks[taskId]) {
       this.store.tasks[taskId] = {};
     }
@@ -110,10 +110,10 @@ class MemoryStore {
     return this;
   }
 
-  queryByTag(tag) {
+  queryByTag (tag) {
     const taskIds = this._tagIndex.get(tag);
     if (!taskIds) return [];
-    
+
     const results = [];
     for (const taskId of taskIds) {
       const taskData = this.store.tasks[taskId];
@@ -124,7 +124,7 @@ class MemoryStore {
     return results;
   }
 
-  addTag(taskId, tag) {
+  addTag (taskId, tag) {
     if (!this.store.tasks[taskId]) {
       this.store.tasks[taskId] = {};
     }
@@ -143,7 +143,7 @@ class MemoryStore {
     return this;
   }
 
-  getTaskHistory(taskIds) {
+  getTaskHistory (taskIds) {
     const history = [];
     for (const taskId of taskIds) {
       const taskData = this.store.tasks[taskId];
@@ -160,7 +160,7 @@ class MemoryStore {
     return history;
   }
 
-  getFullContext(taskId) {
+  getFullContext (taskId) {
     const taskData = this.store.tasks[taskId] || {};
     return {
       global: this.getAllGlobals(),
@@ -169,14 +169,14 @@ class MemoryStore {
     };
   }
 
-  clear() {
+  clear () {
     this.store = { global: {}, tasks: {}, tags: {} };
     this._tagIndex.clear();
     this._debouncedSave();
     return this;
   }
 
-  clearTask(taskId) {
+  clearTask (taskId) {
     if (this.store.tasks[taskId]) {
       // 从索引中移除该 task 的所有标签
       const taskData = this.store.tasks[taskId];
@@ -195,7 +195,7 @@ class MemoryStore {
     return this;
   }
 
-  _debouncedSave() {
+  _debouncedSave () {
     if (this._pendingSave) return;
     this._pendingSave = true;
     if (this._saveTimer) clearTimeout(this._saveTimer);
@@ -206,7 +206,7 @@ class MemoryStore {
     }, 1000);
   }
 
-  flush() {
+  flush () {
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;

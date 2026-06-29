@@ -28,7 +28,7 @@ const TESTER_PROMPT = `你是一位专业的测试工程师，擅长设计测试
 注意：只输出 JSON，不要其他文字。`;
 
 class TesterAgent extends BaseAgent {
-  constructor(provider, options = {}) {
+  constructor (provider, options = {}) {
     super(provider, {
       name: 'Tester',
       role: '测试工程师',
@@ -38,7 +38,7 @@ class TesterAgent extends BaseAgent {
     });
   }
 
-  async designTests(task, context = {}) {
+  async designTests (task, context = {}) {
     let prompt = `请为以下任务设计测试用例：\n\n任务：${task.title}\n描述：${task.description}\n`;
 
     if (context.code) {

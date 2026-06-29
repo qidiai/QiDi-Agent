@@ -2,19 +2,19 @@ const fs = require('fs');
 const path = require('path');
 
 class FileManager {
-  constructor(workspaceDir) {
+  constructor (workspaceDir) {
     this.workspaceDir = workspaceDir || process.env.WORKSPACE_DIR || './workspace';
     this.workspaceDir = path.resolve(this.workspaceDir);
     this._ensureDir(this.workspaceDir);
   }
 
-  _ensureDir(dir) {
+  _ensureDir (dir) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
 
-  resolvePath(relativePath) {
+  resolvePath (relativePath) {
     const fullPath = path.resolve(this.workspaceDir, relativePath);
     const normalized = path.normalize(fullPath);
     if (!normalized.startsWith(this.workspaceDir)) {
@@ -23,7 +23,7 @@ class FileManager {
     return normalized;
   }
 
-  readFile(relativePath) {
+  readFile (relativePath) {
     const fullPath = this.resolvePath(relativePath);
     if (!fs.existsSync(fullPath)) {
       return null;
@@ -31,7 +31,7 @@ class FileManager {
     return fs.readFileSync(fullPath, 'utf-8');
   }
 
-  writeFile(relativePath, content) {
+  writeFile (relativePath, content) {
     const fullPath = this.resolvePath(relativePath);
     const dir = path.dirname(fullPath);
     this._ensureDir(dir);
@@ -39,12 +39,12 @@ class FileManager {
     return fullPath;
   }
 
-  fileExists(relativePath) {
+  fileExists (relativePath) {
     const fullPath = this.resolvePath(relativePath);
     return fs.existsSync(fullPath);
   }
 
-  listFiles(relativePath = '.', pattern = null) {
+  listFiles (relativePath = '.', pattern = null) {
     const fullPath = this.resolvePath(relativePath);
     if (!fs.existsSync(fullPath)) return [];
 
@@ -68,7 +68,7 @@ class FileManager {
     return files;
   }
 
-  getFileTree(relativePath = '.', maxDepth = 3) {
+  getFileTree (relativePath = '.', maxDepth = 3) {
     const fullPath = this.resolvePath(relativePath);
     if (!fs.existsSync(fullPath)) return '';
 

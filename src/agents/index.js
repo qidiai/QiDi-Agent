@@ -7,31 +7,31 @@ const QualityCheckerAgent = require('./QualityCheckerAgent');
 const MergeEngine = require('./MergeEngine');
 
 class AgentFactory {
-  static createAgent(type, provider, options = {}) {
+  static createAgent (type, provider, options = {}) {
     switch (type) {
-      case 'splitter':
-      case 'task_splitter':
-        return new TaskSplitterAgent(provider, options);
-      case 'writer':
-      case 'code_writer':
-        return new CodeWriterAgent(provider, options);
-      case 'reviewer':
-      case 'code_reviewer':
-        return new CodeReviewerAgent(provider, options);
-      case 'tester':
-        return new TesterAgent(provider, options);
-      case 'quality':
-      case 'quality_checker':
-        return new QualityCheckerAgent(provider, options);
-      case 'merge':
-      case 'merge_engine':
-        return new MergeEngine(provider, options);
-      default:
-        throw new Error(`未知的 Agent 类型: ${type}`);
+    case 'splitter':
+    case 'task_splitter':
+      return new TaskSplitterAgent(provider, options);
+    case 'writer':
+    case 'code_writer':
+      return new CodeWriterAgent(provider, options);
+    case 'reviewer':
+    case 'code_reviewer':
+      return new CodeReviewerAgent(provider, options);
+    case 'tester':
+      return new TesterAgent(provider, options);
+    case 'quality':
+    case 'quality_checker':
+      return new QualityCheckerAgent(provider, options);
+    case 'merge':
+    case 'merge_engine':
+      return new MergeEngine(provider, options);
+    default:
+      throw new Error(`未知的 Agent 类型: ${type}`);
     }
   }
 
-  static createAll(provider, options = {}) {
+  static createAll (provider, options = {}) {
     return {
       splitter: new TaskSplitterAgent(provider, options.splitter),
       codeWriter: new CodeWriterAgent(provider, options.codeWriter),

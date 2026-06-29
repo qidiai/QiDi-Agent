@@ -5,32 +5,32 @@ const createLogger = require('../utils/Logger');
 const logger = createLogger('AgentHub');
 
 class AgentHub {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.configDir = options.configDir || './config';
     this.agents = new Map();
     this.config = null;
     this.initialized = false;
   }
 
-  async initialize() {
+  async initialize () {
     if (this.initialized) {
       return this.agents;
     }
 
     const configPath = path.join(this.configDir, 'agents.json');
-    
+
     if (!fs.existsSync(configPath)) {
       await this._createDefaultConfig(configPath);
     }
 
     this.config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    
+
     for (const [name, agentConfig] of Object.entries(this.config.agents)) {
       if (agentConfig.enabled !== false) {
         const provider = this._createProvider(agentConfig);
         this.agents.set(name, {
           config: agentConfig,
-          provider: provider,
+          provider,
           status: 'ready'
         });
       }
@@ -40,7 +40,7 @@ class AgentHub {
     return this.agents;
   }
 
-  async _createDefaultConfig(configPath) {
+  async _createDefaultConfig (configPath) {
     const defaultConfig = {
       version: '1.0',
       description: '多 Agent 配置文件',
@@ -111,9 +111,9 @@ class AgentHub {
     logger.info('📝 请编辑配置文件启用需要的 Agent');
   }
 
-  _createProvider(agentConfig) {
+  _createProvider (agentConfig) {
     const ProviderFactory = require('../providers');
-    
+
     try {
       const provider = ProviderFactory.create(agentConfig.provider, agentConfig.config);
       return provider;
@@ -123,11 +123,11 @@ class AgentHub {
     }
   }
 
-  getAgent(name) {
+  getAgent (name) {
     return this.agents.get(name);
   }
 
-  getAllAgents() {
+  getAllAgents () {
     return Array.from(this.agents.entries()).map(([name, agent]) => ({
       name,
       provider: agent.config.provider,
@@ -138,7 +138,7 @@ class AgentHub {
     }));
   }
 
-  getEnabledAgents() {
+  getEnabledAgents () {
     return Array.from(this.agents.entries())
       .filter(([name, agent]) => agent.config.enabled !== false && agent.provider)
       .map(([name, agent]) => ({
@@ -148,9 +148,9 @@ class AgentHub {
       }));
   }
 
-  async checkAllConnections() {
+  async checkAllConnections () {
     const results = {};
-    
+
     for (const [name, agent] of this.agents.entries()) {
       if (!agent.provider) {
         results[name] = { status: 'error', message: 'Provider 未初始化' };
@@ -174,34 +174,34 @@ class AgentHub {
     return results;
   }
 
-  getConfig() {
+  getConfig () {
     return this.config;
   }
 
-  updateAgentConfig(name, updates) {
+  updateAgentConfig (name, updates) {
     if (this.agents.has(name)) {
       const agent = this.agents.get(name);
       agent.config = { ...agent.config, ...updates };
-      
+
       const configPath = path.join(this.configDir, 'agents.json');
       this.config.agents[name] = agent.config;
       fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
-      
+
       return true;
     }
     return false;
   }
 
-  enableAgent(name) {
+  enableAgent (name) {
     let result = false;
-    
+
     // 尝试更新内存中已有的 agent
     if (this.agents.has(name)) {
       this.agents.get(name).config.enabled = true;
       this.agents.get(name).status = 'ready';
       result = true;
     }
-    
+
     // 如果 config 中有但未加载（已禁用或新注册），则加载
     if (this.config && this.config.agents && this.config.agents[name]) {
       const agentConfig = this.config.agents[name];
@@ -210,38 +210,64 @@ class AgentHub {
         const provider = this._createProvider(agentConfig);
         this.agents.set(name, {
           config: agentConfig,
-          provider: provider,
+          provider,
           status: 'ready'
         });
       }
       result = true;
     }
-    
+
     // 持久化到文件
     if (result) {
       const configPath = path.join(this.configDir, 'agents.json');
-      try { fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8'); } catch (e) {}
+      try {
+        fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+      } catch (e) {}
     }
-    
+
     return result;
   }
 
-  disableAgent(name) {
+  disableAgent (name) {
     if (this.agents.has(name)) {
       this.agents.get(name).config.enabled = false;
       this.agents.get(name).status = 'disabled';
-      
+
       const configPath = path.join(this.configDir, 'agents.json');
-      try { fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8'); } catch (e) {}
+      try {
+        fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+      } catch (e) {}
       return true;
     }
     return false;
   }
 
-  reload() {
+  reload () {
     this.agents.clear();
     this.initialized = false;
     return this.initialize();
+  }
+
+  createAllProviders () {
+    const providers = [];
+
+    for (const [name, agent] of this.agents.entries()) {
+      if (agent.config.enabled !== false && agent.provider) {
+        providers.push({
+          ...agent.provider,
+          name,
+          displayName: agent.config.name
+        });
+      }
+    }
+
+    return providers;
+  }
+
+  static async createFromConfig (configDir = './config') {
+    const hub = new AgentHub({ configDir });
+    await hub.initialize();
+    return hub;
   }
 }
 

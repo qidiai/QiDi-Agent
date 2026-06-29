@@ -37,7 +37,7 @@ ${chalk.bold.yellow('    QQ                        QQ')}
 ${chalk.cyan('═══════════════════════════════════════════')}
 `;
 
-function printLogo(options = {}) {
+function printLogo (options = {}) {
   if (options.mini) {
     console.log(miniLogo);
   } else if (options.banner) {

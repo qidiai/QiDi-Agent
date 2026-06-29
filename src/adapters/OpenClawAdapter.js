@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 class OpenClawAdapter extends BaseToolAdapter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super({
       name: 'openclaw',
       displayName: 'OpenClaw',
@@ -13,7 +13,7 @@ class OpenClawAdapter extends BaseToolAdapter {
     });
   }
 
-  async detect() {
+  async detect () {
     this.detected = false;
     this.status = 'offline';
 
@@ -22,7 +22,7 @@ class OpenClawAdapter extends BaseToolAdapter {
       if (cmdPath) {
         this.installPath = cmdPath;
         this.detected = true;
-        
+
         const versionResult = await this.checkVersion();
         if (versionResult) {
           this.version = versionResult;
@@ -49,7 +49,7 @@ class OpenClawAdapter extends BaseToolAdapter {
           this.installPath = p;
           this.command = p;
           this.detected = true;
-          
+
           const versionResult = await this.checkVersion();
           if (versionResult) {
             this.version = versionResult;
@@ -64,7 +64,7 @@ class OpenClawAdapter extends BaseToolAdapter {
     return false;
   }
 
-  async checkVersion() {
+  async checkVersion () {
     try {
       const result = await this._runCommand(this.command, ['--version'], { timeout: 10000 });
       if (result.success) {
@@ -75,11 +75,11 @@ class OpenClawAdapter extends BaseToolAdapter {
     return null;
   }
 
-  async connect(options = {}) {
+  async connect (options = {}) {
     if (!this.detected) {
       await this.detect();
     }
-    
+
     if (!this.detected) {
       throw new Error('OpenClaw 未安装或未找到');
     }
@@ -98,9 +98,9 @@ class OpenClawAdapter extends BaseToolAdapter {
     }
   }
 
-  async execute(task, options = {}) {
+  async execute (task, options = {}) {
     const startTime = Date.now();
-    
+
     if (!this.isAvailable()) {
       const result = this._normalizeResult({
         taskId: options.taskId || `task_${Date.now()}`,
@@ -115,7 +115,7 @@ class OpenClawAdapter extends BaseToolAdapter {
 
     const taskId = options.taskId || `task_${Date.now()}`;
     const outputDir = options.outputDir || `./workspace/openclaw/${taskId}`;
-    
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -181,10 +181,10 @@ class OpenClawAdapter extends BaseToolAdapter {
     return unifiedResult;
   }
 
-  async collectOutput(taskId) {
+  async collectOutput (taskId) {
     const outputDir = `./workspace/openclaw/${taskId}`;
     const outputFile = path.join(outputDir, 'output.md');
-    
+
     if (fs.existsSync(outputFile)) {
       const content = fs.readFileSync(outputFile, 'utf-8');
       return {
@@ -193,10 +193,9 @@ class OpenClawAdapter extends BaseToolAdapter {
         files: fs.readdirSync(outputDir).map(f => path.join(outputDir, f))
       };
     }
-    
+
     return null;
   }
-
 }
 
 module.exports = OpenClawAdapter;

@@ -24,10 +24,11 @@ const ToolLearning = require('./ToolLearning');
  * - TaskOrchestrator: 配置聚合、事件发射、生命周期协调
  */
 class TaskOrchestrator extends EventEmitter {
-  constructor(provider, options = {}) {
+  constructor (provider, options = {}) {
     super();
     this.provider = provider;
     this.options = options;
+    this.providers = options.providers || [provider];
 
     // ═══════════════ 基础设施 ═══════════════
     this.fileManager = new FileManager(options.workspaceDir);
@@ -38,7 +39,8 @@ class TaskOrchestrator extends EventEmitter {
     this.tokenCounter = new TokenCounter({ maxHistory: options.maxTokenHistory || 200 });
     this.contextCompressor = new ContextCompressor({
       maxContextTokens: options.maxContextTokens || 1500,
-      keepSignatures: true, keepComments: false
+      keepSignatures: true,
+      keepComments: false
     });
     this.cacheStore = new CacheStore({
       maxSize: options.cacheSize || 100,
@@ -70,6 +72,7 @@ class TaskOrchestrator extends EventEmitter {
     this.routingStrategy = options.routingStrategy || modeConfig.routing.defaultStrategy;
     this.manualRouting = options.manualRouting || {};
     this.toolRouter = null;
+    this.multiProviderMode = modeConfig.codeGeneration?.multiProviderMode || false;
 
     // ═══════════════ Agents ═══════════════
     const qualityConfig = modeConfig.qualityCheck;
@@ -124,6 +127,7 @@ class TaskOrchestrator extends EventEmitter {
       enableCompression: options.enableCompression !== false,
       enableModelRouting: options.enableModelRouting !== false,
       enableContractAssembly: this.enableContractAssembly,
+      multiProviderMode: this.multiProviderMode,
       cacheStore: this.cacheStore,
       tokenCounter: this.tokenCounter,
       contextCompressor: this.contextCompressor,
@@ -133,6 +137,7 @@ class TaskOrchestrator extends EventEmitter {
       memory: this.memory,
       contractAssembler: this.contractAssembler,
       toolAdapters: this.toolAdapters,
+      providers: this.providers,
       _getTaskRouter: () => this._getTaskRouter()
     });
 
@@ -150,7 +155,7 @@ class TaskOrchestrator extends EventEmitter {
 
   // ── 路由器 ──
 
-  _getTaskRouter() {
+  _getTaskRouter () {
     if (!this.toolRouter) {
       this.toolRouter = new TaskRouter(this.toolAdapters, {
         strategy: this.routingStrategy,
@@ -165,43 +170,78 @@ class TaskOrchestrator extends EventEmitter {
 
   // ── 公共 API（配置） ──
 
-  getRoutingStrategies() { return this._getTaskRouter().getStrategies(); }
-  getToolCapabilities() { return this._getTaskRouter().options.capabilities; }
-  getToolLearningStats() { return this.toolLearning.getLearningStats(); }
-  getToolLearningProfiles() { return this.toolLearning.getAllToolProfiles(); }
-  getToolRecommendation(taskInfo, availableTools) {
+  getRoutingStrategies () {
+    return this._getTaskRouter().getStrategies();
+  }
+
+  getToolCapabilities () {
+    return this._getTaskRouter().options.capabilities;
+  }
+
+  getToolLearningStats () {
+    return this.toolLearning.getLearningStats();
+  }
+
+  getToolLearningProfiles () {
+    return this.toolLearning.getAllToolProfiles();
+  }
+
+  getToolRecommendation (taskInfo, availableTools) {
     return this.toolLearning.recommendBestTool(taskInfo, availableTools);
   }
-  resetToolLearning() { return this.toolLearning.reset(); }
-  getModeManager() { return this.modeManager; }
-  getExecutionMode() { return this.modeManager.getCurrentMode(); }
 
-  setExecutionMode(modeName) {
+  resetToolLearning () {
+    return this.toolLearning.reset();
+  }
+
+  getModeManager () {
+    return this.modeManager;
+  }
+
+  getExecutionMode () {
+    return this.modeManager.getCurrentMode();
+  }
+
+  setExecutionMode (modeName) {
     const modeConfig = this.modeManager.setMode(modeName);
     this.privacyMode = modeConfig.privacy.enabled;
     this.routingStrategy = modeConfig.routing.defaultStrategy;
     this.enableContractAssembly = modeConfig.merging.strategy === 'contract';
+    this.multiProviderMode = modeConfig.codeGeneration?.multiProviderMode || false;
     this.toolRouter = null;
+
+    if (this.executor) {
+      this.executor.privacyMode = this.privacyMode;
+      this.executor.routingStrategy = this.routingStrategy;
+      this.executor.multiProviderMode = this.multiProviderMode;
+    }
+
     return modeConfig;
   }
 
-  getExecutionModes() { return this.modeManager.getAllModes(); }
-  setToolCapabilities(capabilities) { this._getTaskRouter().setCapabilities(capabilities); }
-  setManualRouting(routingTable) {
+  getExecutionModes () {
+    return this.modeManager.getAllModes();
+  }
+
+  setToolCapabilities (capabilities) {
+    this._getTaskRouter().setCapabilities(capabilities);
+  }
+
+  setManualRouting (routingTable) {
     this.manualRouting = routingTable;
     this._getTaskRouter().setManualRouting(routingTable);
   }
 
   // ── 生命周期 ──
 
-  async initialize() {
+  async initialize () {
     this.emit('init', { provider: this.provider.name });
     this.tokenCounter.reset();
     this.modelRouter.reset();
     return true;
   }
 
-  async runTask(taskDescription, context = {}) {
+  async runTask (taskDescription, context = {}) {
     if (this.isRunning) {
       throw new Error('已有任务正在运行');
     }
@@ -239,8 +279,10 @@ class TaskOrchestrator extends EventEmitter {
       }));
 
       this.emit('taskSplit', {
-        overview: splitResult.taskOverview, tasks: this.tasks,
-        plan: splitResult.overallPlan, constraints: splitResult.constraints || {},
+        overview: splitResult.taskOverview,
+        tasks: this.tasks,
+        plan: splitResult.overallPlan,
+        constraints: splitResult.constraints || {},
         coverageCheck: splitResult.coverageCheck || {},
         dependencyGraph: splitResult.dependencyGraph || {}
       });
@@ -254,7 +296,9 @@ class TaskOrchestrator extends EventEmitter {
           }
 
           const result = await this.executor.executeSingleTask(task, {
-            ...ctx, orchestrator: this, saveToMemory: (t, r) => this.executor._saveToMemory(t, r),
+            ...ctx,
+            orchestrator: this,
+            saveToMemory: (t, r) => this.executor._saveToMemory(t, r),
             completedCountIncrement: () => {}
           });
 
@@ -272,7 +316,9 @@ class TaskOrchestrator extends EventEmitter {
       const finalResult = await this._finalReview(taskDescription, splitResult);
 
       this.emit('taskComplete', {
-        success: true, result: finalResult, tasks: this.tasks,
+        success: true,
+        result: finalResult,
+        tasks: this.tasks,
         constraints: splitResult.constraints || {}
       });
 
@@ -288,7 +334,6 @@ class TaskOrchestrator extends EventEmitter {
       finalResult.reportId = reportResult.report.id;
       finalResult.reportPath = reportResult.filePath;
       return finalResult;
-
     } catch (error) {
       this.emit('taskError', { error: error.message });
       this.isRunning = false;
@@ -296,7 +341,7 @@ class TaskOrchestrator extends EventEmitter {
     }
   }
 
-  async _splitTask(taskDescription, context) {
+  async _splitTask (taskDescription, context) {
     this.emit('splitting', { task: taskDescription });
     const result = await this.agents.splitter.splitTask(taskDescription, context);
     return result;
@@ -304,7 +349,7 @@ class TaskOrchestrator extends EventEmitter {
 
   // ── 最终审查 ──
 
-  async _finalReview(originalTask, splitResult) {
+  async _finalReview (originalTask, splitResult) {
     const completedTasks = this.tasks.filter(t => t.status === 'completed');
     const failedTasks = this.tasks.filter(t => t.status === 'failed');
     const needsRevisionTasks = this.tasks.filter(t => t.status === 'needs_revision');
@@ -336,10 +381,13 @@ class TaskOrchestrator extends EventEmitter {
       failedTasks: failedTasks.length,
       needsRevisionTasks: needsRevisionTasks.length,
       successRate: this.tasks.length > 0
-        ? Math.round((completedTasks.length / this.tasks.length) * 100) : 0,
+        ? Math.round((completedTasks.length / this.tasks.length) * 100)
+        : 0,
       constraints: this.memory.getAllGlobals(),
       tasks: this.tasks.map(t => ({
-        id: t.id, title: t.title, status: t.status,
+        id: t.id,
+        title: t.title,
+        status: t.status,
         qualityScore: t.result?.quality?.qualityScore || null,
         toolResults: t.result?.quality?.toolResults || null,
         toolName: t.result?.toolName || null,
@@ -411,7 +459,7 @@ class TaskOrchestrator extends EventEmitter {
     return summary;
   }
 
-  async _assembleContracts(completedTasks, splitResult) {
+  async _assembleContracts (completedTasks, splitResult) {
     const allCodeBlocks = completedTasks
       .filter(t => t.result?.codeBlocks)
       .flatMap(t => t.result.codeBlocks.map(b => ({
@@ -456,14 +504,18 @@ class TaskOrchestrator extends EventEmitter {
     }
 
     return {
-      success: assemblyResult.success, contracts: assemblyResult.contracts,
-      conflicts: assemblyResult.conflicts, issues: validation.issues,
-      warnings: validation.warnings, code: assemblyResult.code,
-      language: targetLanguage, privacyProtected: true
+      success: assemblyResult.success,
+      contracts: assemblyResult.contracts,
+      conflicts: assemblyResult.conflicts,
+      issues: validation.issues,
+      warnings: validation.warnings,
+      code: assemblyResult.code,
+      language: targetLanguage,
+      privacyProtected: true
     };
   }
 
-  async _finalQualityGate(originalTask, summary) {
+  async _finalQualityGate (originalTask, summary) {
     const allCode = this.tasks
       .filter(t => t.status === 'completed' && t.result?.codeBlocks)
       .flatMap(t => t.result.codeBlocks);
@@ -483,11 +535,11 @@ class TaskOrchestrator extends EventEmitter {
 
   // ── 状态查询 ──
 
-  getFullReport() {
+  getFullReport () {
     return this.tokenCounter.getReport() + this.cacheStore.getReport() + this.modelRouter.getReport();
   }
 
-  getStatus() {
+  getStatus () {
     return {
       isRunning: this.isRunning,
       currentTask: this.currentTaskIndex >= 0 ? this.tasks[this.currentTaskIndex] : null,
@@ -500,10 +552,21 @@ class TaskOrchestrator extends EventEmitter {
     };
   }
 
-  getRecentReports(count = 5) { return this.reportGenerator.getRecentReports(count); }
-  listReports() { return this.reportGenerator.listReports(); }
-  searchReports(query) { return this.reportGenerator.searchReports(query); }
-  loadReport(reportId) { return this.reportGenerator.loadReport(reportId); }
+  getRecentReports (count = 5) {
+    return this.reportGenerator.getRecentReports(count);
+  }
+
+  listReports () {
+    return this.reportGenerator.listReports();
+  }
+
+  searchReports (query) {
+    return this.reportGenerator.searchReports(query);
+  }
+
+  loadReport (reportId) {
+    return this.reportGenerator.loadReport(reportId);
+  }
 
   // ═══════════════════════════════════════════
   // 暂停/恢复 API
@@ -512,7 +575,7 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 暂停当前运行的任务
    */
-  async pause() {
+  async pause () {
     if (!this.isRunning) {
       throw new Error('当前没有正在运行的任务');
     }
@@ -523,7 +586,7 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 恢复暂停的任务
    */
-  resume() {
+  resume () {
     if (!this.isRunning) {
       throw new Error('当前没有正在运行的任务');
     }
@@ -534,7 +597,7 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 检查任务是否已暂停
    */
-  isPaused() {
+  isPaused () {
     return this.scheduler.isPaused();
   }
 
@@ -545,7 +608,7 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 手动保存 checkpoint
    */
-  saveCheckpoint() {
+  saveCheckpoint () {
     if (!this._currentRunId) {
       throw new Error('当前没有运行中的任务');
     }
@@ -561,7 +624,7 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 列出所有可用的 checkpoint
    */
-  listCheckpoints() {
+  listCheckpoints () {
     return this.scheduler.listCheckpoints();
   }
 
@@ -570,7 +633,7 @@ class TaskOrchestrator extends EventEmitter {
    * @param {string} runId - 要恢复的 checkpoint runId
    * @returns {Object} 恢复的任务状态
    */
-  restoreCheckpoint(runId) {
+  restoreCheckpoint (runId) {
     const checkpoint = this.scheduler.loadCheckpoint(runId);
     if (!checkpoint) {
       throw new Error(`Checkpoint 不存在: ${runId}`);
@@ -609,42 +672,45 @@ class TaskOrchestrator extends EventEmitter {
   /**
    * 删除 checkpoint
    */
-  deleteCheckpoint(runId) {
+  deleteCheckpoint (runId) {
     return this.scheduler.deleteCheckpoint(runId);
   }
 
   /**
    * 清理过期 checkpoint
    */
-  cleanOldCheckpoints(maxDays = 7) {
+  cleanOldCheckpoints (maxDays = 7) {
     return this.scheduler.cleanOldCheckpoints(maxDays);
   }
 
-  getHistoricalContext(count = 3) {
+  getHistoricalContext (count = 3) {
     const recentReports = this.reportGenerator.getRecentReports(count);
     return this.reportGenerator.getContextSummary(recentReports.map(r => r.id));
   }
-  getReportGenerator() { return this.reportGenerator; }
+
+  getReportGenerator () {
+    return this.reportGenerator;
+  }
 
   // ═══════════════════════════════════════════
   // 被拒计数器与人工审批 API
   // ═══════════════════════════════════════════
 
-  _resetRejectionCounter() {
+  _resetRejectionCounter () {
     this.rejectionCounter.consecutiveFailures = 0;
     this.rejectionCounter.requiresHumanApproval = false;
   }
 
-  _updateRejectionCounter(task, result) {
+  _updateRejectionCounter (task, result) {
     if (!this.rejectionCounter.enabled) return;
 
-    const isFailed = result?.success === false || 
+    const isFailed = result?.success === false ||
                      result?.quality?.qualityScore < this.modeManager.getModeConfig().qualityCheck.minQualityScore ||
                      task?.status === 'failed';
 
     if (isFailed) {
       this.rejectionCounter.consecutiveFailures++;
-      
+
       if (this.rejectionCounter.consecutiveFailures >= this.rejectionCounter.maxConsecutiveFailures) {
         this.rejectionCounter.requiresHumanApproval = true;
         this.emit('humanApprovalRequired', {
@@ -661,7 +727,7 @@ class TaskOrchestrator extends EventEmitter {
     }
   }
 
-  confirmHumanApproval(reason = '') {
+  confirmHumanApproval (reason = '') {
     if (!this.rejectionCounter.requiresHumanApproval) {
       throw new Error('当前不需要人工审批');
     }
@@ -688,7 +754,7 @@ class TaskOrchestrator extends EventEmitter {
     };
   }
 
-  skipHumanApproval() {
+  skipHumanApproval () {
     if (!this.rejectionCounter.requiresHumanApproval) {
       throw new Error('当前不需要人工审批');
     }
@@ -706,7 +772,7 @@ class TaskOrchestrator extends EventEmitter {
     };
   }
 
-  getRejectionCounterStatus() {
+  getRejectionCounterStatus () {
     return {
       enabled: this.rejectionCounter.enabled,
       consecutiveFailures: this.rejectionCounter.consecutiveFailures,
@@ -717,7 +783,7 @@ class TaskOrchestrator extends EventEmitter {
     };
   }
 
-  setRejectionThreshold(threshold) {
+  setRejectionThreshold (threshold) {
     if (threshold < 1 || threshold > 10) {
       throw new Error('阈值必须在 1-10 之间');
     }
@@ -725,12 +791,12 @@ class TaskOrchestrator extends EventEmitter {
     return { success: true, threshold };
   }
 
-  disableRejectionCounter() {
+  disableRejectionCounter () {
     this.rejectionCounter.enabled = false;
     return { success: true, message: '被拒计数器已禁用' };
   }
 
-  enableRejectionCounter() {
+  enableRejectionCounter () {
     this.rejectionCounter.enabled = true;
     return { success: true, message: '被拒计数器已启用' };
   }

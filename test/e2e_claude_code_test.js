@@ -1,6 +1,6 @@
 /**
  * 端到端测试：使用真实的 Claude Code 执行任务
- * 
+ *
  * 这个测试会：
  * 1. 检测 Claude Code 是否已安装
  * 2. 连接 Claude Code
@@ -14,7 +14,7 @@ const RealTaskExecutor = require('../src/core/RealTaskExecutor');
 const fs = require('fs');
 const path = require('path');
 
-async function testClaudeCodeE2E() {
+async function testClaudeCodeE2E () {
   console.log('🧪 Claude Code 端到端测试\n');
   console.log('='.repeat(60));
 
@@ -32,12 +32,12 @@ async function testClaudeCodeE2E() {
   const detected = await claudeAdapter.detect();
 
   if (detected) {
-    console.log(`   ✅ Claude Code 已检测到`);
+    console.log('   ✅ Claude Code 已检测到');
     console.log(`      安装路径: ${claudeAdapter.installPath}`);
     console.log(`      版本: ${claudeAdapter.version}`);
     console.log(`      状态: ${claudeAdapter.status}`);
   } else {
-    console.log(`   ❌ Claude Code 未检测到`);
+    console.log('   ❌ Claude Code 未检测到');
     console.log('   请确保 Claude Code 已正确安装');
     return { success: false, error: 'Claude Code 未安装' };
   }
@@ -51,7 +51,7 @@ async function testClaudeCodeE2E() {
   try {
     const connectResult = await claudeAdapter.connect();
     if (connectResult.success) {
-      console.log(`   ✅ 连接成功`);
+      console.log('   ✅ 连接成功');
       console.log(`      消息: ${connectResult.message}`);
     } else {
       console.log(`   ❌ 连接失败: ${connectResult.message}`);
@@ -75,12 +75,12 @@ async function testClaudeCodeE2E() {
   }
 
   const task = '用C语言写一个简单的Hello World程序，输出 "Hello from Claude Code!"';
-  
+
   console.log(`   任务: ${task}`);
   console.log('   正在执行（这可能需要30-60秒）...');
 
   const startTime = Date.now();
-  
+
   try {
     const execResult = await claudeAdapter.execute(task, {
       taskId: 'e2e_hello_world',
@@ -92,8 +92,8 @@ async function testClaudeCodeE2E() {
     console.log(`\n   执行耗时: ${Math.round(duration / 1000)}秒`);
 
     if (execResult.success) {
-      console.log(`   ✅ 执行成功`);
-      
+      console.log('   ✅ 执行成功');
+
       // 显示输出
       if (execResult.content) {
         console.log('\n   📝 Claude Code 输出:');
@@ -121,13 +121,11 @@ async function testClaudeCodeE2E() {
         console.log(`\n   📁 输出目录: ${execResult.outputDir}`);
         console.log(`      文件列表: ${files.join(', ')}`);
       }
-
     } else {
-      console.log(`   ❌ 执行失败`);
+      console.log('   ❌ 执行失败');
       console.log(`      错误: ${execResult.stderr || execResult.error || '未知'}`);
       return { success: false, error: execResult.stderr || execResult.error };
     }
-
   } catch (e) {
     console.log(`   ❌ 执行异常: ${e.message}`);
     return { success: false, error: e.message };
@@ -158,14 +156,14 @@ async function testClaudeCodeE2E() {
   };
 
   console.log('\n   正在通过 ToolExecutor 执行...');
-  
+
   try {
     const toolResult = await toolExecutor.executeTask(subtask, {
       timeout: 120000
     });
 
     if (toolResult.success) {
-      console.log(`   ✅ ToolExecutor 执行成功`);
+      console.log('   ✅ ToolExecutor 执行成功');
       console.log(`      工具: ${toolResult.tool}`);
       console.log(`      输出长度: ${toolResult.output?.length || 0}`);
     } else {
@@ -190,13 +188,13 @@ async function testClaudeCodeE2E() {
   await realExecutor.initialize();
 
   const status = realExecutor.getStatus();
-  console.log(`\n   状态信息:`);
+  console.log('\n   状态信息:');
   console.log(`      - 提供商: ${status.providers.map(p => p.name).join(', ')}`);
   console.log(`      - 可用工具: ${status.toolExecutor.availableTools.join(', ')}`);
 
   if (status.toolExecutor.availableTools.length > 0) {
     console.log('\n   ✅ Claude Code 已被 RealTaskExecutor 识别');
-    
+
     // 执行一个小任务测试流程
     console.log('\n   正在执行测试任务...');
     try {
@@ -204,12 +202,11 @@ async function testClaudeCodeE2E() {
         taskId: 'e2e_js_hello'
       });
 
-      console.log(`\n   ✅ RealTaskExecutor 执行完成`);
+      console.log('\n   ✅ RealTaskExecutor 执行完成');
       console.log(`      成功: ${testResult.success}`);
       console.log(`      子任务数: ${testResult.finalSummary?.totalSubtasks || 0}`);
       console.log(`      完成数: ${testResult.finalSummary?.completedSubtasks || 0}`);
       console.log(`      耗时: ${Math.round(testResult.duration / 1000)}秒`);
-
     } catch (e) {
       console.log(`   ⚠️ RealTaskExecutor 执行失败: ${e.message}`);
     }

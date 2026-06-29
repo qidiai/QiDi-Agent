@@ -12,7 +12,7 @@ const logger = createLogger('MultiAgentDispatcher');
  * 支持：并行/顺序/选择最佳/级联/合并 5 种模式，以及隐私路由模式。
  */
 class MultiAgentDispatcher {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.hub = new AgentHub({
       configDir: options.configDir || './config'
     });
@@ -35,8 +35,13 @@ class MultiAgentDispatcher {
     };
     this.results = new Map();
     this.stats = {
-      totalTasks: 0, completedTasks: 0, failedTasks: 0,
-      byAgent: {}, startTime: null, endTime: null, duration: 0
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      byAgent: {},
+      startTime: null,
+      endTime: null,
+      duration: 0
     };
     this.mergeEngine = null; // 延迟初始化，需要 provider
     this.taskRouter = null; // 延迟初始化
@@ -45,7 +50,7 @@ class MultiAgentDispatcher {
   /**
    * 获取任务路由器实例
    */
-  _getTaskRouter(adapters = []) {
+  _getTaskRouter (adapters = []) {
     if (!this.taskRouter) {
       this.taskRouter = new TaskRouter(adapters, {
         strategy: this.options.routingStrategy,
@@ -56,12 +61,12 @@ class MultiAgentDispatcher {
     return this.taskRouter;
   }
 
-  async initialize() {
+  async initialize () {
     await this.hub.initialize();
     return this;
   }
 
-  async dispatch(taskDescription, options = {}) {
+  async dispatch (taskDescription, options = {}) {
     const mode = options.mode || this.options.mode;
     const targetAgents = options.agents || this._getDefaultAgents();
 
@@ -71,7 +76,7 @@ class MultiAgentDispatcher {
     this.stats.failedTasks = 0;
     this.stats.startTime = Date.now();
 
-    logger.info(`\n🚀 多 Agent 智能分派`);
+    logger.info('\n🚀 多 Agent 智能分派');
     logger.info(`📋 任务: ${taskDescription.substring(0, 80)}${taskDescription.length > 80 ? '...' : ''}`);
     logger.info(`🤖 目标 Agent: ${targetAgents.join(', ')}`);
     logger.info(`⚙️ 模式: ${mode}`);
@@ -81,26 +86,26 @@ class MultiAgentDispatcher {
 
     let result;
     switch (mode) {
-      case 'parallel':
-        result = await this._dispatchParallel(taskDescription, targetAgents, options);
-        break;
-      case 'sequential':
-        result = await this._dispatchSequential(taskDescription, targetAgents, options);
-        break;
-      case 'select':
-        result = await this._dispatchSelectBest(taskDescription, targetAgents, options);
-        break;
-      case 'cascade':
-        result = await this._dispatchCascade(taskDescription, targetAgents, options);
-        break;
-      case 'merge':
-        result = await this._dispatchMerge(taskDescription, targetAgents, options);
-        break;
-      case 'privacy': // 隐私路由模式
-        result = await this._dispatchPrivacy(taskDescription, targetAgents, options);
-        break;
-      default:
-        result = await this._dispatchParallel(taskDescription, targetAgents, options);
+    case 'parallel':
+      result = await this._dispatchParallel(taskDescription, targetAgents, options);
+      break;
+    case 'sequential':
+      result = await this._dispatchSequential(taskDescription, targetAgents, options);
+      break;
+    case 'select':
+      result = await this._dispatchSelectBest(taskDescription, targetAgents, options);
+      break;
+    case 'cascade':
+      result = await this._dispatchCascade(taskDescription, targetAgents, options);
+      break;
+    case 'merge':
+      result = await this._dispatchMerge(taskDescription, targetAgents, options);
+      break;
+    case 'privacy': // 隐私路由模式
+      result = await this._dispatchPrivacy(taskDescription, targetAgents, options);
+      break;
+    default:
+      result = await this._dispatchParallel(taskDescription, targetAgents, options);
     }
 
     this.stats.endTime = Date.now();
@@ -118,13 +123,13 @@ class MultiAgentDispatcher {
    * - 工具之间互不知道其他工具的产出
    * - 最终合并各工具产出
    */
-  async _dispatchPrivacy(taskDescription, agentNames, options = {}) {
-    logger.info(`🔒 隐私路由模式: 根据路由策略分配任务给不同工具\n`);
+  async _dispatchPrivacy (taskDescription, agentNames, options = {}) {
+    logger.info('🔒 隐私路由模式: 根据路由策略分配任务给不同工具\n');
 
     // 1. 获取工具适配器
     const toolAdapters = this._getToolAdapters();
     if (toolAdapters.length === 0) {
-      logger.warn(`没有可用工具适配器，降级到传统模式`);
+      logger.warn('没有可用工具适配器，降级到传统模式');
       return await this._dispatchParallel(taskDescription, agentNames, options);
     }
 
@@ -149,7 +154,7 @@ class MultiAgentDispatcher {
       routingStrategy: this.options.routingStrategy,
       manualRouting: this.options.manualRouting,
       // 工具适配器
-      toolAdapters: toolAdapters
+      toolAdapters
     });
 
     await orchestrator.initialize();
@@ -181,7 +186,7 @@ class MultiAgentDispatcher {
       stats: this.stats
     };
 
-    logger.info(`\n🔒 隐私路由执行完成`);
+    logger.info('\n🔒 隐私路由执行完成');
     logger.info(`   路由策略: ${this.options.routingStrategy}`);
     logger.info(`   工具数量: ${toolAdapters.length}`);
 
@@ -191,7 +196,7 @@ class MultiAgentDispatcher {
   /**
    * 获取工具适配器列表
    */
-  _getToolAdapters() {
+  _getToolAdapters () {
     const adapters = [];
     for (const agentName of this.hub.getEnabledAgents().map(a => a.name)) {
       const agentInfo = this.hub.getAgent(agentName);
@@ -203,7 +208,7 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 并行模式（带限流分批）───────────────────────
-  async _dispatchParallel(taskDescription, agentNames, options = {}) {
+  async _dispatchParallel (taskDescription, agentNames, options = {}) {
     logger.info(`⚡ 并行模式: 同时执行 ${agentNames.length} 个 Agent\n`);
 
     const limit = this.options.parallelLimit;
@@ -212,7 +217,7 @@ class MultiAgentDispatcher {
       chunks.push(agentNames.slice(i, i + limit));
     }
 
-    let successful = 0, failed = 0;
+    let successful = 0; let failed = 0;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       if (chunks.length > 1) {
@@ -236,9 +241,9 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 顺序模式 ───────────────────────
-  async _dispatchSequential(taskDescription, agentNames, options = {}) {
+  async _dispatchSequential (taskDescription, agentNames, options = {}) {
     logger.info(`📜 顺序模式: 依次执行 ${agentNames.length} 个 Agent\n`);
-    let successful = 0, failed = 0;
+    let successful = 0; let failed = 0;
 
     for (let i = 0; i < agentNames.length; i++) {
       const agentName = agentNames[i];
@@ -259,8 +264,8 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 选择最佳模式 ───────────────────────
-  async _dispatchSelectBest(taskDescription, agentNames, options = {}) {
-    logger.info(`🏆 选择最佳模式: 测试所有 Agent 并选择最优结果\n`);
+  async _dispatchSelectBest (taskDescription, agentNames, options = {}) {
+    logger.info('🏆 选择最佳模式: 测试所有 Agent 并选择最优结果\n');
     const results = [];
 
     for (let i = 0; i < agentNames.length; i++) {
@@ -286,7 +291,7 @@ class MultiAgentDispatcher {
     const best = results[0];
 
     logger.info(`\n🏆 最佳结果来自: ${best.agentName} (质量: ${best.qualityScore}分)`);
-    logger.info(`📊 排名:`);
+    logger.info('📊 排名:');
     results.forEach((r, i) => {
       logger.info(`   ${i + 1}. ${r.agentName} - ${r.qualityScore}分`);
     });
@@ -301,9 +306,9 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 级联模式（失败接管 + 质量接管）───────────────────────
-  async _dispatchCascade(taskDescription, agentNames, options = {}) {
-    logger.info(`🔄 级联模式: 依次执行，失败则由下一个 Agent 接管\n`);
-    let lastResult = null, successfulAgent = null;
+  async _dispatchCascade (taskDescription, agentNames, options = {}) {
+    logger.info('🔄 级联模式: 依次执行，失败则由下一个 Agent 接管\n');
+    let lastResult = null; let successfulAgent = null;
     const failAnalysis = [];
 
     for (let i = 0; i < agentNames.length; i++) {
@@ -348,8 +353,8 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 合并模式（新增）───────────────────────
-  async _dispatchMerge(taskDescription, agentNames, options = {}) {
-    logger.info(`🧩 合并模式: 执行所有 Agent 并融合最佳部分\n`);
+  async _dispatchMerge (taskDescription, agentNames, options = {}) {
+    logger.info('🧩 合并模式: 执行所有 Agent 并融合最佳部分\n');
 
     // 1. 先并行执行所有 Agent
     const parallelResult = await this._dispatchParallel(taskDescription, agentNames, options);
@@ -377,7 +382,7 @@ class MultiAgentDispatcher {
     const mergeEngine = this._getMergeEngine(options);
     const mergeResult = await mergeEngine.merge(successfulResults, options.constraints || {});
 
-    logger.info(`\n✅ 合并完成！`);
+    logger.info('\n✅ 合并完成！');
     logger.info(`   文件数: ${Object.keys(mergeResult.mergedFiles || {}).length}`);
     logger.info(`   冲突数: ${mergeResult.conflicts?.length || 0}`);
     logger.info(`   改进数: ${mergeResult.improvements?.length || 0}`);
@@ -385,7 +390,7 @@ class MultiAgentDispatcher {
 
     // 3. 如果一致性问题严重，额外提示
     if (mergeResult.consistencyCheck?.issues?.length > 0) {
-      logger.warn(`\n⚠️ 一致性问题:`);
+      logger.warn('\n⚠️ 一致性问题:');
       mergeResult.consistencyCheck.issues.forEach(issue => logger.warn(`   - ${issue}`));
     }
 
@@ -408,7 +413,7 @@ class MultiAgentDispatcher {
     };
   }
 
-  _getMergeEngine(options) {
+  _getMergeEngine (options) {
     if (!this.mergeEngine) {
       // 使用第一个成功结果的 provider 作为合并引擎的 provider
       const firstAgent = this.hub.getEnabledAgents()[0];
@@ -419,7 +424,7 @@ class MultiAgentDispatcher {
   }
 
   // ─────────────────────── 辅助方法 ───────────────────────
-  async _dispatchWithRetry(agentName, taskDescription, options = {}) {
+  async _dispatchWithRetry (agentName, taskDescription, options = {}) {
     const maxRetries = this.options.retryCount;
     let lastError = null;
 
@@ -437,7 +442,7 @@ class MultiAgentDispatcher {
     throw lastError;
   }
 
-  async _dispatchToAgent(agentName, taskDescription, options = {}) {
+  async _dispatchToAgent (agentName, taskDescription, options = {}) {
     const agentInfo = this.hub.getAgent(agentName);
     if (!agentInfo || !agentInfo.provider) {
       throw new Error(`Agent ${agentName} 未找到或未启用`);
@@ -464,7 +469,7 @@ class MultiAgentDispatcher {
     return {
       success: true,
       agent: agentName,
-      result: result,
+      result,
       reportId: report.id,
       reportPath: filePath,
       outputDir: result.outputDir,
@@ -473,7 +478,7 @@ class MultiAgentDispatcher {
     };
   }
 
-  _recordResult(agentName, result) {
+  _recordResult (agentName, result) {
     if (result.status === 'fulfilled') {
       this.results.set(agentName, result.value);
       this.stats.completedTasks++;
@@ -484,7 +489,7 @@ class MultiAgentDispatcher {
     this._updateStats(agentName, result.status === 'fulfilled' ? result.value : { error: result.reason.message });
   }
 
-  _updateStats(agentName, result) {
+  _updateStats (agentName, result) {
     this._ensureStats(agentName);
     if (result && result.success) {
       this.stats.byAgent[agentName].success++;
@@ -493,13 +498,13 @@ class MultiAgentDispatcher {
     }
   }
 
-  _ensureStats(agentName) {
+  _ensureStats (agentName) {
     if (!this.stats.byAgent[agentName]) {
       this.stats.byAgent[agentName] = { success: 0, failed: 0, duration: 0 };
     }
   }
 
-  _calculateQualityScore(result) {
+  _calculateQualityScore (result) {
     if (!result || !result.success) return 0;
     const taskResult = result.result;
     if (!taskResult) return 0;
@@ -525,11 +530,11 @@ class MultiAgentDispatcher {
     return Math.max(0, Math.min(100, score));
   }
 
-  _getDefaultAgents() {
+  _getDefaultAgents () {
     return this.hub.getEnabledAgents().map(a => a.name);
   }
 
-  _formatResults(agentNames, stats) {
+  _formatResults (agentNames, stats) {
     const results = {};
     for (const [name, result] of this.results.entries()) {
       results[name] = result;
@@ -547,17 +552,36 @@ class MultiAgentDispatcher {
     };
   }
 
-  getHub() { return this.hub; }
-  getStats() { return this.stats; }
-  getResults() { return Object.fromEntries(this.results); }
+  getHub () {
+    return this.hub;
+  }
+
+  getStats () {
+    return this.stats;
+  }
+
+  getResults () {
+    return Object.fromEntries(this.results);
+  }
 
   /** 委托方法：代理到 AgentHub */
-  async listAgents() { return this.hub.getAllAgents(); }
-  async checkAgents() { return this.hub.checkAllConnections(); }
-  enableAgent(name) { return this.hub.enableAgent(name); }
-  disableAgent(name) { return this.hub.disableAgent(name); }
+  async listAgents () {
+    return this.hub.getAllAgents();
+  }
 
-  getModes() {
+  async checkAgents () {
+    return this.hub.checkAllConnections();
+  }
+
+  enableAgent (name) {
+    return this.hub.enableAgent(name);
+  }
+
+  disableAgent (name) {
+    return this.hub.disableAgent(name);
+  }
+
+  getModes () {
     return [
       { name: 'parallel', description: '并行模式 - 同时执行所有 Agent' },
       { name: 'sequential', description: '顺序模式 - 依次执行每个 Agent' },
@@ -572,7 +596,7 @@ class MultiAgentDispatcher {
   /**
    * 获取路由策略列表
    */
-  getRoutingStrategies() {
+  getRoutingStrategies () {
     const router = this._getTaskRouter();
     return router.getStrategies();
   }
@@ -580,7 +604,7 @@ class MultiAgentDispatcher {
   /**
    * 获取工具能力表
    */
-  getToolCapabilities() {
+  getToolCapabilities () {
     const router = this._getTaskRouter();
     return router.options.capabilities;
   }
@@ -588,7 +612,7 @@ class MultiAgentDispatcher {
   /**
    * 设置路由策略
    */
-  setRoutingStrategy(strategy, manualRouting = {}) {
+  setRoutingStrategy (strategy, manualRouting = {}) {
     this.options.routingStrategy = strategy;
     this.options.manualRouting = manualRouting;
     this.taskRouter = null; // 重置路由器
@@ -597,14 +621,14 @@ class MultiAgentDispatcher {
   /**
    * 设置隐私模式
    */
-  setPrivacyMode(enabled) {
+  setPrivacyMode (enabled) {
     this.options.privacyMode = enabled;
   }
 
   /**
    * 设置手动路由表
    */
-  setManualRouting(routingTable) {
+  setManualRouting (routingTable) {
     this.options.manualRouting = routingTable;
     if (this.taskRouter) {
       this.taskRouter.setManualRouting(routingTable);

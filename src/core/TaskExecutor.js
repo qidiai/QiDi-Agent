@@ -6,7 +6,7 @@ const MergeEngine = require('../agents/MergeEngine');
  * 从 TaskOrchestrator 拆分出来，专注执行细节。
  */
 class TaskExecutor {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.privacyMode = options.privacyMode || false;
     this.routingStrategy = options.routingStrategy || 'round_robin';
     this.maxRetries = options.maxRetries || 2;
@@ -14,6 +14,7 @@ class TaskExecutor {
     this.enableCompression = options.enableCompression !== false;
     this.enableModelRouting = options.enableModelRouting !== false;
     this.enableContractAssembly = options.enableContractAssembly || false;
+    this.multiProviderMode = options.multiProviderMode || false;
 
     this.cacheStore = options.cacheStore || null;
     this.tokenCounter = options.tokenCounter || null;
@@ -25,12 +26,13 @@ class TaskExecutor {
     this.contractAssembler = options.contractAssembler || null;
     this.toolAdapters = options.toolAdapters || [];
     this._getTaskRouter = options._getTaskRouter || null;
+    this.providers = options.providers || [];
   }
 
   /**
    * 执行单个任务（完整流程：缓存 → 上下文 → 路由 → 执行 → 质检 → 缓存保存）。
    */
-  async executeSingleTask(task, context) {
+  async executeSingleTask (task, context) {
     const agentName = this._getAgentName(task.role);
 
     // 1. 缓存检查
@@ -53,7 +55,9 @@ class TaskExecutor {
       previousCode = this.contextCompressor.compressCode(previousCode);
       const compressedTokens = this.tokenCounter.estimateTokens(previousCode);
       context.orchestrator?.emit('contextCompressed', {
-        task, originalTokens, compressedTokens,
+        task,
+        originalTokens,
+        compressedTokens,
         saved: originalTokens - compressedTokens
       });
     }
@@ -71,25 +75,28 @@ class TaskExecutor {
       const modelSelection = this.modelRouter.selectModel(agentName, task, taskContext);
       useSmallModel = modelSelection.size === 'small';
       context.orchestrator?.emit('modelSelected', {
-        task, agent: agentName,
-        model: modelSelection.model, size: modelSelection.size, reason: modelSelection.reason
+        task,
+        agent: agentName,
+        model: modelSelection.model,
+        size: modelSelection.size,
+        reason: modelSelection.reason
       });
     }
 
     // 4. 执行（按角色分发）
     let result;
     switch (task.role) {
-      case 'code_reviewer':
-        result = await this._executeReviewTask(task, taskContext, useSmallModel);
-        break;
-      case 'tester':
-        result = await this._executeTestTask(task, taskContext, useSmallModel);
-        break;
-      case 'quality_checker':
-        result = await this._executeQualityTask(task, taskContext, useSmallModel);
-        break;
-      default:
-        result = await this._executeCodeTask(task, taskContext, useSmallModel);
+    case 'code_reviewer':
+      result = await this._executeReviewTask(task, taskContext, useSmallModel);
+      break;
+    case 'tester':
+      result = await this._executeTestTask(task, taskContext, useSmallModel);
+      break;
+    case 'quality_checker':
+      result = await this._executeQualityTask(task, taskContext, useSmallModel);
+      break;
+    default:
+      result = await this._executeCodeTask(task, taskContext, useSmallModel);
     }
 
     // 5. Token 记录
@@ -103,18 +110,37 @@ class TaskExecutor {
     // 6. 质量检查
     const qualityResult = await this._checkQuality(task, result, taskContext);
 
-    if (qualityResult.status === 'needs_revision' && task.retries < this.maxRetries) {
+    if (qualityResult.status === 'needs_revision') {
       task.lastQualityFeedback = qualityResult.revisionSuggestions || qualityResult.weaknesses?.join('; ') || '';
       task.lastQualityScore = qualityResult.qualityScore || 0;
       task.lastQualityIssues = qualityResult.constraintViolations || [];
-      task.retries++;
-      task.status = 'pending';
 
-      context.orchestrator?.emit('qualityReview', {
-        task, quality: qualityResult, needsRevision: true, feedbackInjected: task.lastQualityFeedback
-      });
+      if (task.retries < this.maxRetries) {
+        task.retries++;
+        task.status = 'needs_revision';
 
-      return { ...result, quality: qualityResult, needsRevision: true };
+        context.orchestrator?.emit('qualityReview', {
+          task, quality: qualityResult, needsRevision: true, feedbackInjected: task.lastQualityFeedback
+        });
+
+        return { ...result, quality: qualityResult, needsRevision: true };
+      } else {
+        context.orchestrator?.emit('qualityReview', {
+          task,
+          quality: qualityResult,
+          needsRevision: false,
+          qualityWarning: true,
+          message: `代码质量仍不达标，但已达到最大重试次数(${this.maxRetries})，强制完成`
+        });
+
+        return {
+          ...result,
+          quality: qualityResult,
+          needsRevision: false,
+          qualityWarning: true,
+          qualityWarningMessage: `代码质量检查未通过，但已达到最大重试次数(${this.maxRetries})，将使用当前代码`
+        };
+      }
     }
 
     // 7. 缓存结果
@@ -130,7 +156,7 @@ class TaskExecutor {
 
   // ── 角色特定执行 ──
 
-  async _executeCodeTask(task, context, useSmallModel = false) {
+  async _executeCodeTask (task, context, useSmallModel = false) {
     context.orchestrator?.emit('agentWorking', { agent: 'codeWriter', task, modelSize: useSmallModel ? 'small' : 'large' });
 
     const enhancedContext = { ...context };
@@ -146,7 +172,24 @@ class TaskExecutor {
       return await this._executePrivacyMode(task, enhancedContext, useSmallModel);
     }
 
-    const providerResult = await this.agents.codeWriter?.writeCode(task, enhancedContext, { useSmallModel });
+    if (this.multiProviderMode && this.providers.length > 1) {
+      return await this._executeMultiProviderMode(task, enhancedContext, useSmallModel);
+    }
+
+    let providerResult;
+    if (task.lastQualityFeedback && task.result?.codeBlocks?.length > 0) {
+      const originalCode = task.result.codeBlocks.map(b => b.code).join('\n\n');
+      const feedback = {
+        revisionSuggestions: task.lastQualityFeedback,
+        weaknesses: task.lastQualityIssues || [],
+        constraintViolations: []
+      };
+      providerResult = await this.agents.codeWriter?.refineCode(task, originalCode, feedback, enhancedContext, { useSmallModel });
+      context.orchestrator?.emit('codeRefined', { task, revisionCount: task.retries });
+    } else {
+      providerResult = await this.agents.codeWriter?.writeCode(task, enhancedContext, { useSmallModel });
+    }
+
     const adapterResults = await this._dispatchToAdapters(task, enhancedContext);
     const finalResult = await this._mergeToolOutputs(task, providerResult || {}, adapterResults, enhancedContext);
 
@@ -157,7 +200,156 @@ class TaskExecutor {
     return finalResult;
   }
 
-  async _executePrivacyMode(task, context, useSmallModel = false) {
+  async _executeMultiProviderMode (task, context, useSmallModel = false) {
+    context.orchestrator?.emit('multiProviderStart', {
+      task,
+      providers: this.providers.map(p => p.name || p.constructor.name),
+      count: this.providers.length
+    });
+
+    const AgentFactory = require('../agents');
+    const allResults = {};
+    const promises = this.providers.map(async (provider, index) => {
+      const providerName = provider.name || `provider_${index + 1}`;
+
+      try {
+        const agents = AgentFactory.createAll(provider);
+        const result = await agents.codeWriter?.writeCode(task, context, { useSmallModel });
+
+        allResults[providerName] = {
+          success: true,
+          result: { codeBlocks: result?.codeBlocks || [], content: result?.content || '' },
+          content: result?.content || '',
+          providerName,
+          model: result?.model || 'unknown'
+        };
+
+        context.orchestrator?.emit('multiProviderResult', {
+          task,
+          provider: providerName,
+          hasCodeBlocks: (result?.codeBlocks?.length || 0) > 0
+        });
+      } catch (error) {
+        allResults[providerName] = {
+          success: false,
+          error: error.message,
+          providerName
+        };
+        context.orchestrator?.emit('multiProviderError', { task, provider: providerName, error: error.message });
+      }
+    });
+
+    await Promise.all(promises);
+
+    const validResults = Object.keys(allResults).filter(name => allResults[name].success);
+
+    if (validResults.length === 0) {
+      context.orchestrator?.emit('multiProviderFailed', { task, error: '所有Provider都执行失败' });
+      return { content: '', codeBlocks: [], multiProviderFailed: true };
+    }
+
+    if (validResults.length === 1) {
+      const singleResult = allResults[validResults[0]];
+      return {
+        ...singleResult.result,
+        content: singleResult.content,
+        source: 'multi_provider_single',
+        providerName: validResults[0],
+        _providerCount: 1
+      };
+    }
+
+    const mergeResult = await this._mergeMultiProviderOutputs(task, allResults, context);
+
+    if (mergeResult.codeBlocks && mergeResult.codeBlocks.length > 0) {
+      this._saveCodeBlocks(task, mergeResult.codeBlocks);
+    }
+
+    return {
+      ...mergeResult,
+      source: 'multi_provider_merged',
+      _providerCount: validResults.length,
+      _providers: validResults
+    };
+  }
+
+  async _mergeMultiProviderOutputs (task, providerResults, context) {
+    const validResults = {};
+    for (const [name, result] of Object.entries(providerResults)) {
+      if (result.success) {
+        validResults[name] = result;
+      }
+    }
+
+    try {
+      const MergeEngine = require('../agents/MergeEngine');
+      const mergeEngine = new MergeEngine(this.agents.codeWriter?.provider || null, {
+        conflictResolution: 'ai_decides',
+        enableThreeWayMerge: Object.keys(validResults).length >= 3
+      });
+
+      const mergeResult = await mergeEngine.merge(validResults, context.constraints || {});
+
+      if (mergeResult.mergedCode) {
+        const mergedCodeBlocks = Object.entries(mergeResult.mergedFiles || {}).map(([filePath, code]) => ({
+          filePath,
+          language: this._getLangFromFilePath(filePath),
+          code
+        }));
+
+        const finalResult = {
+          content: mergeResult.mergedCode,
+          codeBlocks: mergedCodeBlocks.length > 0 ? mergedCodeBlocks : [],
+          mergeQuality: mergeResult.qualityAssessment,
+          mergeReport: mergeResult,
+          mergeConflicts: mergeResult.conflicts?.length || 0,
+          _providerCount: Object.keys(validResults).length
+        };
+
+        context.orchestrator?.emit('multiProviderMerged', {
+          task,
+          providers: Object.keys(validResults),
+          conflicts: mergeResult.conflicts?.length || 0,
+          quality: mergeResult.qualityAssessment
+        });
+
+        return finalResult;
+      }
+    } catch (mergeError) {
+      context.orchestrator?.emit('multiProviderMergeFailed', { task, error: mergeError.message });
+    }
+
+    return this._pickBestResultFromProviders(validResults);
+  }
+
+  _pickBestResultFromProviders (providerResults) {
+    let bestName = null;
+    let bestScore = 0;
+    let bestResult = null;
+
+    for (const [name, result] of Object.entries(providerResults)) {
+      if (!result.success) continue;
+
+      const blockCount = (result.result?.codeBlocks?.length || 0);
+      const contentLength = (result.content?.length || 0);
+      const score = blockCount * 100 + Math.min(contentLength / 10, 500);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestName = name;
+        bestResult = result;
+      }
+    }
+
+    return {
+      ...bestResult.result,
+      content: bestResult.content,
+      source: 'multi_provider_fallback',
+      providerName: bestName
+    };
+  }
+
+  async _executePrivacyMode (task, context, useSmallModel = false) {
     context.orchestrator?.emit('privacyModeStart', { task, strategy: this.routingStrategy });
 
     const router = this._getTaskRouter?.();
@@ -175,9 +367,11 @@ class TaskExecutor {
     }
 
     context.orchestrator?.emit('toolSelected', {
-      task, tool: selectedAdapter.name,
+      task,
+      tool: selectedAdapter.name,
       displayName: selectedAdapter.displayName,
-      strategy: this.routingStrategy, reason: routingReason
+      strategy: this.routingStrategy,
+      reason: routingReason
     });
 
     const toolTaskDesc = this._buildPrivacyTaskDescription(task, context);
@@ -197,7 +391,8 @@ class TaskExecutor {
 
     if (!toolResult?.success) {
       context.orchestrator?.emit('toolFailed', {
-        task, tool: selectedAdapter.name,
+        task,
+        tool: selectedAdapter.name,
         error: toolResult.error || toolResult.stderr || '工具执行失败'
       });
       return await this.agents.codeWriter?.writeCode(task, context, { useSmallModel }) || {};
@@ -206,9 +401,13 @@ class TaskExecutor {
     const finalResult = {
       content: toolResult.content || '',
       codeBlocks: toolResult.codeBlocks || [],
-      source: 'tool', toolName: selectedAdapter.name,
+      source: 'tool',
+      toolName: selectedAdapter.name,
       toolDisplayName: selectedAdapter.displayName,
-      routingStrategy: this.routingStrategy, routingReason, duration, privacyMode: true
+      routingStrategy: this.routingStrategy,
+      routingReason,
+      duration,
+      privacyMode: true
     };
 
     if (toolResult.metadata) finalResult.metadata = toolResult.metadata;
@@ -222,7 +421,7 @@ class TaskExecutor {
     return finalResult;
   }
 
-  async _executeReviewTask(task, context, useSmallModel = false) {
+  async _executeReviewTask (task, context, useSmallModel = false) {
     context.orchestrator?.emit('agentWorking', { agent: 'codeReviewer', task, modelSize: useSmallModel ? 'small' : 'large' });
     const codeToReview = context.previousCode || context.previousResults?.[0]?.content || '';
     return await this.agents.codeReviewer?.reviewCode(codeToReview, task, {
@@ -230,29 +429,32 @@ class TaskExecutor {
     }) || {};
   }
 
-  async _executeTestTask(task, context, useSmallModel = false) {
+  async _executeTestTask (task, context, useSmallModel = false) {
     context.orchestrator?.emit('agentWorking', { agent: 'tester', task, modelSize: useSmallModel ? 'small' : 'large' });
     const codeToTest = context.previousCode || context.previousResults?.[0]?.content || '';
     return await this.agents.tester?.designTests(task, {
-      code: codeToTest, acceptanceCriteria: task.acceptanceCriteria,
-      constraints: context.constraints, useSmallModel
+      code: codeToTest,
+      acceptanceCriteria: task.acceptanceCriteria,
+      constraints: context.constraints,
+      useSmallModel
     }) || {};
   }
 
-  async _executeQualityTask(task, context, useSmallModel = false) {
+  async _executeQualityTask (task, context, useSmallModel = false) {
     context.orchestrator?.emit('agentWorking', { agent: 'qualityChecker', task, modelSize: useSmallModel ? 'small' : 'large' });
     const contentToCheck = context.previousResults?.[0]?.content || '';
     return await this.agents.qualityChecker?.checkQuality(
       task, contentToCheck, {
         previousTasks: context.previousTasks || [],
-        constraints: context.constraints, previousCode: context.previousCode
+        constraints: context.constraints,
+        previousCode: context.previousCode
       }
     ) || {};
   }
 
   // ── 工具派发与合并 ──
 
-  async _dispatchToAdapters(task, context) {
+  async _dispatchToAdapters (task, context) {
     const results = {};
     const onlineAdapters = this.toolAdapters.filter(a => a.isAvailable && a.isAvailable());
 
@@ -294,7 +496,7 @@ class TaskExecutor {
     return results;
   }
 
-  async _mergeToolOutputs(task, providerResult, adapterResults, context) {
+  async _mergeToolOutputs (task, providerResult, adapterResults, context) {
     const allOutputs = {
       provider: { success: true, result: { codeBlocks: providerResult.codeBlocks || [] }, content: providerResult.content || '' }
     };
@@ -324,8 +526,10 @@ class TaskExecutor {
         };
 
         context.orchestrator?.emit('multiToolMerged', {
-          task, toolsUsed: Object.keys(adapterResults).filter(n => adapterResults[n].success),
-          conflicts: mergeResult.conflicts?.length || 0, quality: mergeResult.qualityAssessment
+          task,
+          toolsUsed: Object.keys(adapterResults).filter(n => adapterResults[n].success),
+          conflicts: mergeResult.conflicts?.length || 0,
+          quality: mergeResult.qualityAssessment
         });
 
         finalResult.mergeQuality = mergeResult.qualityAssessment;
@@ -343,20 +547,21 @@ class TaskExecutor {
 
   // ── 质量检查 ──
 
-  async _checkQuality(task, result, context) {
+  async _checkQuality (task, result, context) {
     context.orchestrator?.emit('agentWorking', { agent: 'qualityChecker', task });
     const contentToCheck = result.content || JSON.stringify(result);
     return await this.agents.qualityChecker?.checkQuality(
       task, contentToCheck, {
         previousTasks: context.previousTasks || [],
-        constraints: context.constraints, previousCode: context.previousCode
+        constraints: context.constraints,
+        previousCode: context.previousCode
       }
     ) || { status: 'completed', qualityScore: 100 };
   }
 
   // ── 辅助方法 ──
 
-  _saveToMemory(task, result) {
+  _saveToMemory (task, result) {
     this.memory?.put(task.id, 'content', result.content || '');
     this.memory?.put(task.id, 'codeBlocks', result.codeBlocks || []);
     this.memory?.put(task.id, 'qualityScore', result.quality?.qualityScore || 0);
@@ -366,20 +571,22 @@ class TaskExecutor {
     this.memory?.addTag(task.id, task.role);
   }
 
-  _getAgentName(role) {
+  _getAgentName (role) {
     const roleMap = {
-      'code_writer': 'codeWriter', 'architect': 'codeWriter',
-      'code_reviewer': 'codeReviewer', 'tester': 'tester',
-      'quality_checker': 'qualityChecker'
+      code_writer: 'codeWriter',
+      architect: 'codeWriter',
+      code_reviewer: 'codeReviewer',
+      tester: 'tester',
+      quality_checker: 'qualityChecker'
     };
     return roleMap[role] || 'codeWriter';
   }
 
-  _buildPromptForLogging(task, context) {
+  _buildPromptForLogging (task, context) {
     return `${task.title}\n${task.description}\n${context.previousCode?.substring(0, 500) || ''}`;
   }
 
-  _buildPreviousCode(previousResults) {
+  _buildPreviousCode (previousResults) {
     let code = '';
     for (const res of previousResults) {
       if (res.codeBlocks && res.codeBlocks.length > 0) {
@@ -394,7 +601,7 @@ class TaskExecutor {
     return code;
   }
 
-  _buildPrivacyTaskDescription(task, context) {
+  _buildPrivacyTaskDescription (task, context) {
     const criteria = task.acceptanceCriteria;
     const criteriaStr = Array.isArray(criteria) ? criteria.join('\n') : (typeof criteria === 'string' ? criteria : '无');
 
@@ -417,7 +624,7 @@ class TaskExecutor {
     return desc;
   }
 
-  _buildToolTaskDescription(task, context) {
+  _buildToolTaskDescription (task, context) {
     const criteria = task.acceptanceCriteria;
     const criteriaStr = Array.isArray(criteria) ? criteria.join('\n') : (typeof criteria === 'string' ? criteria : '无');
 
@@ -430,58 +637,108 @@ class TaskExecutor {
     return desc;
   }
 
-  _getLangFromFilePath(filePath) {
+  _getLangFromFilePath (filePath) {
     if (!filePath || filePath === 'main') return 'text';
     const ext = filePath.split('.').pop().toLowerCase();
     const map = {
-      js: 'javascript', ts: 'typescript', py: 'python', rb: 'ruby',
-      go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp',
-      cs: 'csharp', php: 'php', swift: 'swift', kt: 'kotlin',
-      html: 'html', css: 'css', json: 'json', xml: 'xml',
-      yaml: 'yaml', yml: 'yaml', md: 'markdown', sql: 'sql',
-      sh: 'shell', bash: 'shell', ps1: 'powershell'
+      js: 'javascript',
+      ts: 'typescript',
+      py: 'python',
+      rb: 'ruby',
+      go: 'go',
+      rs: 'rust',
+      java: 'java',
+      c: 'c',
+      cpp: 'cpp',
+      cs: 'csharp',
+      php: 'php',
+      swift: 'swift',
+      kt: 'kotlin',
+      html: 'html',
+      css: 'css',
+      json: 'json',
+      xml: 'xml',
+      yaml: 'yaml',
+      yml: 'yaml',
+      md: 'markdown',
+      sql: 'sql',
+      sh: 'shell',
+      bash: 'shell',
+      ps1: 'powershell'
     };
     return map[ext] || ext;
   }
 
-  _saveCodeBlocks(task, codeBlocks) {
+  _saveCodeBlocks (task, codeBlocks) {
     const taskDir = `output/${task.id}`;
     codeBlocks.forEach((block, i) => {
-      const ext = this._getExtFromLanguage(block.language);
-      const fileName = `result_${i + 1}${ext}`;
-      const filePath = `${taskDir}/${fileName}`;
-      try { this.fileManager?.writeFile(filePath, block.code); } catch (e) {}
+      let relPath = block.filePath;
+      if (!relPath || relPath === 'main') {
+        const ext = this._getExtFromLanguage(block.language);
+        relPath = `result_${i + 1}${ext}`;
+      }
+      relPath = relPath.replace(/^\/+/, '').replace(/\.\.\//g, '');
+      const filePath = `${taskDir}/${relPath}`;
+      try {
+        this.fileManager?.writeFile(filePath, block.code);
+      } catch (e) {}
     });
   }
 
-  _getExtFromLanguage(lang) {
+  _getExtFromLanguage (lang) {
     const map = {
-      javascript: '.js', python: '.py', html: '.html', css: '.css',
-      json: '.json', typescript: '.ts', jsx: '.jsx', tsx: '.tsx',
-      java: '.java', go: '.go', rust: '.rs', c: '.c', cpp: '.cpp',
-      'c++': '.cpp', 'c/c++': '.cpp', objectivec: '.m', csharp: '.cs',
-      php: '.php', ruby: '.rb', swift: '.swift', kotlin: '.kt',
-      scala: '.scala', sql: '.sql', shell: '.sh', bash: '.sh',
-      lua: '.lua', perl: '.pl', haskell: '.hs', fsharp: '.fs',
-      dart: '.dart', r: '.r', julia: '.jl'
+      javascript: '.js',
+      python: '.py',
+      html: '.html',
+      css: '.css',
+      json: '.json',
+      typescript: '.ts',
+      jsx: '.jsx',
+      tsx: '.tsx',
+      java: '.java',
+      go: '.go',
+      rust: '.rs',
+      c: '.c',
+      cpp: '.cpp',
+      'c++': '.cpp',
+      'c/c++': '.cpp',
+      objectivec: '.m',
+      csharp: '.cs',
+      php: '.php',
+      ruby: '.rb',
+      swift: '.swift',
+      kotlin: '.kt',
+      scala: '.scala',
+      sql: '.sql',
+      shell: '.sh',
+      bash: '.sh',
+      lua: '.lua',
+      perl: '.pl',
+      haskell: '.hs',
+      fsharp: '.fs',
+      dart: '.dart',
+      r: '.r',
+      julia: '.jl'
     };
     return map[lang?.toLowerCase()] || '.txt';
   }
 
-  _pickBestResult(providerResult, adapterResults) {
+  _pickBestResult (providerResult, adapterResults) {
     let best = providerResult;
     let bestScore = this._scoreResult(providerResult);
 
     for (const [, r] of Object.entries(adapterResults)) {
       if (!r.success) continue;
       const score = this._scoreResult(r);
-      if (score > bestScore) { best = r; bestScore = score; }
+      if (score > bestScore) {
+        best = r; bestScore = score;
+      }
     }
 
     return best === providerResult ? null : best;
   }
 
-  _scoreResult(result) {
+  _scoreResult (result) {
     if (!result || !result.success) return 0;
     const blockCount = (result.codeBlocks || []).length;
     const contentLength = (result.content || '').length;

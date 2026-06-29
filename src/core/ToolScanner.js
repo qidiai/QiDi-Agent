@@ -4,7 +4,7 @@ const ConfirmPrompt = require('../utils/ConfirmPrompt');
 const logger = require('../utils/Logger')('ToolScanner');
 
 class ToolScanner {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.options = options;
     this.adapters = [];
     this.scanResults = [];
@@ -15,22 +15,22 @@ class ToolScanner {
     });
   }
 
-  registerAdapter(adapter) {
+  registerAdapter (adapter) {
     this.adapters.push(adapter);
     return this;
   }
 
-  registerAdapters(adapters) {
+  registerAdapters (adapters) {
     adapters.forEach(adapter => this.registerAdapter(adapter));
     return this;
   }
 
-  async scan(options = {}) {
+  async scan (options = {}) {
     const forceSilent = options.silent || this.options.silentScan;
     const forceAutoConfirm = options.autoConfirm || this.options.autoConfirm;
-    
+
     this.scanResults = [];
-    
+
     logger.info('正在扫描本机 AI 编程工具...');
 
     const scanPromises = this.adapters.map(async (adapter) => {
@@ -38,17 +38,17 @@ class ToolScanner {
       try {
         const detected = await adapter.detect();
         const duration = Date.now() - startTime;
-        
+
         const result = {
           ...adapter.getInfo(),
           scanTime: duration,
           scannedAt: Date.now(),
-          detected: detected,
-          enabled: false  // 默认不启用，等待用户确认
+          detected,
+          enabled: false // 默认不启用，等待用户确认
         };
-        
+
         this.scanResults.push(result);
-        
+
         if (detected) {
           logger.info(`${adapter.displayName} - ${adapter.installPath || 'PATH中找到'}`);
           if (adapter.version) {
@@ -71,10 +71,10 @@ class ToolScanner {
     });
 
     await Promise.all(scanPromises);
-    
+
     // 用户确认阶段
     const detectedTools = this.scanResults.filter(r => r.detected);
-    
+
     if (detectedTools.length === 0) {
       logger.info('未发现任何 AI 编程工具');
       return { tools: [], enabled: [] };
@@ -85,9 +85,9 @@ class ToolScanner {
       silent: forceSilent,
       autoConfirm: forceAutoConfirm
     });
-    
+
     const confirmResult = await prompt.confirmScanResults(detectedTools);
-    
+
     // 更新 enabled 状态
     const enabledTools = confirmResult.enabled;
     detectedTools.forEach(tool => {
@@ -101,9 +101,9 @@ class ToolScanner {
     };
   }
 
-  async connectAll() {
+  async connectAll () {
     const results = {};
-    
+
     logger.info('正在连接所有已发现的工具...');
 
     for (const adapter of this.adapters) {
@@ -114,7 +114,7 @@ class ToolScanner {
             ...result,
             displayName: adapter.displayName
           };
-          
+
           if (result.success) {
             logger.info(`${adapter.displayName} - 连接成功`);
             this.registeredTools.set(adapter.name, adapter);
@@ -133,14 +133,14 @@ class ToolScanner {
         }
       }
     }
-    
+
     logger.info(`连接完成，共 ${Object.keys(results).length} 个工具`);
     return results;
   }
 
-  async connect(toolName) {
+  async connect (toolName) {
     const adapter = this.adapters.find(a => a.name === toolName);
-    
+
     if (!adapter) {
       throw new Error(`工具 ${toolName} 未注册`);
     }
@@ -150,33 +150,33 @@ class ToolScanner {
     }
 
     const result = await adapter.connect();
-    
+
     if (result.success) {
       this.registeredTools.set(toolName, adapter);
     }
-    
+
     return result;
   }
 
-  getRegisteredTools() {
+  getRegisteredTools () {
     return Array.from(this.registeredTools.entries()).map(([name, adapter]) => ({
       name,
       ...adapter.getInfo()
     }));
   }
 
-  getAvailableTools() {
+  getAvailableTools () {
     return this.scanResults.filter(r => r.detected && r.status === 'online');
   }
 
-  getTool(name) {
+  getTool (name) {
     return this.registeredTools.get(name);
   }
 
-  async execute(task, options = {}) {
+  async execute (task, options = {}) {
     const toolName = options.tool;
     const adapter = this.getTool(toolName);
-    
+
     if (!adapter) {
       throw new Error(`工具 ${toolName} 未注册或不可用`);
     }
@@ -184,9 +184,9 @@ class ToolScanner {
     return await adapter.execute(task, options);
   }
 
-  async executeAll(task, options = {}) {
+  async executeAll (task, options = {}) {
     const results = {};
-    
+
     for (const [name, adapter] of this.registeredTools.entries()) {
       try {
         logger.info(`分派任务给 ${adapter.displayName}...`);
@@ -198,7 +198,7 @@ class ToolScanner {
           ...result,
           displayName: adapter.displayName
         };
-        
+
         if (result.success) {
           logger.info(`${adapter.displayName} - 任务完成`);
         } else {
@@ -214,11 +214,11 @@ class ToolScanner {
         logger.error(`${adapter.displayName} - 任务失败: ${e.message}`);
       }
     }
-    
+
     return results;
   }
 
-  saveResults(outputDir = './config') {
+  saveResults (outputDir = './config') {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -239,19 +239,19 @@ class ToolScanner {
 
     const filePath = path.join(outputDir, 'tools.json');
     fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8');
-    
+
     return filePath;
   }
 
-  loadResults(inputDir = './config') {
+  loadResults (inputDir = './config') {
     const filePath = path.join(inputDir, 'tools.json');
-    
+
     if (!fs.existsSync(filePath)) {
       return null;
     }
 
     const config = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    
+
     for (const tool of config.tools) {
       const adapter = this.adapters.find(a => a.name === tool.name);
       if (adapter) {
@@ -260,7 +260,7 @@ class ToolScanner {
         adapter.version = tool.version;
         adapter.installPath = tool.installPath;
         adapter.command = tool.command;
-        
+
         if (tool.detected && tool.status === 'online') {
           this.registeredTools.set(tool.name, adapter);
         }
@@ -270,22 +270,22 @@ class ToolScanner {
     return config;
   }
 
-  getScanReport() {
+  getScanReport () {
     const available = this.scanResults.filter(r => r.detected && r.status === 'online');
     const detected = this.scanResults.filter(r => r.detected);
     const offline = this.scanResults.filter(r => r.detected && r.status !== 'online');
-    
+
     let report = '';
-    
-    report += `📊 扫描报告\n`;
-    report += `═══════════════════════════════════════════\n`;
+
+    report += '📊 扫描报告\n';
+    report += '═══════════════════════════════════════════\n';
     report += `扫描时间: ${new Date().toLocaleString()}\n`;
     report += `总工具数: ${this.scanResults.length}\n`;
     report += `已发现: ${detected.length}\n`;
     report += `可用: ${available.length}\n`;
     report += `离线: ${offline.length}\n`;
-    report += `═══════════════════════════════════════════\n\n`;
-    
+    report += '═══════════════════════════════════════════\n\n';
+
     for (const tool of this.scanResults) {
       const icon = tool.detected && tool.status === 'online' ? '✅' : tool.detected ? '⚠️' : '❌';
       report += `${icon} ${tool.displayName}\n`;
@@ -298,9 +298,9 @@ class ToolScanner {
           report += `   路径: ${tool.installPath}\n`;
         }
       }
-      report += `\n`;
+      report += '\n';
     }
-    
+
     return report;
   }
 }

@@ -7,7 +7,7 @@
  */
 
 class TUIEventAdapter {
-  constructor(tuiContext) {
+  constructor (tuiContext) {
     this.tui = tuiContext;
     this.startTime = null;
   }
@@ -15,45 +15,45 @@ class TUIEventAdapter {
   /**
    * 附加到编排器
    */
-  attach(orchestrator) {
+  attach (orchestrator) {
     if (!orchestrator) return this;
 
     const events = {
       // 任务生命周期
-      'init': (d) => this.onInit(d),
-      'splitting': (d) => this.onSplitting(d),
-      'taskSplit': (d) => this.onTaskSplit(d),
-      'taskStart': (d) => this.onTaskStart(d),
-      'taskStart_sub': (d) => this.onSubtaskStart(d),
-      'taskComplete_sub': (d) => this.onSubtaskComplete(d),
-      'taskFailed': (d) => this.onTaskFailed(d),
-      'taskComplete': (d) => this.onTaskComplete(d),
-      'taskError': (d) => this.onTaskError(d),
+      init: (d) => this.onInit(d),
+      splitting: (d) => this.onSplitting(d),
+      taskSplit: (d) => this.onTaskSplit(d),
+      taskStart: (d) => this.onTaskStart(d),
+      taskStart_sub: (d) => this.onSubtaskStart(d),
+      taskComplete_sub: (d) => this.onSubtaskComplete(d),
+      taskFailed: (d) => this.onTaskFailed(d),
+      taskComplete: (d) => this.onTaskComplete(d),
+      taskError: (d) => this.onTaskError(d),
 
       // 代理事件
-      'agentWorking': (d) => this.onAgentWorking(d),
-      'qualityReview': (d) => this.onQualityReview(d),
+      agentWorking: (d) => this.onAgentWorking(d),
+      qualityReview: (d) => this.onQualityReview(d),
 
       // 工具事件
-      'toolSelected': (d) => this.onToolSelected(d),
-      'multiToolDispatch': (d) => this.onMultiToolDispatch(d),
-      'toolFailed': (d) => this.onToolFailed(d),
-      'multiToolMerged': (d) => this.onMultiToolMerged(d),
+      toolSelected: (d) => this.onToolSelected(d),
+      multiToolDispatch: (d) => this.onMultiToolDispatch(d),
+      toolFailed: (d) => this.onToolFailed(d),
+      multiToolMerged: (d) => this.onMultiToolMerged(d),
 
       // 流式输出
-      'streamStart': (d) => this.onStreamStart(d),
-      'streamToken': (d) => this.onStreamToken(d),
-      'streamEnd': (d) => this.onStreamEnd(d),
+      streamStart: (d) => this.onStreamStart(d),
+      streamToken: (d) => this.onStreamToken(d),
+      streamEnd: (d) => this.onStreamEnd(d),
 
       // 报告
-      'reportGenerated': (d) => this.onReportGenerated(d),
+      reportGenerated: (d) => this.onReportGenerated(d),
 
       // 隐私模式
-      'privacyModeStart': (d) => this.onPrivacyModeStart(d),
-      'privacyModeComplete': (d) => this.onPrivacyModeComplete(d),
+      privacyModeStart: (d) => this.onPrivacyModeStart(d),
+      privacyModeComplete: (d) => this.onPrivacyModeComplete(d),
 
       // 契约组装
-      'contractAssemblyComplete': (d) => this.onContractComplete(d)
+      contractAssemblyComplete: (d) => this.onContractComplete(d)
     };
 
     for (const [event, handler] of Object.entries(events)) {
@@ -64,18 +64,18 @@ class TUIEventAdapter {
   }
 
   // 初始化
-  onInit(data) {
+  onInit (data) {
     this.startTime = Date.now();
     this.tui.emit && this.tui.emit('status', { status: 'connecting', ...data });
   }
 
   // 拆分中
-  onSplitting(data) {
+  onSplitting (data) {
     this.tui.emit && this.tui.emit('status', { status: 'splitting', ...data });
   }
 
   // 任务拆分完成
-  onTaskSplit(data) {
+  onTaskSplit (data) {
     if (this.tui.setTasks) {
       this.tui.setTasks(data.tasks || []);
     }
@@ -96,12 +96,12 @@ class TUIEventAdapter {
   }
 
   // 任务开始
-  onTaskStart(data) {
+  onTaskStart (data) {
     this.tui.emit && this.tui.emit('status', { status: 'running', ...data });
   }
 
   // 子任务开始
-  onSubtaskStart(data) {
+  onSubtaskStart (data) {
     if (this.tui.setCurrentTask) {
       this.tui.setCurrentTask(data.task);
     }
@@ -115,7 +115,7 @@ class TUIEventAdapter {
   }
 
   // 子任务完成
-  onSubtaskComplete(data) {
+  onSubtaskComplete (data) {
     if (this.tui.updateTask && data.task && data.task.id) {
       this.tui.updateTask(data.task.id, {
         status: 'completed',
@@ -129,7 +129,7 @@ class TUIEventAdapter {
   }
 
   // 任务失败
-  onTaskFailed(data) {
+  onTaskFailed (data) {
     if (this.tui.updateTask && data.task && data.task.id) {
       this.tui.updateTask(data.task.id, {
         status: 'failed',
@@ -140,47 +140,47 @@ class TUIEventAdapter {
   }
 
   // 任务完成
-  onTaskComplete(data) {
+  onTaskComplete (data) {
     this.tui.emit && this.tui.emit('task:complete', data);
   }
 
   // 任务错误
-  onTaskError(data) {
+  onTaskError (data) {
     this.tui.emit && this.tui.emit('error', data);
   }
 
   // Agent 工作中
-  onAgentWorking(data) {
+  onAgentWorking (data) {
     this.tui.emit && this.tui.emit('agent:working', data);
   }
 
   // 质量审查
-  onQualityReview(data) {
+  onQualityReview (data) {
     this.tui.emit && this.tui.emit('quality:review', data);
   }
 
   // 工具选中
-  onToolSelected(data) {
+  onToolSelected (data) {
     this.tui.emit && this.tui.emit('tool:selected', data);
   }
 
   // 多工具派发
-  onMultiToolDispatch(data) {
+  onMultiToolDispatch (data) {
     this.tui.emit && this.tui.emit('tool:dispatch', data);
   }
 
   // 工具失败
-  onToolFailed(data) {
+  onToolFailed (data) {
     this.tui.emit && this.tui.emit('tool:failed', data);
   }
 
   // 多工具合并
-  onMultiToolMerged(data) {
+  onMultiToolMerged (data) {
     this.tui.emit && this.tui.emit('tool:merged', data);
   }
 
   // 流式开始
-  onStreamStart(data) {
+  onStreamStart (data) {
     if (this.tui.startStream) {
       this.tui.startStream(data.type || 'code');
     }
@@ -188,7 +188,7 @@ class TUIEventAdapter {
   }
 
   // 流式 token
-  onStreamToken(data) {
+  onStreamToken (data) {
     if (this.tui.appendStreamToken) {
       this.tui.appendStreamToken(data.token || '');
     }
@@ -196,7 +196,7 @@ class TUIEventAdapter {
   }
 
   // 流式结束
-  onStreamEnd(data) {
+  onStreamEnd (data) {
     if (this.tui.endStream) {
       this.tui.endStream(data);
     }
@@ -204,22 +204,22 @@ class TUIEventAdapter {
   }
 
   // 报告生成
-  onReportGenerated(data) {
+  onReportGenerated (data) {
     this.tui.emit && this.tui.emit('report:generated', data);
   }
 
   // 隐私模式开始
-  onPrivacyModeStart(data) {
+  onPrivacyModeStart (data) {
     this.tui.emit && this.tui.emit('privacy:start', data);
   }
 
   // 隐私模式完成
-  onPrivacyModeComplete(data) {
+  onPrivacyModeComplete (data) {
     this.tui.emit && this.tui.emit('privacy:complete', data);
   }
 
   // 契约组装完成
-  onContractComplete(data) {
+  onContractComplete (data) {
     this.tui.emit && this.tui.emit('contract:complete', data);
   }
 }

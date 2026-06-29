@@ -18,8 +18,8 @@ module.exports = {
   AtomCodeAdapter,
   MimoCodeAdapter,
   TraeAdapter,
-  
-  createAll() {
+
+  createAll () {
     return [
       new ClaudeCodeAdapter(),
       new OpenCodeAdapter(),
@@ -31,24 +31,24 @@ module.exports = {
       new TraeAdapter()
     ];
   },
-  
-  create(name) {
+
+  create (name) {
     const adapters = {
       'claude-code': ClaudeCodeAdapter,
       'open-code': OpenCodeAdapter,
-      'openclaw': OpenClawAdapter,
-      'qoder': QoderAdapter,
+      openclaw: OpenClawAdapter,
+      qoder: QoderAdapter,
       'hermes-agent': HermesAgentAdapter,
       'atom-code': AtomCodeAdapter,
       'mimo-code': MimoCodeAdapter,
-      'trae': TraeAdapter
+      trae: TraeAdapter
     };
-    
+
     const AdapterClass = adapters[name];
     if (AdapterClass) {
       return new AdapterClass();
     }
-    
+
     throw new Error(`未知工具: ${name}`);
   }
 };

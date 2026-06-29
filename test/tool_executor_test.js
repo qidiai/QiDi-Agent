@@ -8,7 +8,7 @@ const RealTaskExecutor = require('../src/core/RealTaskExecutor');
 const { ClaudeCodeAdapter, QoderAdapter } = require('../src/adapters');
 
 // Mock Provider
-function createMockProvider() {
+function createMockProvider () {
   return {
     name: 'mock',
     chat: async () => ({
@@ -22,7 +22,7 @@ function createMockProvider() {
   };
 }
 
-async function testToolExecutor() {
+async function testToolExecutor () {
   console.log('🧪 ToolExecutor 单元测试\n');
   console.log('='.repeat(50));
 
@@ -38,7 +38,7 @@ async function testToolExecutor() {
     defaultTimeout: 10000
   });
 
-  console.log(`   ✅ 实例创建成功`);
+  console.log('   ✅ 实例创建成功');
   console.log(`   workspace: ${executor.workspaceDir}`);
   console.log(`   maxConcurrent: ${executor.maxConcurrent}`);
   console.log(`   defaultTimeout: ${executor.defaultTimeout}ms`);
@@ -46,7 +46,7 @@ async function testToolExecutor() {
   // 测试注册适配器
   const qoderAdapter = new QoderAdapter();
   executor.registerAdapter(qoderAdapter);
-  console.log(`\n   ✅ 适配器注册成功`);
+  console.log('\n   ✅ 适配器注册成功');
   console.log(`   已注册工具: ${executor.getRegisteredTools().join(', ')}`);
 
   // 测试工具选择
@@ -57,7 +57,7 @@ async function testToolExecutor() {
     role: 'code_writer'
   };
   const selectedTool = executor.selectBestTool(mockTask);
-  console.log(`\n   ✅ 工具选择成功`);
+  console.log('\n   ✅ 工具选择成功');
   console.log(`   选中工具: ${selectedTool || '无'}`);
 
   // ═══════════════════════════════════════════════════════════
@@ -88,7 +88,7 @@ async function testToolExecutor() {
 
   console.log(`   执行结果: ${result.success ? '成功' : '失败'}`);
   console.log(`   错误信息: ${result.error || '无'}`);
-  console.log(`   ✅ 降级机制工作正常（工具不可用时返回错误而非崩溃）`);
+  console.log('   ✅ 降级机制工作正常（工具不可用时返回错误而非崩溃）');
 
   // ═══════════════════════════════════════════════════════════
   // 测试3: 文件扫描和差异检测
@@ -98,7 +98,7 @@ async function testToolExecutor() {
 
   const scanResult = executor._scanWorkspace('./test_workspace');
   console.log(`   扫描文件数: ${scanResult.size}`);
-  console.log(`   ✅ 文件扫描功能正常`);
+  console.log('   ✅ 文件扫描功能正常');
 
   // ═══════════════════════════════════════════════════════════
   // 测试4: 执行历史记录
@@ -111,7 +111,7 @@ async function testToolExecutor() {
 
   const history = executor.getExecutionHistory(5);
   console.log(`   历史记录数: ${history.length}`);
-  console.log(`   ✅ 历史记录功能正常`);
+  console.log('   ✅ 历史记录功能正常');
 
   // ═══════════════════════════════════════════════════════════
   // 测试5: RealTaskExecutor 集成
@@ -129,14 +129,14 @@ async function testToolExecutor() {
   // 初始化
   await realExecutor.initialize();
 
-  console.log(`   ✅ RealTaskExecutor 初始化成功`);
+  console.log('   ✅ RealTaskExecutor 初始化成功');
   console.log(`   AI提供商: ${realExecutor.enabledProviders.length} 个`);
   console.log(`   已注册工具: ${realExecutor.toolExecutor.getRegisteredTools().length} 个`);
   console.log(`   可用工具: ${realExecutor.toolExecutor.getAvailableTools().length} 个`);
 
   // 获取状态
   const status = realExecutor.getStatus();
-  console.log(`\n   🔍 状态信息:`);
+  console.log('\n   🔍 状态信息:');
   console.log(`      - 提供商: ${JSON.stringify(status.providers.map(p => p.name))}`);
   console.log(`      - 已注册工具: ${status.toolExecutor.registeredTools.join(', ') || '无'}`);
   console.log(`      - 可用工具: ${status.toolExecutor.availableTools.join(', ') || '无'}`);
@@ -156,7 +156,7 @@ async function testToolExecutor() {
   };
 
   const desc = realExecutor._buildExecutionPrompt(task, task.constraints);
-  console.log(`   ✅ 任务描述构建成功`);
+  console.log('   ✅ 任务描述构建成功');
   console.log(`   长度: ${desc.length} 字符`);
   console.log(`   包含标题: ${desc.includes('实现功能') ? '是' : '否'}`);
   console.log(`   包含约束: ${desc.includes('python') ? '是' : '否'}`);
@@ -173,7 +173,7 @@ async function testToolExecutor() {
     displayName: 'Tool A',
     isAvailable: () => true,
     execute: async (task) => {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(resolve => setTimeout(resolve, 100));
       return { success: true, stdout: 'Tool A output' };
     }
   };
@@ -183,7 +183,7 @@ async function testToolExecutor() {
     displayName: 'Tool B',
     isAvailable: () => true,
     execute: async (task) => {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(resolve => setTimeout(resolve, 100));
       return { success: true, stdout: 'Tool B output' };
     }
   };
@@ -197,7 +197,7 @@ async function testToolExecutor() {
     { mode: 'parallel', timeout: 5000 }
   );
 
-  console.log(`   ✅ 多工具并行执行成功`);
+  console.log('   ✅ 多工具并行执行成功');
   console.log(`   结果数: ${multiResult.results.length}`);
   console.log(`   成功数: ${multiResult.results.filter(r => r.success).length}`);
 

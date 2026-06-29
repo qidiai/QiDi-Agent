@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 
 class TraeAdapter extends BaseToolAdapter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super({
       name: 'trae',
       displayName: 'Trae CN',
@@ -16,7 +16,7 @@ class TraeAdapter extends BaseToolAdapter {
     this.execPath = null;
   }
 
-  async detect() {
+  async detect () {
     this.detected = false;
     this.status = 'offline';
 
@@ -44,7 +44,7 @@ class TraeAdapter extends BaseToolAdapter {
     return false;
   }
 
-  async checkVersion() {
+  async checkVersion () {
     try {
       // 使用 spawnSync 避免卡死：trae-cn.cmd --version 可能启动 GUI 进程
       // spawnSync 有硬性超时保证，不会出现 Promise 永不 resolve 的情况
@@ -62,7 +62,7 @@ class TraeAdapter extends BaseToolAdapter {
     return null;
   }
 
-  async connect(options = {}) {
+  async connect (options = {}) {
     if (!this.detected) await this.detect();
     if (!this.detected) throw new Error('Trae CN 未安装');
 
@@ -86,9 +86,9 @@ class TraeAdapter extends BaseToolAdapter {
     }
   }
 
-  async execute(task, options = {}) {
+  async execute (task, options = {}) {
     const startTime = Date.now();
-    
+
     if (!this.isAvailable()) {
       const result = this._normalizeResult({
         taskId: options.taskId || `task_${Date.now()}`,
@@ -111,7 +111,7 @@ class TraeAdapter extends BaseToolAdapter {
     let result;
     let outputContent = '';
     let codeBlocks = [];
-    let generatedFiles = [];
+    const generatedFiles = [];
 
     try {
       result = await this._runCommand(this.execPath, [
@@ -175,7 +175,6 @@ class TraeAdapter extends BaseToolAdapter {
     this.executionHistory.push(unifiedResult);
     return unifiedResult;
   }
-
 }
 
 module.exports = TraeAdapter;

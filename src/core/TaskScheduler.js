@@ -9,7 +9,7 @@ const path = require('path');
  * 新增：任务暂停/恢复 + 断点续传（Checkpoint）
  */
 class TaskScheduler extends EventEmitter {
-  constructor(options = {}) {
+  constructor (options = {}) {
     super();
     this.strictMode = options.strictMode !== false;
     this.maxRetries = options.maxRetries || 2;
@@ -28,7 +28,7 @@ class TaskScheduler extends EventEmitter {
    * @param {Object} context - 项目上下文
    * @returns {Promise<void>}
    */
-  async executeLoop(tasks, executeFn, context, runId = null) {
+  async executeLoop (tasks, executeFn, context, runId = null) {
     let completedCount = 0;
     const totalCount = tasks.length;
 
@@ -58,25 +58,32 @@ class TaskScheduler extends EventEmitter {
         await this._waitForResume();
 
         this.emit('taskStart_sub', {
-          task, index: currentIndex, total: totalCount,
+          task,
+          index: currentIndex,
+          total: totalCount,
           constraints: context.constraints || {}
         });
 
         try {
           const result = await executeFn(task, context);
           task.result = result;
-          task.status = 'completed';
-          completedCount++;
 
-          context.saveToMemory?.(task, result);
+          if (result.needsRevision) {
+            context.orchestrator?.emit('taskNeedsRevision', {
+              task, result, index: currentIndex, total: totalCount
+            });
+          } else {
+            task.status = 'completed';
+            completedCount++;
 
-          this.emit('taskComplete_sub', {
-            task, result, index: currentIndex, total: totalCount
-          });
+            context.saveToMemory?.(task, result);
 
-          // 自动 checkpoint 保存
-          this._autoCheckpoint(runId, tasks);
+            this.emit('taskComplete_sub', {
+              task, result, index: currentIndex, total: totalCount
+            });
 
+            this._autoCheckpoint(runId, tasks);
+          }
         } catch (error) {
           await this._handleTaskError(task, error, context);
         }
@@ -87,9 +94,9 @@ class TaskScheduler extends EventEmitter {
   /**
    * 获取所有就绪的任务（依赖已满足、状态为 pending）。
    */
-  _getReadyTasks(tasks) {
+  _getReadyTasks (tasks) {
     return tasks.filter(task => {
-      if (task.status !== 'pending') return false;
+      if (task.status !== 'pending' && task.status !== 'needs_revision') return false;
       if (!task.dependsOn || task.dependsOn.length === 0) return true;
       return task.dependsOn.every(depId => {
         const depTask = tasks.find(t => t.id === depId);
@@ -101,7 +108,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 处理卡住的任务（失败/需要修订）。
    */
-  async _handleStuckTasks(tasks, stuckTasks) {
+  async _handleStuckTasks (tasks, stuckTasks) {
     const criticalRoles = ['architect', 'code_writer'];
     const criticalFailed = stuckTasks.filter(t => criticalRoles.includes(t.role));
 
@@ -128,7 +135,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 处理单个任务执行错误（重试或标记失败）。
    */
-  async _handleTaskError(task, error, context) {
+  async _handleTaskError (task, error, context) {
     task.retries++;
     if (task.retries <= this.maxRetries) {
       task.status = 'pending';
@@ -146,7 +153,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 验证所有依赖图的合法性（无缺失依赖、无循环）。
    */
-  _validateAllDependencies(tasks) {
+  _validateAllDependencies (tasks) {
     const graph = {};
     const inDegree = {};
     for (const t of tasks) {
@@ -171,7 +178,7 @@ class TaskScheduler extends EventEmitter {
     return { valid: true };
   }
 
-  _hasCycleDFS(node, graph, visited, recStack) {
+  _hasCycleDFS (node, graph, visited, recStack) {
     visited.add(node);
     recStack.add(node);
     for (const neighbor of graph[node] || []) {
@@ -193,7 +200,7 @@ class TaskScheduler extends EventEmitter {
    * 暂停当前执行循环
    * @returns {Promise<void>} 解析当 resume() 被调用时
    */
-  async pause() {
+  async pause () {
     this._paused = true;
     this.emit('schedulerPaused', { taskIndex: this._currentTaskIndex });
     return new Promise((resolve) => {
@@ -204,7 +211,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 恢复暂停的执行循环
    */
-  resume() {
+  resume () {
     if (this._resumeResolver) {
       this._paused = false;
       this._resumeResolver();
@@ -216,7 +223,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 检查是否已暂停
    */
-  isPaused() {
+  isPaused () {
     return this._paused;
   }
 
@@ -224,7 +231,7 @@ class TaskScheduler extends EventEmitter {
    * 在执行循环中等待暂停解除
    * @private
    */
-  async _waitForResume() {
+  async _waitForResume () {
     if (this._paused && this._resumeResolver) {
       await this.pause();
     }
@@ -241,7 +248,7 @@ class TaskScheduler extends EventEmitter {
    * @param {Object} extra - 额外数据
    * @returns {string} checkpoint 文件路径
    */
-  saveCheckpoint(runId, tasks, extra = {}) {
+  saveCheckpoint (runId, tasks, extra = {}) {
     if (!fs.existsSync(this.checkpointDir)) {
       fs.mkdirSync(this.checkpointDir, { recursive: true });
     }
@@ -257,11 +264,13 @@ class TaskScheduler extends EventEmitter {
         role: t.role,
         status: t.status,
         retries: t.retries || 0,
-        result: t.result ? {
-          content: t.result.content ? t.result.content.substring(0, 500) + '...' : null,
-          qualityScore: t.result.quality?.qualityScore || null,
-          codeBlocks: t.result.codeBlocks?.length || 0
-        } : null,
+        result: t.result
+          ? {
+            content: t.result.content ? t.result.content.substring(0, 500) + '...' : null,
+            qualityScore: t.result.quality?.qualityScore || null,
+            codeBlocks: t.result.codeBlocks?.length || 0
+          }
+          : null,
         error: t.error || null,
         lastQualityFeedback: t.lastQualityFeedback || null,
         lastQualityScore: t.lastQualityScore || null,
@@ -282,7 +291,7 @@ class TaskScheduler extends EventEmitter {
    * @param {string} runId - 运行 ID
    * @returns {Object|null} checkpoint 数据或 null
    */
-  loadCheckpoint(runId) {
+  loadCheckpoint (runId) {
     const filePath = path.join(this.checkpointDir, `${runId}.json`);
     if (!fs.existsSync(filePath)) return null;
 
@@ -298,7 +307,7 @@ class TaskScheduler extends EventEmitter {
    * 列出所有可用的 checkpoint
    * @returns {Array} checkpoint 列表
    */
-  listCheckpoints() {
+  listCheckpoints () {
     if (!fs.existsSync(this.checkpointDir)) return [];
     return fs.readdirSync(this.checkpointDir)
       .filter(f => f.endsWith('.json'))
@@ -318,7 +327,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 删除指定 checkpoint
    */
-  deleteCheckpoint(runId) {
+  deleteCheckpoint (runId) {
     const filePath = path.join(this.checkpointDir, `${runId}.json`);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -331,7 +340,7 @@ class TaskScheduler extends EventEmitter {
    * 自动 checkpoint 保存（每完成一个任务）
    * @private
    */
-  _autoCheckpoint(runId, tasks) {
+  _autoCheckpoint (runId, tasks) {
     if (!runId) return;
     try {
       this.saveCheckpoint(runId, tasks, { autoCheckpoint: true });
@@ -343,7 +352,7 @@ class TaskScheduler extends EventEmitter {
   /**
    * 清理过期 checkpoint（默认保留 7 天）
    */
-  cleanOldCheckpoints(maxDays = 7) {
+  cleanOldCheckpoints (maxDays = 7) {
     if (!fs.existsSync(this.checkpointDir)) return 0;
     const cutoff = Date.now() - maxDays * 86400000;
     let removed = 0;

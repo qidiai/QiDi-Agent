@@ -14,13 +14,13 @@ const createLogger = require('../utils/Logger');
 const logger = createLogger('WebUIServer');
 
 class WebUIServer {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.port = options.port || process.env.WEB_PORT || 3000;
     this.host = options.host || '127.0.0.1';
     this.configDir = options.configDir || './config';
     this.workspaceDir = options.workspaceDir || './workspace';
     this.reportDir = options.reportDir || './reports';
-    
+
     // 安全配置
     this.corsOrigin = process.env.CORS_ALLOW_ORIGIN || 'http://localhost:3000';
     this.authPassword = process.env.WEBUI_AUTH_PASSWORD || '';
@@ -29,13 +29,13 @@ class WebUIServer {
       .map(s => s.trim())
       .filter(Boolean);
     this._authToken = this.authPassword ? crypto.createHash('sha256').update(this.authPassword).digest('hex') : null;
-    
+
     // _activeTasks 容量限制 + 定时清理
     this._MAX_ACTIVE_TASKS = 100;
     this._TASK_CLEANUP_INTERVAL_MS = 3600000; // 1h
     this._cleanupTimer = null;
     this._activeTasks = new Map();
-    
+
     this.app = express();
     this.toolScanner = null;
     this.reportGenerator = null;
@@ -48,14 +48,14 @@ class WebUIServer {
 
     this._agentStatus = new Map();
     this._tokenStats = new Map();
-    
+
     this._setupMiddleware();
     this._setupAuth();
     this._setupRoutes();
     this._setupStaticFiles();
   }
 
-  _setupMiddleware() {
+  _setupMiddleware () {
     // 全局速率限制：所有 API 限 100次/分钟
     const generalLimiter = rateLimit({
       windowMs: 60 * 1000,
@@ -81,7 +81,7 @@ class WebUIServer {
 
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
-    
+
     this.app.use((req, res, next) => {
       // CORS：根据环境变量限制来源
       const origin = this.corsOrigin === '*' ? '*' : (req.headers.origin || '');
@@ -101,13 +101,13 @@ class WebUIServer {
    * 认证中间件
    * 如果配置了 WEBUI_AUTH_PASSWORD，则要求请求携带 X-WebUI-Token 头
    */
-  _setupAuth() {
+  _setupAuth () {
     if (!this._authToken) return;
 
     this.app.use((req, res, next) => {
       // 健康检查接口免认证
       if (req.path === '/api/health') return next();
-      
+
       const token = req.headers['x-webui-token'];
       if (!token) {
         logger.warn('WebUI 认证失败：缺少令牌', { ip: req.ip, path: req.path });
@@ -124,7 +124,7 @@ class WebUIServer {
     });
   }
 
-  _setupRoutes() {
+  _setupRoutes () {
     this.app.get('/api/health', (req, res) => {
       res.json({
         status: 'ok',
@@ -572,12 +572,12 @@ class WebUIServer {
     });
   }
 
-  _setupStaticFiles() {
+  _setupStaticFiles () {
     const publicDir = path.join(__dirname, '../../public');
     if (fs.existsSync(publicDir)) {
       this.app.use(express.static(publicDir));
     }
-    
+
     this.app.get('/', (req, res) => {
       const indexPath = path.join(__dirname, '../../public/index.html');
       if (fs.existsSync(indexPath)) {
@@ -600,15 +600,15 @@ class WebUIServer {
     });
   }
 
-  async _getDashboardData() {
+  async _getDashboardData () {
     const tools = await this._getToolsList();
     const agents = await this._getAgentsList();
     const tokenStats = await this._getTokenStats();
     const reportStats = this.reportGenerator.getStats();
-    
+
     const onlineTools = tools.filter(t => t.status === 'online').length;
     const activeAgents = agents.filter(a => a.status === 'active').length;
-    
+
     return {
       summary: {
         totalTools: tools.length,
@@ -627,9 +627,9 @@ class WebUIServer {
     };
   }
 
-  async _getToolsList() {
+  async _getToolsList () {
     const tools = [];
-    
+
     for (const adapter of this.toolScanner.adapters) {
       const info = adapter.getInfo();
       tools.push({
@@ -643,17 +643,17 @@ class WebUIServer {
         command: info.command
       });
     }
-    
+
     return tools;
   }
 
-  async _scanTools() {
+  async _scanTools () {
     const results = await this.toolScanner.scan();
     this.toolScanner.saveResults(this.configDir);
     return results;
   }
 
-  async _connectTool(name) {
+  async _connectTool (name) {
     try {
       const result = await this.toolScanner.connect(name);
       return {
@@ -670,7 +670,7 @@ class WebUIServer {
     }
   }
 
-  async _getToolDetail(name) {
+  async _getToolDetail (name) {
     const adapter = this.toolScanner.getTool(name);
     if (!adapter) {
       const allAdapters = this.toolScanner.adapters;
@@ -678,7 +678,7 @@ class WebUIServer {
       if (!found) {
         return { error: '工具不存在' };
       }
-      
+
       return {
         name: found.name,
         displayName: found.displayName,
@@ -713,17 +713,17 @@ class WebUIServer {
     };
   }
 
-  _getToolWorkFiles(toolName) {
+  _getToolWorkFiles (toolName) {
     const files = [];
     const toolDir = path.join(this.workspaceDir, toolName);
-    
+
     if (fs.existsSync(toolDir)) {
       const walkDir = (dir, prefix = '') => {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
           const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-          
+
           if (entry.isDirectory()) {
             walkDir(fullPath, relPath);
           } else {
@@ -740,14 +740,14 @@ class WebUIServer {
       };
       walkDir(toolDir);
     }
-    
+
     return files.slice(0, 50);
   }
 
-  _getToolWorkUrls(toolName) {
+  _getToolWorkUrls (toolName) {
     const urls = [];
     const toolDir = path.join(this.workspaceDir, toolName);
-    
+
     if (fs.existsSync(toolDir)) {
       const files = fs.readdirSync(toolDir);
       for (const file of files) {
@@ -760,17 +760,17 @@ class WebUIServer {
         }
       }
     }
-    
+
     return urls;
   }
 
-  async _getAgentsList() {
+  async _getAgentsList () {
     const agents = [];
-    
+
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       let config = { agents: {} };
-      
+
       if (fs.existsSync(configPath)) {
         config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       }
@@ -779,7 +779,7 @@ class WebUIServer {
         const status = this._agentStatus.get(name) || { status: 'idle' };
         const tokens = this._tokenStats.get(name) || { total: 0, prompt: 0, completion: 0 };
         const isProvider = ['ollama', 'openai', 'anthropic', 'deepseek', 'groq', 'zhipu'].includes(name);
-        
+
         agents.push({
           name,
           displayName: agentConfig.name_display || agentConfig.name || name,
@@ -803,68 +803,68 @@ class WebUIServer {
     } catch (e) {
       logger.error('Error loading agents:', e);
     }
-    
+
     return agents;
   }
 
-  async _enableAgent(name) {
+  async _enableAgent (name) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       if (!fs.existsSync(configPath)) {
         return { success: false, message: '配置文件不存在' };
       }
-      
-      let config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
       if (!config.agents[name]) {
         return { success: false, message: `Agent ${name} 不存在` };
       }
-      
+
       config.agents[name].enabled = true;
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       await this.agentHub.reload();
-      
+
       return { success: true, message: `${name} 已启用` };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  async _disableAgent(name) {
+  async _disableAgent (name) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       if (!fs.existsSync(configPath)) {
         return { success: false, message: '配置文件不存在' };
       }
-      
-      let config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
       if (!config.agents[name]) {
         return { success: false, message: `Agent ${name} 不存在` };
       }
-      
+
       config.agents[name].enabled = false;
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       await this.agentHub.reload();
-      
+
       return { success: true, message: `${name} 已禁用` };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  _getRoutingConfig() {
+  _getRoutingConfig () {
     const configPath = path.join(this.configDir, 'agents.json');
     let config = { dispatch: {}, agents: {} };
-    
+
     if (fs.existsSync(configPath)) {
       config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     }
 
     const dispatch = config.dispatch || {};
-    
+
     const strategies = [
       { id: 'parallel', name: '并行模式', desc: '同时执行所有选中的模型，选择最快完成的结果' },
       { id: 'sequential', name: '顺序模式', desc: '依次执行每个模型，适合调试和对比' },
@@ -901,15 +901,15 @@ class WebUIServer {
     };
   }
 
-  async _saveRoutingConfig(body) {
+  async _saveRoutingConfig (body) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       if (!fs.existsSync(configPath)) {
         return { success: false, message: '配置文件不存在' };
       }
-      
-      let config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
       config.dispatch = {
         ...config.dispatch,
         mode: body.mode,
@@ -920,16 +920,16 @@ class WebUIServer {
         maxRetries: body.maxRetries,
         routingRules: body.routingRules
       };
-      
+
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       return { success: true, message: '路由配置已保存' };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  async _handleChat(chatData) {
+  async _handleChat (chatData) {
     const { messages, options, sessionId } = chatData;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -975,7 +975,7 @@ class WebUIServer {
       '- 使用中文回复';
 
     const systemTokens = this.chatTokenCounter.estimateTokens(systemPromptText);
-    let managedMessages = [...messages];
+    const managedMessages = [...messages];
     let totalTokens = this._countMessagesTokens(managedMessages) + systemTokens;
     let truncatedCount = 0;
 
@@ -1036,7 +1036,7 @@ class WebUIServer {
   }
 
   /** 估算消息列表的总 token 数 */
-  _countMessagesTokens(messages) {
+  _countMessagesTokens (messages) {
     if (!messages || !Array.isArray(messages)) return 0;
     let total = 0;
     for (const msg of messages) {
@@ -1047,7 +1047,7 @@ class WebUIServer {
   }
 
   /** 列出所有聊天会话摘要 */
-  _listChatSessions() {
+  _listChatSessions () {
     try {
       if (!fs.existsSync(this.chatMemoryDir)) return [];
       const files = fs.readdirSync(this.chatMemoryDir)
@@ -1066,13 +1066,17 @@ class WebUIServer {
             lastMessage: data.lastMessage || '',
             systemPrompt: data.systemPrompt ? (data.systemPrompt.length > 60 ? data.systemPrompt.slice(0, 60) + '...' : data.systemPrompt) : null
           };
-        } catch (_) { return null; }
+        } catch (_) {
+          return null;
+        }
       }).filter(Boolean);
-    } catch (_) { return []; }
+    } catch (_) {
+      return [];
+    }
   }
 
   /** 加载单个会话的完整数据（含消息） */
-  _loadChatSession(sessionId) {
+  _loadChatSession (sessionId) {
     try {
       const filePath = path.join(this.chatMemoryDir, `${sessionId}.json`);
       if (fs.existsSync(filePath)) {
@@ -1083,7 +1087,7 @@ class WebUIServer {
   }
 
   /** 删除单个会话 */
-  _deleteChatSession(sessionId) {
+  _deleteChatSession (sessionId) {
     try {
       const filePath = path.join(this.chatMemoryDir, `${sessionId}.json`);
       if (fs.existsSync(filePath)) {
@@ -1096,7 +1100,7 @@ class WebUIServer {
     }
   }
 
-  async _executeTask(taskData) {
+  async _executeTask (taskData) {
     const taskId = `task_${Date.now()}`;
     const { task, models, constraints, mode } = taskData;
 
@@ -1105,12 +1109,14 @@ class WebUIServer {
     if (!useModels || useModels.length === 0) {
       try {
         useModels = this.agentHub.getEnabledAgents().map(a => a.name);
-      } catch (_) { useModels = []; }
+      } catch (_) {
+        useModels = [];
+      }
     }
 
     // 容量控制
     this._ensureActiveTaskSlot(taskId);
-    
+
     this._activeTasks.set(taskId, {
       id: taskId,
       task,
@@ -1150,10 +1156,10 @@ class WebUIServer {
   /**
    * 异步执行任务内部方法（替代 setTimeout）。
    */
-  async _runTaskAsync(taskId, task, models, constraints, mode) {
+  async _runTaskAsync (taskId, task, models, constraints, mode) {
     try {
       const taskMode = this._activeTasks.get(taskId)?.mode || 'privacy';
-      
+
       // 从 AgentHub 获取第一个启用 Agent 的 provider 传下去，否则 TaskSplitter 无法工作
       const resolvedProvider = this.agentHub?.getEnabledAgents?.()?.[0]?.provider || null;
 
@@ -1162,7 +1168,7 @@ class WebUIServer {
         timeout: 600000,
         executionMode: taskMode,
         provider: resolvedProvider,
-        toolScanner: this.toolScanner  // 传递已扫描+授权好的工具列表，避免二次扫描
+        toolScanner: this.toolScanner // 传递已扫描+授权好的工具列表，避免二次扫描
       });
 
       this._activeTasks.set(taskId, {
@@ -1176,7 +1182,7 @@ class WebUIServer {
       this._activeTasks.set(taskId, {
         ...this._activeTasks.get(taskId),
         progress: 20,
-        output: [...(this._activeTasks.get(taskId)?.output || []), 
+        output: [...(this._activeTasks.get(taskId)?.output || []),
           `✅ 已连接 ${initResult.providers} 个 AI 模型，${initResult.tools} 个工具\n`
         ]
       });
@@ -1203,14 +1209,14 @@ class WebUIServer {
         this._activeTasks.set(taskId, {
           ...this._activeTasks.get(taskId),
           progress: 40,
-          output: [...(this._activeTasks.get(taskId)?.output || []), `📋 任务分解完成\n`]
+          output: [...(this._activeTasks.get(taskId)?.output || []), '📋 任务分解完成\n']
         });
       });
 
       executor.on('subtaskStart', (e) => {
         this._activeTasks.set(taskId, {
           ...this._activeTasks.get(taskId),
-          output: [...(this._activeTasks.get(taskId)?.output || []), 
+          output: [...(this._activeTasks.get(taskId)?.output || []),
             `\n🚀 开始执行: ${e.task.title}\n`
           ]
         });
@@ -1219,7 +1225,7 @@ class WebUIServer {
       executor.on('providerSelected', (e) => {
         this._activeTasks.set(taskId, {
           ...this._activeTasks.get(taskId),
-          output: [...(this._activeTasks.get(taskId)?.output || []), 
+          output: [...(this._activeTasks.get(taskId)?.output || []),
             `   使用模型: ${e.provider}\n`
           ]
         });
@@ -1229,7 +1235,7 @@ class WebUIServer {
         this._activeTasks.set(taskId, {
           ...this._activeTasks.get(taskId),
           progress: Math.min(90, this._activeTasks.get(taskId)?.progress + 5),
-          output: [...(this._activeTasks.get(taskId)?.output || []), 
+          output: [...(this._activeTasks.get(taskId)?.output || []),
             `   ${e.success ? '✅' : '❌'} ${e.task.title} ${e.success ? '完成' : '失败'}\n`
           ]
         });
@@ -1247,16 +1253,16 @@ class WebUIServer {
         progress: 100,
         result,
         files: result.executionResults.flatMap(r => r.generatedFiles || []),
-        output: [...(this._activeTasks.get(taskId)?.output || []), 
-          `\n============================\n`,
-          `📊 任务完成！\n`,
+        output: [...(this._activeTasks.get(taskId)?.output || []),
+          '\n============================\n',
+          '📊 任务完成！\n',
           `总子任务: ${result.finalSummary.totalSubtasks}\n`,
           `完成: ${result.finalSummary.completedSubtasks}\n`,
           `失败: ${result.finalSummary.failedSubtasks}\n`,
           `质量通过: ${result.finalSummary.qualityPassed}\n`,
           `生成文件: ${result.executionResults.flatMap(r => r.generatedFiles || []).length} 个\n`,
           `耗时: ${Math.round(result.duration / 1000)} 秒\n`,
-          `============================\n`
+          '============================\n'
         ]
       });
 
@@ -1275,7 +1281,6 @@ class WebUIServer {
 
       // 启动定时清理
       this._startTaskCleanup();
-
     } catch (e) {
       this._activeTasks.set(taskId, {
         ...this._activeTasks.get(taskId),
@@ -1288,7 +1293,7 @@ class WebUIServer {
     }
   }
 
-  _getTaskStatus(taskId) {
+  _getTaskStatus (taskId) {
     const task = this._activeTasks.get(taskId);
     if (!task) {
       return { error: '任务不存在' };
@@ -1296,21 +1301,21 @@ class WebUIServer {
     return task;
   }
 
-  _generateModelKey(name) {
+  _generateModelKey (name) {
     return name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
   }
 
-  async _saveModel(modelData) {
+  async _saveModel (modelData) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       let config = { agents: {} };
-      
+
       if (fs.existsSync(configPath)) {
         config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       }
 
       const modelKey = this._generateModelKey(modelData.name);
-      
+
       if (config.agents[modelKey]) {
         return { success: false, message: `模型 ${modelData.name} 已存在` };
       }
@@ -1334,25 +1339,25 @@ class WebUIServer {
       };
 
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       await this.agentHub.reload();
-      
+
       return { success: true, message: `模型 ${modelData.name} 添加成功`, key: modelKey };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  async _updateModel(name, modelData) {
+  async _updateModel (name, modelData) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       if (!fs.existsSync(configPath)) {
         return { success: false, message: '配置文件不存在' };
       }
-      
-      let config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const modelKey = this._generateModelKey(name);
-      
+
       if (!config.agents[modelKey]) {
         return { success: false, message: `模型 ${name} 不存在` };
       }
@@ -1377,44 +1382,44 @@ class WebUIServer {
       };
 
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       await this.agentHub.reload();
-      
+
       return { success: true, message: `模型 ${name} 更新成功` };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  async _deleteModel(name) {
+  async _deleteModel (name) {
     try {
       const configPath = path.join(this.configDir, 'agents.json');
       if (!fs.existsSync(configPath)) {
         return { success: false, message: '配置文件不存在' };
       }
-      
-      let config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const modelKey = this._generateModelKey(name);
-      
+
       if (!config.agents[modelKey]) {
         return { success: false, message: `模型 ${name} 不存在` };
       }
 
       delete config.agents[modelKey];
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-      
+
       await this.agentHub.reload();
-      
+
       return { success: true, message: `模型 ${name} 已删除` };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  async _getAgentStatus(name) {
+  async _getAgentStatus (name) {
     const status = this._agentStatus.get(name) || { status: 'idle' };
     const tokens = this._tokenStats.get(name) || { total: 0, prompt: 0, completion: 0 };
-    
+
     return {
       name,
       status: status.status,
@@ -1426,40 +1431,40 @@ class WebUIServer {
     };
   }
 
-  async _getTokenStats() {
+  async _getTokenStats () {
     const stats = [];
-    
+
     for (const [name, tokens] of this._tokenStats.entries()) {
       stats.push({
         agent: name,
         ...tokens
       });
     }
-    
+
     return stats;
   }
 
-  _calculateTotalTokens(tokenStats) {
+  _calculateTotalTokens (tokenStats) {
     return tokenStats.reduce((sum, t) => sum + (t.total || 0), 0);
   }
 
-  async _getTasksList() {
+  async _getTasksList () {
     const tasks = [];
-    
+
     for (const [id, task] of this._activeTasks.entries()) {
       tasks.push({
         id,
         ...task
       });
     }
-    
+
     return tasks.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   // ═══════════════ 文件管理辅助方法 ═══════════════
   // 所有方法都对路径做安全校验，防止穿越 workspaceDir。
 
-  _resolveSafe(relPath) {
+  _resolveSafe (relPath) {
     const resolvedWorkspace = path.resolve(this.workspaceDir);
     const fullPath = path.resolve(path.join(this.workspaceDir, relPath));
     if (!fullPath.startsWith(resolvedWorkspace)) {
@@ -1468,34 +1473,55 @@ class WebUIServer {
     return fullPath;
   }
 
-  _ensureDir(dir) {
+  _ensureDir (dir) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
 
-  _detectLang(name) {
+  _detectLang (name) {
     const ext = path.extname(name).toLowerCase();
     const map = {
-      '.js': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
-      '.ts': 'typescript', '.tsx': 'typescript', '.jsx': 'javascript',
+      '.js': 'javascript',
+      '.mjs': 'javascript',
+      '.cjs': 'javascript',
+      '.ts': 'typescript',
+      '.tsx': 'typescript',
+      '.jsx': 'javascript',
       '.py': 'python',
-      '.c': 'c', '.h': 'c', '.cpp': 'cpp', '.cc': 'cpp', '.hpp': 'cpp',
-      '.java': 'java', '.go': 'go', '.rs': 'rust', '.rb': 'ruby',
-      '.php': 'php', '.sh': 'bash', '.bash': 'bash',
-      '.json': 'json', '.md': 'markdown', '.txt': 'text',
-      '.html': 'html', '.css': 'css', '.yml': 'yaml', '.yaml': 'yaml',
-      '.sql': 'sql', '.xml': 'xml'
+      '.c': 'c',
+      '.h': 'c',
+      '.cpp': 'cpp',
+      '.cc': 'cpp',
+      '.hpp': 'cpp',
+      '.java': 'java',
+      '.go': 'go',
+      '.rs': 'rust',
+      '.rb': 'ruby',
+      '.php': 'php',
+      '.sh': 'bash',
+      '.bash': 'bash',
+      '.json': 'json',
+      '.md': 'markdown',
+      '.txt': 'text',
+      '.html': 'html',
+      '.css': 'css',
+      '.yml': 'yaml',
+      '.yaml': 'yaml',
+      '.sql': 'sql',
+      '.xml': 'xml'
     };
     return map[ext] || 'text';
   }
 
-  _walkDir(dir, base = '') {
+  _walkDir (dir, base = '') {
     const out = [];
     let entries = [];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (_) { return out; }
+    } catch (_) {
+      return out;
+    }
     // 文件夹优先，名字升序
     entries.sort((a, b) => {
       if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -1524,7 +1550,7 @@ class WebUIServer {
     return out;
   }
 
-  _listFiles(relPath, recursive) {
+  _listFiles (relPath, recursive) {
     const fullPath = this._resolveSafe(relPath);
     if (!fs.existsSync(fullPath)) {
       return { path: relPath, exists: false, entries: [] };
@@ -1567,7 +1593,7 @@ class WebUIServer {
     };
   }
 
-  _readFile(relPath) {
+  _readFile (relPath) {
     const fullPath = this._resolveSafe(relPath);
     if (!fs.existsSync(fullPath)) {
       throw new Error('文件不存在');
@@ -1598,7 +1624,7 @@ class WebUIServer {
     };
   }
 
-  _writeFile(relPath, content, encoding = 'utf-8') {
+  _writeFile (relPath, content, encoding = 'utf-8') {
     const fullPath = this._resolveSafe(relPath);
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) {
@@ -1621,7 +1647,7 @@ class WebUIServer {
     };
   }
 
-  _renameFile(fromRel, toRel) {
+  _renameFile (fromRel, toRel) {
     const fromFull = this._resolveSafe(fromRel);
     const toFull = this._resolveSafe(toRel);
     if (!fs.existsSync(fromFull)) {
@@ -1643,7 +1669,7 @@ class WebUIServer {
     };
   }
 
-  _deleteFile(relPath) {
+  _deleteFile (relPath) {
     const fullPath = this._resolveSafe(relPath);
     if (!fs.existsSync(fullPath)) {
       throw new Error('文件不存在');
@@ -1658,7 +1684,7 @@ class WebUIServer {
     return { success: true, path: relPath, message: '已删除' };
   }
 
-  _makeDir(relPath) {
+  _makeDir (relPath) {
     const fullPath = this._resolveSafe(relPath);
     if (fs.existsSync(fullPath)) {
       return { success: true, path: relPath, message: '目录已存在' };
@@ -1667,14 +1693,14 @@ class WebUIServer {
     return { success: true, path: relPath, message: '目录已创建' };
   }
 
-  updateAgentStatus(agentName, status) {
+  updateAgentStatus (agentName, status) {
     this._agentStatus.set(agentName, {
       ...status,
       lastActive: Date.now()
     });
   }
 
-  updateTokenUsage(agentName, tokens) {
+  updateTokenUsage (agentName, tokens) {
     const current = this._tokenStats.get(agentName) || { total: 0, prompt: 0, completion: 0, calls: 0 };
     this._tokenStats.set(agentName, {
       total: current.total + (tokens.total || 0),
@@ -1684,35 +1710,35 @@ class WebUIServer {
     });
   }
 
-  async initialize() {
+  async initialize () {
     this.toolScanner = new ToolScanner();
     const allAdapters = adapters.createAll();
     this.toolScanner.registerAdapters(allAdapters);
-    
+
     try {
       this.toolScanner.loadResults(this.configDir);
     } catch (e) {
     }
-    
+
     this.reportGenerator = new ExperimentReportGenerator({
       reportDir: this.reportDir
     });
-    
+
     this.agentHub = new AgentHub({
       configDir: this.configDir
     });
-    
+
     try {
       await this.agentHub.initialize();
     } catch (e) {
     }
-    
+
     return this;
   }
 
-  async start() {
+  async start () {
     await this.initialize();
-    
+
     return new Promise((resolve) => {
       this.server = this.app.listen(this.port, this.host, () => {
         logger.info(`QIDI Agent Web UI 已启动 | 地址: http://${this.host}:${this.port}`);
@@ -1721,7 +1747,7 @@ class WebUIServer {
     });
   }
 
-  async stop() {
+  async stop () {
     if (this.server) {
       await new Promise((resolve) => {
         this.server.close(resolve);
@@ -1736,13 +1762,13 @@ class WebUIServer {
   /**
    * 启动 _activeTasks 定时清理：移除 completed/failed 超 1h 的条目。
    */
-  _startTaskCleanup() {
+  _startTaskCleanup () {
     if (this._cleanupTimer) return;
     this._cleanupTimer = setInterval(() => this._cleanupExpiredTasks(), this._TASK_CLEANUP_INTERVAL_MS);
     this._cleanupExpiredTasks();
   }
 
-  _cleanupExpiredTasks() {
+  _cleanupExpiredTasks () {
     const now = Date.now();
     const expired = [];
     for (const [id, task] of this._activeTasks) {
@@ -1759,7 +1785,7 @@ class WebUIServer {
   /**
    * 安全插入 _activeTasks：超限则淘汰最旧的 completed/failed 条目。
    */
-  _ensureActiveTaskSlot(taskId) {
+  _ensureActiveTaskSlot (taskId) {
     while (this._activeTasks.size >= this._MAX_ACTIVE_TASKS) {
       let oldestId = null;
       let oldestTs = Infinity;
@@ -1789,12 +1815,12 @@ class WebUIServer {
   /**
    * 文件上传路由（必须在 express.json() 之前注册，避免 multipart 冲突）。
    */
-  _setupFileUpload() {
+  _setupFileUpload () {
     const uploadDir = path.join(__dirname, '../../tmp/uploads');
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    
+
     const upload = multer({ dest: uploadDir, limits: { fileSize: 50 * 1024 * 1024 } });
-    
+
     // multipart 上传
     this.app.post('/api/files/upload', upload.array('files', 20), async (req, res) => {
       try {
@@ -1814,7 +1840,9 @@ class WebUIServer {
             results.push({ name: file.originalname, ...r, size: file.size });
             fs.unlinkSync(file.path); // 清理临时文件
           } catch (e) {
-            try { fs.unlinkSync(file.path); } catch (_) {}
+            try {
+              fs.unlinkSync(file.path);
+            } catch (_) {}
             results.push({ name: file.originalname, success: false, error: e.message });
           }
         }
@@ -1823,7 +1851,7 @@ class WebUIServer {
         res.status(400).json({ error: e.message });
       }
     });
-    
+
     // 遗留兼容：JSON 格式上传
     this.app.post('/api/files/upload-json', async (req, res) => {
       try {

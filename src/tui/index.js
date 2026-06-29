@@ -36,7 +36,7 @@ try {
  * 启动 TUI
  * @param {TUIOptions} options
  */
-async function startTUI(options = {}) {
+async function startTUI (options = {}) {
   const {
     workspaceDir = path.join(process.cwd(), 'workspace'),
     mode = 'privacy',
@@ -74,24 +74,24 @@ async function startTUI(options = {}) {
         unmount();
         resolve({ exit: 'interrupt' });
       });
-
     } catch (err) {
       reject(err);
     }
   });
 }
 
-function loadTUISession() {
+function loadTUISession () {
   try {
     return require('./TUISession');
   } catch (e) {
     // TUISession 尚未创建，返回空类
     return class EmptySession {
-      constructor() {
+      constructor () {
         this.workspaceDir = '.';
         this.mode = 'privacy';
       }
-      async start() {
+
+      async start () {
         console.log('TUISession not implemented yet');
       }
     };

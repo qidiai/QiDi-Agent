@@ -29,7 +29,7 @@ const useTaskEvents = (session, orchestrator) => {
     if (!orchestrator) return;
 
     const events = {
-      'taskSplit': (data) => {
+      taskSplit: (data) => {
         setTasks(data.tasks || []);
         setOverview(data.overview || '');
         setPlan(data.plan || '');
@@ -39,14 +39,14 @@ const useTaskEvents = (session, orchestrator) => {
           startTime: Date.now()
         });
       },
-      'taskStart_sub': (data) => {
+      taskStart_sub: (data) => {
         setCurrentTask(data.task);
         setProgress(prev => ({
           ...prev,
           current: (data.index || 0) + 1
         }));
       },
-      'taskComplete_sub': (data) => {
+      taskComplete_sub: (data) => {
         if (data.task && data.task.id) {
           updateTask(data.task.id, {
             status: 'completed',
@@ -57,7 +57,7 @@ const useTaskEvents = (session, orchestrator) => {
           appendCodeBlocks(data.result.codeBlocks);
         }
       },
-      'taskFailed': (data) => {
+      taskFailed: (data) => {
         if (data.task && data.task.id) {
           updateTask(data.task.id, {
             status: 'failed',
@@ -65,37 +65,37 @@ const useTaskEvents = (session, orchestrator) => {
           });
         }
       },
-      'agentWorking': (data) => {
+      agentWorking: (data) => {
         addMessage({
           role: 'agent',
           content: `[${data.agent}] 正在生成代码...`
         });
       },
-      'toolSelected': (data) => {
+      toolSelected: (data) => {
         addMessage({
           role: 'system',
           content: `选择工具: ${data.tool}`
         });
       },
-      'multiToolDispatch': (data) => {
+      multiToolDispatch: (data) => {
         addMessage({
           role: 'system',
           content: `派发到 ${data.tools ? data.tools.length : 0} 个工具`
         });
       },
-      'toolFailed': (data) => {
+      toolFailed: (data) => {
         addMessage({
           role: 'system',
           content: `[${data.tool}] 失败: ${data.error}`
         });
       },
-      'streamStart': (data) => {
+      streamStart: (data) => {
         startStream(data.type || 'code');
       },
-      'streamToken': (data) => {
+      streamToken: (data) => {
         appendStreamToken(data.token || '');
       },
-      'streamEnd': (data) => {
+      streamEnd: (data) => {
         endStream(data);
         if (data && data.codeBlocks) {
           appendCodeBlocks(data.codeBlocks);

@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(loadDashboard, 30000);
 });
 
-function initNavigation() {
+function initNavigation () {
   const navItems = document.querySelectorAll('.nav-item');
   navItems.forEach(item => {
     item.addEventListener('click', (e) => {
@@ -29,7 +29,7 @@ function initNavigation() {
   });
 }
 
-function switchPage(page) {
+function switchPage (page) {
   currentPage = page;
 
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -69,11 +69,11 @@ function switchPage(page) {
   }
 }
 
-async function loadAllData() {
+async function loadAllData () {
   await loadDashboard();
 }
 
-async function loadDashboard() {
+async function loadDashboard () {
   try {
     const res = await fetch('/api/dashboard');
     const data = await res.json();
@@ -84,7 +84,7 @@ async function loadDashboard() {
   }
 }
 
-function renderDashboard(data) {
+function renderDashboard (data) {
   document.getElementById('stat-tools').textContent = data.summary.totalTools;
   document.getElementById('stat-tools-online').textContent = `${data.summary.onlineTools} 在线`;
   document.getElementById('stat-agents').textContent = data.summary.totalAgents;
@@ -104,7 +104,7 @@ function renderDashboard(data) {
   reportsData = data.recentReports;
 }
 
-function renderToolsPreview(tools) {
+function renderToolsPreview (tools) {
   const container = document.getElementById('tools-preview');
   if (!tools || tools.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">暂无工具</div></div>';
@@ -123,7 +123,7 @@ function renderToolsPreview(tools) {
   `).join('');
 }
 
-function renderAgentsPreview(agents) {
+function renderAgentsPreview (agents) {
   const container = document.getElementById('agents-preview');
   if (!agents || agents.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div><div class="empty-text">暂无智能体</div></div>';
@@ -142,7 +142,7 @@ function renderAgentsPreview(agents) {
   `).join('');
 }
 
-function renderTokensPreview(tokens) {
+function renderTokensPreview (tokens) {
   const container = document.getElementById('tokens-preview');
   if (!tokens || tokens.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">暂无数据</div></div>';
@@ -165,7 +165,7 @@ function renderTokensPreview(tokens) {
   `).join('');
 }
 
-function renderReportsPreview(reports) {
+function renderReportsPreview (reports) {
   const container = document.getElementById('reports-preview');
   if (!reports || reports.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-text">暂无报告</div></div>';
@@ -187,7 +187,7 @@ function renderReportsPreview(reports) {
   `).join('');
 }
 
-async function loadTools() {
+async function loadTools () {
   try {
     const res = await fetch('/api/tools');
     const data = await res.json();
@@ -198,7 +198,7 @@ async function loadTools() {
   }
 }
 
-function renderToolsFull(tools) {
+function renderToolsFull (tools) {
   const container = document.getElementById('tools-full');
   // 同步 Agent 页底部工具数量徽标
   const countEl = document.getElementById('tools-panel-count');
@@ -219,7 +219,7 @@ function renderToolsFull(tools) {
       </div>
       <div class="tool-meta">
         ${tool.version ? `<span>版本: ${tool.version}</span>` : ''}
-        ${tool.detected ? `<span style="color:#10b981;">✓ 已检测</span>` : '<span style="color:#9ca3af;">未检测</span>'}
+        ${tool.detected ? '<span style="color:#10b981;">✓ 已检测</span>' : '<span style="color:#9ca3af;">未检测</span>'}
       </div>
       ${tool.installPath ? `<div style="font-size:11px;color:#9ca3af;margin-top:8px;word-break:break-all;">路径: ${tool.installPath}</div>` : ''}
       <div class="tool-actions">
@@ -232,7 +232,7 @@ function renderToolsFull(tools) {
   `).join('');
 }
 
-async function scanTools() {
+async function scanTools () {
   const btn = event.target.closest('button');
   const originalText = btn.innerHTML;
   btn.innerHTML = '<span>⏳</span> 扫描中...';
@@ -252,7 +252,7 @@ async function scanTools() {
   }
 }
 
-async function connectTool(name) {
+async function connectTool (name) {
   try {
     const res = await fetch(`/api/tools/connect/${name}`, { method: 'POST' });
     const data = await res.json();
@@ -268,7 +268,7 @@ async function connectTool(name) {
   }
 }
 
-async function viewToolDetail(name) {
+async function viewToolDetail (name) {
   try {
     const res = await fetch(`/api/tools/${name}/detail`);
     const data = await res.json();
@@ -278,7 +278,7 @@ async function viewToolDetail(name) {
   }
 }
 
-function showToolDetailModal(tool) {
+function showToolDetailModal (tool) {
   const modal = document.getElementById('report-modal');
   document.getElementById('modal-title').textContent = `${tool.displayName || tool.name} - 工具详情`;
 
@@ -303,14 +303,14 @@ function showToolDetailModal(tool) {
       content += `  ... 还有 ${tool.workFiles.length - 20} 个文件\n`;
     }
   } else {
-    content += `工作文件: 暂无\n`;
+    content += '工作文件: 暂无\n';
   }
 
   document.getElementById('modal-content').textContent = content;
   modal.style.display = 'flex';
 }
 
-async function loadAgents() {
+async function loadAgents () {
   try {
     const res = await fetch('/api/agents');
     const data = await res.json();
@@ -321,7 +321,7 @@ async function loadAgents() {
   }
 }
 
-function renderAgentsFull(agents) {
+function renderAgentsFull (agents) {
   const container = document.getElementById('agents-full');
   if (!agents || agents.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div><div class="empty-text">暂无模型</div><div class="empty-desc">请在配置文件中添加模型</div></div>';
@@ -350,7 +350,7 @@ function renderAgentsFull(agents) {
   container.innerHTML = html;
 }
 
-function renderAgentCard(agent) {
+function renderAgentCard (agent) {
   const statusClass = agent.enabled ? 'status-online' : 'status-offline';
   const statusText = agent.enabled ? '已启用' : '已禁用';
   const typeTag = agent.isLocal ? '本地' : '云端';
@@ -374,10 +374,10 @@ function renderAgentCard(agent) {
         <span>Token消耗: ${formatNumber(agent.tokenUsage?.total || 0)}</span>
       </div>
       <div class="tool-actions" style="margin-top: 12px;">
-        ${agent.enabled 
-          ? `<button class="btn" style="background:#fee2e2;color:#dc2626;" onclick="disableAgent('${agent.name}')">禁用</button>`
-          : `<button class="btn btn-success" onclick="enableAgent('${agent.name}')">启用</button>`
-        }
+        ${agent.enabled
+    ? `<button class="btn" style="background:#fee2e2;color:#dc2626;" onclick="disableAgent('${agent.name}')">禁用</button>`
+    : `<button class="btn btn-success" onclick="enableAgent('${agent.name}')">启用</button>`
+}
         <button class="btn" onclick="showEditModelModal('${agent.name}')">编辑</button>
         <button class="btn" style="color:#dc2626;" onclick="deleteModel('${agent.name}')">删除</button>
       </div>
@@ -385,7 +385,7 @@ function renderAgentCard(agent) {
   `;
 }
 
-async function enableAgent(name) {
+async function enableAgent (name) {
   try {
     const res = await fetch(`/api/agents/${name}/enable`, { method: 'POST' });
     const data = await res.json();
@@ -401,7 +401,7 @@ async function enableAgent(name) {
   }
 }
 
-async function disableAgent(name) {
+async function disableAgent (name) {
   try {
     const res = await fetch(`/api/agents/${name}/disable`, { method: 'POST' });
     const data = await res.json();
@@ -417,7 +417,7 @@ async function disableAgent(name) {
   }
 }
 
-function showAddModelModal() {
+function showAddModelModal () {
   document.getElementById('model-modal-title').textContent = '添加模型';
   document.getElementById('model-form').reset();
   document.getElementById('model-name-original').value = '';
@@ -426,7 +426,7 @@ function showAddModelModal() {
   document.getElementById('model-modal').style.display = 'flex';
 }
 
-function showEditModelModal(name) {
+function showEditModelModal (name) {
   const agent = agentsData.find(a => a.name === name);
   if (!agent) {
     alert('模型不存在');
@@ -447,20 +447,20 @@ function showEditModelModal(name) {
   document.getElementById('model-modal').style.display = 'flex';
 }
 
-function closeModelModal() {
+function closeModelModal () {
   document.getElementById('model-modal').style.display = 'none';
 }
 
-function updateModelDefaults() {
+function updateModelDefaults () {
   const type = document.getElementById('model-type').value;
   const baseURLInput = document.getElementById('model-baseurl');
   const modelInput = document.getElementById('model-model');
 
   const defaults = {
-    'openai': { baseURL: 'https://api.openai.com/v1', model: 'gpt-4' },
-    'anthropic': { baseURL: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-20240620' },
-    'ollama': { baseURL: 'http://localhost:11434', model: 'qwen2.5:7b' },
-    'custom': { baseURL: '', model: '' }
+    openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4' },
+    anthropic: { baseURL: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-20240620' },
+    ollama: { baseURL: 'http://localhost:11434', model: 'qwen2.5:7b' },
+    custom: { baseURL: '', model: '' }
   };
 
   if (defaults[type]) {
@@ -469,12 +469,12 @@ function updateModelDefaults() {
   }
 }
 
-async function saveModel(event) {
+async function saveModel (event) {
   event.preventDefault();
-  
+
   const originalName = document.getElementById('model-name-original').value;
   const isEdit = !!originalName;
-  
+
   const modelData = {
     name: document.getElementById('model-name').value.trim(),
     type: document.getElementById('model-type').value,
@@ -492,7 +492,7 @@ async function saveModel(event) {
 
   try {
     let res, data;
-    
+
     if (isEdit) {
       res = await fetch(`/api/models/${originalName}`, {
         method: 'PUT',
@@ -506,9 +506,9 @@ async function saveModel(event) {
         body: JSON.stringify(modelData)
       });
     }
-    
+
     data = await res.json();
-    
+
     if (data.success) {
       alert(data.message);
       closeModelModal();
@@ -522,7 +522,7 @@ async function saveModel(event) {
   }
 }
 
-async function deleteModel(name) {
+async function deleteModel (name) {
   if (!confirm(`确定要删除模型 ${name} 吗？`)) {
     return;
   }
@@ -530,7 +530,7 @@ async function deleteModel(name) {
   try {
     const res = await fetch(`/api/models/${name}`, { method: 'DELETE' });
     const data = await res.json();
-    
+
     if (data.success) {
       alert(data.message);
       loadAgents();
@@ -543,7 +543,7 @@ async function deleteModel(name) {
   }
 }
 
-async function viewAgentDetail(name) {
+async function viewAgentDetail (name) {
   try {
     const res = await fetch(`/api/agents/${name}/status`);
     const data = await res.json();
@@ -553,7 +553,7 @@ async function viewAgentDetail(name) {
   }
 }
 
-function showAgentDetailModal(agent) {
+function showAgentDetailModal (agent) {
   const modal = document.getElementById('report-modal');
   document.getElementById('modal-title').textContent = `${agent.name} - 智能体详情`;
 
@@ -566,14 +566,14 @@ function showAgentDetailModal(agent) {
   }
 
   if (agent.tokenUsage) {
-    content += `Token消耗统计:\n`;
+    content += 'Token消耗统计:\n';
     content += `  总计: ${formatNumber(agent.tokenUsage.total || 0)}\n`;
     content += `  输入: ${formatNumber(agent.tokenUsage.prompt || 0)}\n`;
     content += `  输出: ${formatNumber(agent.tokenUsage.completion || 0)}\n`;
     if (agent.tokenUsage.calls) {
       content += `  调用次数: ${agent.tokenUsage.calls}\n`;
     }
-    content += `\n`;
+    content += '\n';
   }
 
   if (agent.workFiles && agent.workFiles.length > 0) {
@@ -585,14 +585,14 @@ function showAgentDetailModal(agent) {
       content += `  ... 还有 ${agent.workFiles.length - 30} 个文件\n`;
     }
   } else {
-    content += `工作文件: 暂无\n`;
+    content += '工作文件: 暂无\n';
   }
 
   document.getElementById('modal-content').textContent = content;
   modal.style.display = 'flex';
 }
 
-async function loadTokens() {
+async function loadTokens () {
   try {
     const res = await fetch('/api/tokens');
     const data = await res.json();
@@ -603,7 +603,7 @@ async function loadTokens() {
   }
 }
 
-function renderTokensFull(tokens) {
+function renderTokensFull (tokens) {
   const container = document.getElementById('tokens-full');
   if (!tokens || tokens.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">暂无Token消耗数据</div></div>';
@@ -649,7 +649,7 @@ function renderTokensFull(tokens) {
   `;
 }
 
-async function loadReports() {
+async function loadReports () {
   try {
     const res = await fetch('/api/reports?limit=50');
     const data = await res.json();
@@ -660,7 +660,7 @@ async function loadReports() {
   }
 }
 
-function renderReportsFull(reports) {
+function renderReportsFull (reports) {
   const container = document.getElementById('reports-full');
   if (!reports || reports.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-text">暂无报告</div><div class="empty-desc">任务完成后将自动生成实验报告</div></div>';
@@ -709,7 +709,7 @@ function renderReportsFull(reports) {
   `;
 }
 
-function searchReports() {
+function searchReports () {
   const query = document.getElementById('report-search').value.toLowerCase();
   if (!query) {
     renderReportsFull(reportsData);
@@ -723,7 +723,7 @@ function searchReports() {
   renderReportsFull(filtered);
 }
 
-async function viewReport(id) {
+async function viewReport (id) {
   try {
     const res = await fetch(`/api/reports/${id}`);
     const data = await res.json();
@@ -733,18 +733,18 @@ async function viewReport(id) {
   }
 }
 
-function showReportModal(report) {
+function showReportModal (report) {
   const modal = document.getElementById('report-modal');
   document.getElementById('modal-title').textContent = '实验报告详情';
   document.getElementById('modal-content').textContent = report.content || JSON.stringify(report, null, 2);
   modal.style.display = 'flex';
 }
 
-function closeReportModal() {
+function closeReportModal () {
   document.getElementById('report-modal').style.display = 'none';
 }
 
-async function loadTasks() {
+async function loadTasks () {
   try {
     const res = await fetch('/api/tasks');
     const data = await res.json();
@@ -754,7 +754,7 @@ async function loadTasks() {
   }
 }
 
-function renderTasksFull(tasks) {
+function renderTasksFull (tasks) {
   const container = document.getElementById('tasks-full');
   if (!tasks || tasks.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无任务</div><div class="empty-desc">任务开始后将在这里显示</div></div>';
@@ -768,17 +768,19 @@ function renderTasksFull(tasks) {
         <span class="status-badge status-${task.status || 'idle'}">${getTaskStatusText(task.status)}</span>
       </div>
       <div style="font-size:12px;color:#6b7280;">${task.description || ''}</div>
-      ${task.progress !== undefined ? `
+      ${task.progress !== undefined
+    ? `
         <div class="task-progress">
           <div class="task-progress-fill" style="width: ${task.progress}%"></div>
         </div>
         <div style="font-size:11px;color:#9ca3af;margin-top:4px;text-align:right;">${task.progress}%</div>
-      ` : ''}
+      `
+    : ''}
     </div>
   `).join('');
 }
 
-function refreshData() {
+function refreshData () {
   loadAllData();
   const page = currentPage;
   if (page !== 'dashboard') {
@@ -789,7 +791,7 @@ function refreshData() {
   }
 }
 
-async function loadRoutingConfig() {
+async function loadRoutingConfig () {
   try {
     const res = await fetch('/api/routing/config');
     const config = await res.json();
@@ -799,7 +801,7 @@ async function loadRoutingConfig() {
   }
 }
 
-function renderRoutingConfig(config) {
+function renderRoutingConfig (config) {
   document.getElementById('routing-fast-count').textContent = config.routingRules?.fast?.keywords?.length || 0;
   document.getElementById('routing-fast-target').textContent = config.routingRules?.fast?.target || 'auto';
   document.getElementById('routing-normal-count').textContent = config.routingRules?.normal?.keywords?.length || 0;
@@ -846,9 +848,9 @@ function renderRoutingConfig(config) {
   document.getElementById('routing-models').innerHTML = modelsHtml;
 }
 
-let routingConfig = {};
+const routingConfig = {};
 
-function updateRoutingMode(mode) {
+function updateRoutingMode (mode) {
   routingConfig.mode = mode;
   document.querySelectorAll('input[name="routing-mode"]').forEach(input => {
     input.closest('label').style.background = input.checked ? '#fffef5' : '#f9fafb';
@@ -856,9 +858,9 @@ function updateRoutingMode(mode) {
   });
 }
 
-async function saveRoutingConfig() {
+async function saveRoutingConfig () {
   const mode = document.querySelector('input[name="routing-mode"]:checked')?.value || 'parallel';
-  
+
   try {
     const res = await fetch('/api/routing/config', {
       method: 'POST',
@@ -895,7 +897,7 @@ let consoleInterval = null;
 // ═══════════════ 执行模式 ═══════════════
 let currentMode = 'privacy';
 
-function selectMode(mode) {
+function selectMode (mode) {
   currentMode = mode;
   // 新布局：.mode-pill 胶囊开关
   document.querySelectorAll('.mode-pill').forEach(pill => {
@@ -907,24 +909,24 @@ function selectMode(mode) {
   });
 }
 
-async function recommendMode() {
+async function recommendMode () {
   const task = document.getElementById('console-task').value.trim();
   if (!task) {
     document.getElementById('mode-recommend').textContent = '请先输入任务描述';
     return;
   }
-  
+
   document.getElementById('mode-recommend').textContent = '正在分析...';
-  
+
   try {
     const res = await fetch('/api/modes/recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task })
     });
-    
+
     const data = await res.json();
-    
+
     if (data.mode) {
       selectMode(data.mode);
       document.getElementById('mode-recommend').textContent = `💡 ${data.reason}`;
@@ -934,7 +936,7 @@ async function recommendMode() {
   }
 }
 
-async function initConsole() {
+async function initConsole () {
   const badge = document.getElementById('console-models-badge');
   if (!badge) return;
 
@@ -959,7 +961,7 @@ async function initConsole() {
   }
 }
 
-async function executeTask() {
+async function executeTask () {
   const task = document.getElementById('console-task').value.trim();
   if (!task) {
     alert('请输入任务描述');
@@ -1023,7 +1025,7 @@ async function executeTask() {
   }
 }
 
-function startPolling(taskId) {
+function startPolling (taskId) {
   if (consoleInterval) clearInterval(consoleInterval);
 
   consoleInterval = setInterval(async () => {
@@ -1058,7 +1060,7 @@ function startPolling(taskId) {
   }, 2000);
 }
 
-function updateConsoleOutput(data) {
+function updateConsoleOutput (data) {
   const msgEl = document.getElementById(currentTaskMsgId);
   if (!msgEl) return;
 
@@ -1097,18 +1099,18 @@ function updateConsoleOutput(data) {
   if (outputEl) outputEl.scrollTop = outputEl.scrollHeight;
 }
 
-function updateOutputFiles(files) {
+function updateOutputFiles (files) {
   const container = document.getElementById('output-files');
   const countEl = document.getElementById('file-count');
-  
+
   if (!files || files.length === 0) {
     container.innerHTML = '<div class="empty-state" style="grid-column: 1/-1; padding: 20px;"><div class="empty-text">暂无生成文件</div></div>';
     countEl.textContent = '0 个文件';
     return;
   }
-  
+
   countEl.textContent = `${files.length} 个文件`;
-  
+
   container.innerHTML = files.map(f => {
     const relPath = (f.path || f.name).replace(/\\/g, '/');
     const fileName = f.name || (relPath.split('/').pop() || relPath);
@@ -1128,14 +1130,14 @@ function updateOutputFiles(files) {
   }).join('');
 }
 
-function downloadOne(relPath) {
+function downloadOne (relPath) {
   const a = document.createElement('a');
   a.href = `/api/files/download?path=${encodeURIComponent(relPath)}`;
   a.download = '';
   a.click();
 }
 
-function editInFiles(relPath) {
+function editInFiles (relPath) {
   // 跳到文件管理页面并打开该文件
   switchPage('files');
   const idx = relPath.lastIndexOf('/');
@@ -1149,13 +1151,13 @@ function editInFiles(relPath) {
   }
 }
 
-function escapeHtml(text) {
+function escapeHtml (text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-function clearConsole() {
+function clearConsole () {
   document.getElementById('console-task').value = '';
   clearOutput();
   document.getElementById('output-files').innerHTML = `
@@ -1167,10 +1169,10 @@ function clearConsole() {
   currentTaskId = null;
 }
 
-function downloadOutput() {
+function downloadOutput () {
   const outputEl = document.getElementById('console-output');
   const text = outputEl.innerText;
-  
+
   const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1180,7 +1182,7 @@ function downloadOutput() {
   URL.revokeObjectURL(url);
 }
 
-function viewFile(path) {
+function viewFile (path) {
   fetch(`/api/files/view?path=${encodeURIComponent(path)}`)
     .then(res => res.text())
     .then(content => {
@@ -1192,60 +1194,60 @@ function viewFile(path) {
     .catch(e => alert('无法加载文件: ' + e.message));
 }
 
-function formatNumber(n) {
+function formatNumber (n) {
   if (!n) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return n.toString();
 }
 
-function formatSize(bytes) {
+function formatSize (bytes) {
   if (!bytes) return '0B';
   if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + 'MB';
   if (bytes >= 1024) return (bytes / 1024).toFixed(1) + 'KB';
   return bytes + 'B';
 }
 
-function formatDate(timestamp) {
+function formatDate (timestamp) {
   if (!timestamp) return '-';
   const d = new Date(timestamp);
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-function truncate(str, len) {
+function truncate (str, len) {
   if (!str) return '';
   if (str.length <= len) return str;
   return str.substring(0, len) + '...';
 }
 
-function getStatusText(status) {
+function getStatusText (status) {
   const map = {
-    'online': '在线',
-    'offline': '离线',
-    'error': '错误',
-    'connecting': '连接中'
+    online: '在线',
+    offline: '离线',
+    error: '错误',
+    connecting: '连接中'
   };
   return map[status] || status || '未知';
 }
 
-function getAgentStatusText(status) {
+function getAgentStatusText (status) {
   const map = {
-    'active': '活跃',
-    'idle': '空闲',
-    'busy': '忙碌',
-    'error': '错误',
-    'offline': '离线'
+    active: '活跃',
+    idle: '空闲',
+    busy: '忙碌',
+    error: '错误',
+    offline: '离线'
   };
   return map[status] || status || '未知';
 }
 
-function getTaskStatusText(status) {
+function getTaskStatusText (status) {
   const map = {
-    'running': '运行中',
-    'completed': '已完成',
-    'failed': '失败',
-    'pending': '等待中',
-    'paused': '已暂停'
+    running: '运行中',
+    completed: '已完成',
+    failed: '失败',
+    pending: '等待中',
+    paused: '已暂停'
   };
   return map[status] || status || '未知';
 }
@@ -1268,7 +1270,7 @@ let uploadedFiles = []; // [{name, content, size}]
 let currentEditFile = null;
 let filesEditorDirty = false; // 编辑器脏标记 // 当前在文件管理页面打开的文件路径
 
-function initTaskTemplates() {
+function initTaskTemplates () {
   // 新布局：模板放进 popover
   const pop = document.getElementById('chat-tpl-popover');
   if (pop) {
@@ -1278,13 +1280,13 @@ function initTaskTemplates() {
   }
 }
 
-function toggleTplPopover() {
+function toggleTplPopover () {
   const pop = document.getElementById('chat-tpl-popover');
   if (!pop) return;
   pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
 }
 
-function applyTemplate(i) {
+function applyTemplate (i) {
   const t = TASK_TEMPLATES[i];
   if (!t) return;
   document.getElementById('console-task').value = t.text;
@@ -1293,7 +1295,7 @@ function applyTemplate(i) {
   if (pop) pop.style.display = 'none';
 }
 
-function updateTaskEditor() {
+function updateTaskEditor () {
   const ta = document.getElementById('console-task');
   if (!ta) return;
   const text = ta.value;
@@ -1310,7 +1312,7 @@ function updateTaskEditor() {
   if (exec) exec.disabled = text.trim().length === 0;
 }
 
-function toggleMultiline() {
+function toggleMultiline () {
   multilineMode = !multilineMode;
   const ta = document.getElementById('console-task');
   if (multilineMode) {
@@ -1321,7 +1323,7 @@ function toggleMultiline() {
 }
 
 // 拖拽 + 粘贴 上传（绑定到输入框容器）
-function initUploadDropZone() {
+function initUploadDropZone () {
   const wrap = document.getElementById('chat-input-wrap');
   if (!wrap) return;
   ['dragenter', 'dragover'].forEach(ev => {
@@ -1382,13 +1384,13 @@ function initUploadDropZone() {
   });
 }
 
-function onFileSelected(event) {
+function onFileSelected (event) {
   const files = event.target.files;
   if (files && files.length) handleUploadedFiles(files);
   event.target.value = '';
 }
 
-function handleUploadedFiles(fileList) {
+function handleUploadedFiles (fileList) {
   const arr = Array.from(fileList);
   arr.forEach(f => {
     if (f.size > 2 * 1024 * 1024) {
@@ -1405,7 +1407,7 @@ function handleUploadedFiles(fileList) {
   });
 }
 
-function renderUploadList() {
+function renderUploadList () {
   const wrap = document.getElementById('upload-list');
   if (!wrap) return;
   if (uploadedFiles.length === 0) {
@@ -1423,7 +1425,7 @@ function renderUploadList() {
   if (addBtn) addBtn.classList.add('has-attachments');
 }
 
-function clearOutput() {
+function clearOutput () {
   conversationHistory = [];
   currentTaskMsgId = null;
   customSystemPrompt = null;
@@ -1442,10 +1444,12 @@ function clearOutput() {
   if (bar) bar.style.width = '0%';
   if (text) text.textContent = '';
   // 清除 localStorage 的对话缓存
-  try { localStorage.removeItem('qidi_chat_history'); } catch (_) {}
+  try {
+    localStorage.removeItem('qidi_chat_history');
+  } catch (_) {}
 }
 
-function toggleOutputFiles() {
+function toggleOutputFiles () {
   const body = document.getElementById('output-files-body');
   const toggle = document.getElementById('output-files-toggle');
   if (!body) return;
@@ -1455,7 +1459,7 @@ function toggleOutputFiles() {
 }
 
 // Agent 页底部：工具管理折叠区
-function toggleToolsPanel() {
+function toggleToolsPanel () {
   const body = document.getElementById('tools-panel-body');
   const toggle = document.getElementById('tools-panel-toggle');
   if (!body) return;
@@ -1470,7 +1474,7 @@ function toggleToolsPanel() {
 }
 
 // 文件与报告页：tab 切换
-function switchFilesTab(tab) {
+function switchFilesTab (tab) {
   currentFilesTab = tab;
   const filesBtn = document.getElementById('tab-files-btn');
   const reportsBtn = document.getElementById('tab-reports-btn');
@@ -1492,12 +1496,12 @@ function switchFilesTab(tab) {
   }
 }
 
-function removeUpload(i) {
+function removeUpload (i) {
   uploadedFiles.splice(i, 1);
   renderUploadList();
 }
 
-async function loadFileIntoTask() {
+async function loadFileIntoTask () {
   // 简易：让用户输入路径，载入到任务描述
   const p = prompt('输入工作目录中的相对路径（例如 task_xxx/main.py）：');
   if (!p) return;
@@ -1521,7 +1525,7 @@ async function loadFileIntoTask() {
   }
 }
 
-async function saveTaskToWorkspace() {
+async function saveTaskToWorkspace () {
   const text = document.getElementById('console-task').value.trim();
   if (!text) {
     alert('任务描述为空');
@@ -1546,7 +1550,7 @@ async function saveTaskToWorkspace() {
   }
 }
 
-function copyOutput() {
+function copyOutput () {
   const text = document.getElementById('console-output').innerText;
   navigator.clipboard.writeText(text).then(
     () => alert('已复制到剪贴板'),
@@ -1555,7 +1559,7 @@ function copyOutput() {
 }
 
 // 聊天：发送消息给 AI
-async function sendMessage() {
+async function sendMessage () {
   const ta = document.getElementById('console-task');
   const text = ta.value.trim();
   if (!text) return;
@@ -1661,7 +1665,7 @@ async function sendMessage() {
 }
 
 // 在输出区追加一条消息气泡
-function appendChatMessage(role, content, msgId) {
+function appendChatMessage (role, content, msgId) {
   const outputEl = document.getElementById('console-output');
 
   // 移除空状态占位
@@ -1689,7 +1693,7 @@ function appendChatMessage(role, content, msgId) {
 // ===== 上下文记忆与持久化 =====
 
 /** 从 localStorage 恢复聊天记录 */
-function restoreChatFromStorage() {
+function restoreChatFromStorage () {
   try {
     const saved = localStorage.getItem('qidi_chat_history');
     if (!saved) return;
@@ -1712,7 +1716,7 @@ function restoreChatFromStorage() {
 }
 
 /** 保存聊天记录到 localStorage */
-function saveChatToStorage() {
+function saveChatToStorage () {
   try {
     localStorage.setItem('qidi_chat_history', JSON.stringify({
       history: conversationHistory,
@@ -1724,7 +1728,7 @@ function saveChatToStorage() {
 }
 
 /** 更新上下文用量指示器 */
-function updateContextUsage(usage) {
+function updateContextUsage (usage) {
   const bar = document.getElementById('context-usage-bar');
   const text = document.getElementById('context-usage-text');
   if (!bar || !text) return;
@@ -1752,7 +1756,7 @@ function updateContextUsage(usage) {
 }
 
 // 执行任务（附带上传文件）
-async function executeTaskWithFiles() {
+async function executeTaskWithFiles () {
   // 先把上传文件写入工作目录 uploads/
   if (uploadedFiles.length > 0) {
     try {
@@ -1774,7 +1778,7 @@ async function executeTaskWithFiles() {
   }
 }
 
-async function downloadAllOutputFiles() {
+async function downloadAllOutputFiles () {
   // 简易：依次下载当前任务输出文件
   const cards = document.querySelectorAll('#output-files .output-file-card');
   if (cards.length === 0) {
@@ -1799,7 +1803,7 @@ async function downloadAllOutputFiles() {
 let filesCurrentPath = '.';
 let filesCurrentListing = [];
 
-async function filesRefresh() {
+async function filesRefresh () {
   const pathInput = document.getElementById('files-path');
   filesCurrentPath = (pathInput?.value || '.').trim() || '.';
   const recursive = document.getElementById('files-recursive')?.checked ? '1' : '0';
@@ -1812,7 +1816,7 @@ async function filesRefresh() {
   }
 }
 
-function renderFilesList(data) {
+function renderFilesList (data) {
   const list = document.getElementById('files-list');
   const countEl = document.getElementById('files-count');
   if (!data.exists) {
@@ -1835,7 +1839,7 @@ function renderFilesList(data) {
   // 父目录快捷
   let html = '';
   if (filesCurrentPath !== '.' && filesCurrentPath !== '') {
-    html += `<div class="file-entry" onclick="filesGotoParent()"><span class="file-icon">⬆️</span>..</div>`;
+    html += '<div class="file-entry" onclick="filesGotoParent()"><span class="file-icon">⬆️</span>..</div>';
   }
   html += entries.map(e => {
     const icon = e.type === 'dir' ? '📁' : fileIconFor(e.name);
@@ -1847,10 +1851,11 @@ function renderFilesList(data) {
   list.innerHTML = html || '<div class="empty-state" style="padding:30px;"><div class="empty-text">空目录</div></div>';
 }
 
-function filesGotoParent() {
-  let p = filesCurrentPath;
-  if (p === '.' || p === '') { filesCurrentPath = '.'; }
-  else {
+function filesGotoParent () {
+  const p = filesCurrentPath;
+  if (p === '.' || p === '') {
+    filesCurrentPath = '.';
+  } else {
     const idx = p.lastIndexOf('/');
     filesCurrentPath = idx < 0 ? '.' : p.slice(0, idx) || '.';
   }
@@ -1858,7 +1863,7 @@ function filesGotoParent() {
   filesRefresh();
 }
 
-function filesEntryClick(relPath, type) {
+function filesEntryClick (relPath, type) {
   if (type === 'dir') {
     document.getElementById('files-path').value = relPath;
     filesCurrentPath = relPath;
@@ -1868,19 +1873,42 @@ function filesEntryClick(relPath, type) {
   }
 }
 
-function fileIconFor(name) {
+function fileIconFor (name) {
   const ext = name.split('.').pop()?.toLowerCase();
   const map = {
-    js: '📜', mjs: '📜', cjs: '📜', ts: '📜', tsx: '📜', jsx: '📜',
-    py: '🐍', c: '🔧', cpp: '🔧', h: '🔧', java: '☕', go: '🐹', rs: '🦀',
-    json: '🗂️', md: '📘', txt: '📄', html: '🌐', css: '🎨', yml: '⚙️', yaml: '⚙️',
-    png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️',
-    pdf: '📕', zip: '📦', sql: '🗄️'
+    js: '📜',
+    mjs: '📜',
+    cjs: '📜',
+    ts: '📜',
+    tsx: '📜',
+    jsx: '📜',
+    py: '🐍',
+    c: '🔧',
+    cpp: '🔧',
+    h: '🔧',
+    java: '☕',
+    go: '🐹',
+    rs: '🦀',
+    json: '🗂️',
+    md: '📘',
+    txt: '📄',
+    html: '🌐',
+    css: '🎨',
+    yml: '⚙️',
+    yaml: '⚙️',
+    png: '🖼️',
+    jpg: '🖼️',
+    jpeg: '🖼️',
+    gif: '🖼️',
+    svg: '🖼️',
+    pdf: '📕',
+    zip: '📦',
+    sql: '🗄️'
   };
   return map[ext] || '📄';
 }
 
-async function filesOpenFile(relPath) {
+async function filesOpenFile (relPath) {
   try {
     const res = await fetch(`/api/files/read?path=${encodeURIComponent(relPath)}`);
     if (!res.ok) {
@@ -1923,7 +1951,7 @@ async function filesOpenFile(relPath) {
   }
 }
 
-function filesUpdateGutter() {
+function filesUpdateGutter () {
   const editor = document.getElementById('files-editor');
   const gutter = document.getElementById('files-editor-gutter');
   if (!editor || !gutter) return;
@@ -1931,7 +1959,7 @@ function filesUpdateGutter() {
   gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
 }
 
-function updateFilesEditorStatus() {
+function updateFilesEditorStatus () {
   const statusEl = document.getElementById('files-editor-status');
   if (!statusEl) return;
   if (filesEditorDirty) {
@@ -1946,7 +1974,7 @@ function updateFilesEditorStatus() {
   }
 }
 
-async function filesEditorSave() {
+async function filesEditorSave () {
   if (!currentEditFile || currentEditFile.binary) return;
   const content = document.getElementById('files-editor').value;
   try {
@@ -1968,7 +1996,7 @@ async function filesEditorSave() {
   }
 }
 
-function filesEditorDownload() {
+function filesEditorDownload () {
   if (!currentEditFile) return;
   const a = document.createElement('a');
   a.href = `/api/files/download?path=${encodeURIComponent(currentEditFile.path)}`;
@@ -1976,7 +2004,7 @@ function filesEditorDownload() {
   a.click();
 }
 
-async function filesEditorDelete() {
+async function filesEditorDelete () {
   if (!currentEditFile) return;
   if (!confirm(`确定删除 ${currentEditFile.path}？`)) return;
   try {
@@ -1998,7 +2026,7 @@ async function filesEditorDelete() {
   }
 }
 
-function filesCloseEditor() {
+function filesCloseEditor () {
   // 如果有未保存的更改，提示用户
   if (filesEditorDirty) {
     if (!confirm('有未保存的更改，确定要关闭吗？')) return;
@@ -2013,7 +2041,7 @@ function filesCloseEditor() {
   updateFilesEditorStatus();
 }
 
-function filesNewFile() {
+function filesNewFile () {
   const name = prompt('新文件相对路径（例如 notes/todo.md）：');
   if (!name) return;
   fetch('/api/files/write', {
@@ -2034,7 +2062,7 @@ function filesNewFile() {
   }).catch(e => alert('创建失败: ' + e.message));
 }
 
-function filesNewDir() {
+function filesNewDir () {
   const name = prompt('新目录相对路径：');
   if (!name) return;
   fetch('/api/files/mkdir', {
@@ -2051,21 +2079,21 @@ function filesNewDir() {
   }).catch(e => alert('创建失败: ' + e.message));
 }
 
-function filesUploadClick() {
+function filesUploadClick () {
   document.getElementById('files-upload-input').click();
 }
 
-function filesOnUpload(event) {
+function filesOnUpload (event) {
   const files = Array.from(event.target.files || []);
   if (files.length === 0) return;
-  
+
   // 显示上传进度
   const statusDiv = document.getElementById('files-upload-status');
   if (statusDiv) {
     statusDiv.style.display = 'block';
     statusDiv.innerHTML = `<div style="margin-bottom:4px;font-size:12px;">正在上传 ${files.length} 个文件...</div><div style="background:#e5e7eb;border-radius:4px;height:8px;"><div id="files-upload-progress" style="background:#3b82f6;height:8px;border-radius:4px;width:0%;transition:width 0.3s;"></div></div>`;
   }
-  
+
   // 使用 FormData 进行 multipart 上传
   const formData = new FormData();
   for (const f of files) {
@@ -2074,7 +2102,7 @@ function filesOnUpload(event) {
   if (filesCurrentPath) {
     formData.append('dir', filesCurrentPath);
   }
-  
+
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/files/upload');
   xhr.upload.addEventListener('progress', (e) => {
@@ -2133,7 +2161,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (e.key === 'Tab') {
         e.preventDefault();
-        const s = ta.selectionStart, en = ta.selectionEnd;
+        const s = ta.selectionStart; const en = ta.selectionEnd;
         ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(en);
         ta.selectionStart = ta.selectionEnd = s + 2;
         updateTaskEditor();
@@ -2154,7 +2182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fe.addEventListener('keydown', e => {
       if (e.key === 'Tab') {
         e.preventDefault();
-        const s = fe.selectionStart, en = fe.selectionEnd;
+        const s = fe.selectionStart; const en = fe.selectionEnd;
         fe.value = fe.value.slice(0, s) + '  ' + fe.value.slice(en);
         fe.selectionStart = fe.selectionEnd = s + 2;
         filesUpdateGutter();

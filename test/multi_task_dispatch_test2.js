@@ -1,6 +1,6 @@
 /**
  * 多工具任务派发与合并测试（改进版）
- * 
+ *
  * 确保两个工具都能成功执行不同的任务
  */
 
@@ -11,16 +11,16 @@ const MergeEngine = require('../src/agents/MergeEngine');
 const fs = require('fs');
 const path = require('path');
 
-function createMockProvider() {
+function createMockProvider () {
   return {
     name: 'mock',
     chat: async (messages) => {
       const lastMsg = messages[messages.length - 1]?.content || '';
-      
+
       if (lastMsg.includes('合并')) {
         return {
           content: JSON.stringify({
-            mergedCode: `# 合并后的代码 - 整合了两个工具的产出\n# Claude Code 的斐波那契 + AtomCode 的打印功能\n\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\ndef print_result(func, args):\n    result = func(*args)\n    print(f"结果: {result}")\n\ndef main():\n    for i in range(10):\n        print_result(fibonacci, [i])\n\nif __name__ == "__main__":\n    main()`,
+            mergedCode: '# 合并后的代码 - 整合了两个工具的产出\n# Claude Code 的斐波那契 + AtomCode 的打印功能\n\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\ndef print_result(func, args):\n    result = func(*args)\n    print(f"结果: {result}")\n\ndef main():\n    for i in range(10):\n        print_result(fibonacci, [i])\n\nif __name__ == "__main__":\n    main()',
             conflicts: [
               {
                 location: 'main.py',
@@ -50,7 +50,7 @@ function createMockProvider() {
           role: 'assistant'
         };
       }
-      
+
       return {
         content: JSON.stringify({
           mergedCode: '// 单工具结果',
@@ -68,7 +68,7 @@ function createMockProvider() {
   };
 }
 
-async function testMultiToolDispatch() {
+async function testMultiToolDispatch () {
   console.log('🧪 多工具任务派发与合并测试（改进版）\n');
   console.log('='.repeat(60));
 
@@ -171,11 +171,11 @@ async function testMultiToolDispatch() {
     }
   ];
 
-  console.log(`\n   任务分配:`);
-  console.log(`   ┌─────────────────────────────────────────────────┐`);
+  console.log('\n   任务分配:');
+  console.log('   ┌─────────────────────────────────────────────────┐');
   console.log(`   │ T1: ${tasks[0].title.padEnd(20)} → Claude Code      │`);
   console.log(`   │ T2: ${tasks[1].title.padEnd(20)} → AtomCode       │`);
-  console.log(`   └─────────────────────────────────────────────────┘`);
+  console.log('   └─────────────────────────────────────────────────┘');
 
   console.log('\n   正在并行执行...');
   const startTime = Date.now();
@@ -200,10 +200,10 @@ async function testMultiToolDispatch() {
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     const result = results[i];
-    
+
     if (result.status === 'fulfilled') {
       const execResult = result.value;
-      
+
       toolResults[task.assignedTool] = {
         success: execResult.success,
         taskId: task.id,
@@ -213,7 +213,7 @@ async function testMultiToolDispatch() {
         codeBlocks: execResult.codeBlocks || [],
         duration: execResult.duration
       };
-      
+
       if (execResult.success) {
         successCount++;
         console.log(`   ✅ ${task.assignedTool}: ${task.title} - 成功`);
@@ -272,13 +272,13 @@ async function testMultiToolDispatch() {
     techStack: 'python'
   });
 
-  console.log(`   ✅ 合并完成`);
+  console.log('   ✅ 合并完成');
   console.log(`   合并策略: ${mergeResult.mergeStrategy}`);
   console.log(`   冲突数: ${mergeResult.conflicts?.length || 0}`);
   console.log(`   改进数: ${mergeResult.improvements?.length || 0}`);
-  
+
   if (mergeResult.qualityAssessment) {
-    console.log(`\n   质量评分:`);
+    console.log('\n   质量评分:');
     console.log(`      - 正确性: ${mergeResult.qualityAssessment.correctness}`);
     console.log(`      - 一致性: ${mergeResult.qualityAssessment.consistency}`);
     console.log(`      - 可读性: ${mergeResult.qualityAssessment.readability}`);
@@ -313,7 +313,7 @@ async function testMultiToolDispatch() {
   console.log('\n' + '='.repeat(60));
   console.log('📊 多工具任务派发与合并测试总结');
   console.log('-'.repeat(40));
-  
+
   if (successCount === 2) {
     console.log('   ✅ 两个工具都成功执行不同任务');
     console.log('   ✅ Claude Code 和 AtomCode 并行执行');
@@ -325,7 +325,7 @@ async function testMultiToolDispatch() {
     console.log(`   ❌ 只有 ${successCount}/2 个工具成功`);
     console.log('   ⚠️ 需要在更好的网络/资源条件下测试');
   }
-  
+
   console.log('='.repeat(60));
 
   return { success: successCount === 2, mergeResult, toolResults };

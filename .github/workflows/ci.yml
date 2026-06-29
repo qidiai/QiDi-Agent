@@ -69,3 +69,5 @@ jobs:
           if [ "$count" -gt "0" ]; then
             echo "::warning::Found $count console.log() calls in src/ — consider using logger"
           fi
+      - name: Run ESLint
+        run: npm run lint:ci

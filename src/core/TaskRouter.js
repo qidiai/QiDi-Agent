@@ -4,7 +4,7 @@
  * - round_robin：轮询分发，每个工具轮流执行
  * - capability：根据工具能力智能匹配
  * - manual：根据预定义路由表手动指定
- * 
+ *
  * 隐私保护原理：
  * - 每个子任务只发给一个工具
  * - 工具之间互不知道其他工具的产出
@@ -12,7 +12,7 @@
  */
 
 class TaskRouter {
-  constructor(adapters = [], options = {}) {
+  constructor (adapters = [], options = {}) {
     this.adapters = adapters;
     this.options = {
       strategy: options.strategy || 'round_robin',
@@ -36,14 +36,14 @@ class TaskRouter {
     this.toolLearning = options.toolLearning || null;
   }
 
-  setToolLearning(toolLearning) {
+  setToolLearning (toolLearning) {
     this.toolLearning = toolLearning;
   }
 
   /**
    * 获取可用的适配器列表（过滤熔断的工具）
    */
-  getAvailableAdapters() {
+  getAvailableAdapters () {
     const available = this.adapters.filter(a => a.isAvailable && a.isAvailable());
     return available.filter(adapter => this._isAdapterAvailable(adapter));
   }
@@ -51,7 +51,7 @@ class TaskRouter {
   /**
    * 检查适配器是否可用（熔断器检查）
    */
-  _isAdapterAvailable(adapter) {
+  _isAdapterAvailable (adapter) {
     const breaker = this._getOrCreateCircuitBreaker(adapter.name);
     return breaker.state !== 'open';
   }
@@ -59,7 +59,7 @@ class TaskRouter {
   /**
    * 获取或创建熔断器
    */
-  _getOrCreateCircuitBreaker(toolName) {
+  _getOrCreateCircuitBreaker (toolName) {
     if (!this.circuitBreakers[toolName]) {
       this.circuitBreakers[toolName] = {
         state: 'closed',
@@ -77,7 +77,7 @@ class TaskRouter {
   /**
    * 记录工具执行结果
    */
-  recordTaskResult(toolName, success, errorMessage) {
+  recordTaskResult (toolName, success, errorMessage) {
     const breaker = this._getOrCreateCircuitBreaker(toolName);
     breaker.totalRequests++;
 
@@ -117,7 +117,7 @@ class TaskRouter {
   /**
    * 转换到打开状态（熔断）
    */
-  _transitionToOpen(toolName) {
+  _transitionToOpen (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker) return;
 
@@ -130,7 +130,7 @@ class TaskRouter {
   /**
    * 转换到半开状态（恢复探测）
    */
-  _transitionToHalfOpen(toolName) {
+  _transitionToHalfOpen (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker) return;
 
@@ -142,7 +142,7 @@ class TaskRouter {
   /**
    * 转换到关闭状态（正常）
    */
-  _transitionToClosed(toolName) {
+  _transitionToClosed (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker) return;
 
@@ -157,7 +157,7 @@ class TaskRouter {
   /**
    * 检查半开状态的工具是否可以放行探测请求
    */
-  allowHalfOpenProbe(toolName) {
+  allowHalfOpenProbe (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker || breaker.state !== 'half_open') {
       return { allowed: false, usedProbe: false };
@@ -174,7 +174,7 @@ class TaskRouter {
   /**
    * 检查并更新熔断器状态（处理超时恢复）
    */
-  checkAndUpdateState(toolName) {
+  checkAndUpdateState (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker) return;
 
@@ -189,7 +189,7 @@ class TaskRouter {
   /**
    * 获取熔断器状态
    */
-  getCircuitBreakerStats(toolName) {
+  getCircuitBreakerStats (toolName) {
     const breaker = this.circuitBreakers[toolName];
     if (!breaker) {
       return null;
@@ -215,7 +215,7 @@ class TaskRouter {
   /**
    * 获取所有熔断器状态
    */
-  getAllCircuitBreakerStats() {
+  getAllCircuitBreakerStats () {
     const stats = [];
     for (const toolName of Object.keys(this.circuitBreakers)) {
       stats.push(this.getCircuitBreakerStats(toolName));
@@ -226,7 +226,7 @@ class TaskRouter {
   /**
    * 重置熔断器
    */
-  resetCircuitBreaker(toolName) {
+  resetCircuitBreaker (toolName) {
     if (this.circuitBreakers[toolName]) {
       this._transitionToClosed(toolName);
       return { success: true, message: `${toolName} 熔断器已重置` };
@@ -237,7 +237,7 @@ class TaskRouter {
   /**
    * 重置所有熔断器
    */
-  resetAllCircuitBreakers() {
+  resetAllCircuitBreakers () {
     for (const toolName of Object.keys(this.circuitBreakers)) {
       this._transitionToClosed(toolName);
     }
@@ -247,7 +247,7 @@ class TaskRouter {
   /**
    * 获取路由策略列表
    */
-  getStrategies() {
+  getStrategies () {
     return [
       {
         name: 'round_robin',
@@ -279,7 +279,7 @@ class TaskRouter {
   /**
    * 默认工具能力表
    */
-  _buildDefaultCapabilities() {
+  _buildDefaultCapabilities () {
     return {
       'claude-code': {
         languages: ['python', 'javascript', 'typescript', 'go', 'rust', 'java', 'c', 'cpp', 'csharp', 'php', 'ruby'],
@@ -297,7 +297,7 @@ class TaskRouter {
         roles: ['code_writer', 'tester'],
         description: 'Open Code - 开源 AI 编程工具'
       },
-      'openclaw': {
+      openclaw: {
         languages: ['python', 'javascript', 'typescript', 'lua', 'go'],
         frameworks: ['love2d', 'defold', 'unity'],
         strengths: ['game_dev', 'scripting', 'automation'],
@@ -305,7 +305,7 @@ class TaskRouter {
         roles: ['code_writer', 'tester'],
         description: 'OpenClaw - 游戏开发专用 AI 工具'
       },
-      'qoder': {
+      qoder: {
         languages: ['python', 'javascript', 'typescript', 'bash'],
         frameworks: ['flask', 'express', 'django'],
         strengths: ['quick_prototypes', 'scripting', 'cli_tools'],
@@ -337,7 +337,7 @@ class TaskRouter {
         roles: ['code_writer', 'tester'],
         description: 'Mimo Code - 学习友好的编程助手'
       },
-      'trae': {
+      trae: {
         languages: ['python', 'javascript', 'typescript', 'go', 'rust', 'java'],
         frameworks: ['react', 'vue', 'next', 'fastapi', 'spring'],
         strengths: ['fullstack', 'architecture', 'enterprise'],
@@ -351,14 +351,14 @@ class TaskRouter {
   /**
    * 更新工具能力表
    */
-  setCapabilities(capabilities) {
+  setCapabilities (capabilities) {
     this.options.capabilities = { ...this.options.capabilities, ...capabilities };
   }
 
   /**
    * 设置手动路由表
    */
-  setManualRouting(routingTable) {
+  setManualRouting (routingTable) {
     this.options.manualRouting = { ...this.options.manualRouting, ...routingTable };
   }
 
@@ -367,7 +367,7 @@ class TaskRouter {
    * @param {Array} tasks - 子任务列表
    * @returns {Array} - 每个任务分配的适配器信息
    */
-  routeTasks(tasks) {
+  routeTasks (tasks) {
     const available = this.getAvailableAdapters();
     if (available.length === 0) {
       return tasks.map(t => ({ task: t, adapter: null, reason: '无可用工具' }));
@@ -396,23 +396,23 @@ class TaskRouter {
   /**
    * 为单个任务选择工具
    */
-  routeTask(task) {
+  routeTask (task) {
     const available = this.getAvailableAdapters();
     if (available.length === 0) {
       return { adapter: null, reason: '无可用工具' };
     }
 
     switch (this.options.strategy) {
-      case 'round_robin':
-        return this._routeRoundRobin(task, available);
-      case 'capability':
-        return this._routeByCapability(task, available);
-      case 'manual':
-        return this._routeManual(task, available);
-      case 'broadcast':
-        return { adapter: available, reason: '广播模式：所有工具执行', isBroadcast: true };
-      default:
-        return this._routeRoundRobin(task, available);
+    case 'round_robin':
+      return this._routeRoundRobin(task, available);
+    case 'capability':
+      return this._routeByCapability(task, available);
+    case 'manual':
+      return this._routeManual(task, available);
+    case 'broadcast':
+      return { adapter: available, reason: '广播模式：所有工具执行', isBroadcast: true };
+    default:
+      return this._routeRoundRobin(task, available);
     }
   }
 
@@ -421,7 +421,7 @@ class TaskRouter {
    * 隐私保护：每个工具只拿到部分任务
    * 熔断器感知：自动跳过熔断的工具
    */
-  _routeRoundRobin(task, available) {
+  _routeRoundRobin (task, available) {
     if (available.length === 0) {
       return { adapter: null, reason: '无可用工具' };
     }
@@ -457,7 +457,7 @@ class TaskRouter {
    * 能力匹配路由：根据任务复杂度、语言、框架匹配最佳工具
    * 隐私保护：根据能力分配，工具只执行适合的任务
    */
-  _routeByCapability(task, available) {
+  _routeByCapability (task, available) {
     const scores = available.map(adapter => {
       const caps = this.options.capabilities[adapter.name] || {};
       const score = this._calculateCapabilityScore(task, caps, adapter.name);
@@ -489,7 +489,7 @@ class TaskRouter {
   /**
    * 计算任务与工具能力的匹配度
    */
-  _calculateCapabilityScore(task, caps, toolName) {
+  _calculateCapabilityScore (task, caps, toolName) {
     let score = 0;
     const details = [];
 
@@ -565,7 +565,7 @@ class TaskRouter {
   /**
    * 获取复杂度匹配分数
    */
-  _getComplexityScore(taskComplexity, maxComplexity) {
+  _getComplexityScore (taskComplexity, maxComplexity) {
     const levels = { low: 1, medium: 2, high: 3 };
     const taskLevel = levels[taskComplexity] || 2;
     const maxLevel = levels[maxComplexity] || 2;
@@ -579,7 +579,7 @@ class TaskRouter {
   /**
    * 解释能力匹配原因
    */
-  _explainCapabilityMatch(task, caps, score) {
+  _explainCapabilityMatch (task, caps, score) {
     const toolName = caps.description || caps.name || '未知工具';
     const matches = [];
 
@@ -588,7 +588,7 @@ class TaskRouter {
     }
 
     if (task.frameworks && task.frameworks.length > 0 && caps.frameworks) {
-      const matched = task.frameworks.filter(f => 
+      const matched = task.frameworks.filter(f =>
         caps.frameworks.some(cf => cf.toLowerCase() === f.toLowerCase())
       );
       if (matched.length > 0) matches.push(`熟悉${matched.join(', ')}`);
@@ -609,7 +609,7 @@ class TaskRouter {
    * 手动路由：根据预定义路由表分配
    * 隐私保护：精确控制每个任务类型的去向
    */
-  _routeManual(task, available) {
+  _routeManual (task, available) {
     const toolName = this.options.manualRouting[task.role];
 
     if (!toolName) {
@@ -635,7 +635,7 @@ class TaskRouter {
   /**
    * 获取路由统计信息
    */
-  getRoutingStats(routedTasks) {
+  getRoutingStats (routedTasks) {
     const stats = {
       totalTasks: routedTasks.length,
       assignedTasks: routedTasks.filter(r => r.adapter !== null).length,
@@ -678,7 +678,7 @@ class TaskRouter {
   /**
    * 验证路由配置是否合理
    */
-  validateRouting(routedTasks) {
+  validateRouting (routedTasks) {
     const issues = [];
 
     // 检查是否有任务未分配
@@ -689,7 +689,7 @@ class TaskRouter {
 
     // 检查是否有任务分配给了不存在的工具
     const availableNames = this.getAvailableAdapters().map(a => a.name);
-    const invalidAssignments = routedTasks.filter(r => 
+    const invalidAssignments = routedTasks.filter(r =>
       r.adapter && !availableNames.includes(r.adapter.name)
     );
     if (invalidAssignments.length > 0) {

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 class CacheStore {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.options = options;
     this.cache = new Map();
     this.maxSize = options.maxSize || 100;
@@ -23,13 +23,13 @@ class CacheStore {
     this._pendingSave = false;
   }
 
-  _ensureDir(dir) {
+  _ensureDir (dir) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
 
-  _load() {
+  _load () {
     try {
       const filePath = path.join(this.persistDir, this.persistFile);
       if (fs.existsSync(filePath)) {
@@ -44,7 +44,7 @@ class CacheStore {
     }
   }
 
-  _save() {
+  _save () {
     try {
       const filePath = path.join(this.persistDir, this.persistFile);
       const data = {};
@@ -56,12 +56,12 @@ class CacheStore {
     }
   }
 
-  _hash(input) {
+  _hash (input) {
     const normalized = typeof input === 'string' ? input : JSON.stringify(input);
     return crypto.createHash('sha256').update(normalized).digest('hex');
   }
 
-  _normalizeText(text) {
+  _normalizeText (text) {
     return text
       .toLowerCase()
       .replace(/\s+/g, ' ')
@@ -69,29 +69,29 @@ class CacheStore {
       .trim();
   }
 
-  _calculateSimilarity(text1, text2) {
+  _calculateSimilarity (text1, text2) {
     const norm1 = this._normalizeText(text1);
     const norm2 = this._normalizeText(text2);
-    
+
     const words1 = norm1.split(' ');
     const words2 = norm2.split(' ');
-    
+
     const set1 = new Set(words1);
     const set2 = new Set(words2);
-    
+
     const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
-    
+
     return intersection.size / union.size;
   }
 
-  set(key, response, metadata = {}) {
+  set (key, response, metadata = {}) {
     const cacheKey = this._hash(key);
-    
+
     const entry = {
       key: cacheKey,
       originalKey: key.substring(0, 100),
-      response: response,
+      response,
       metadata: {
         ...metadata,
         timestamp: Date.now(),
@@ -100,7 +100,7 @@ class CacheStore {
     };
 
     this.cache.set(cacheKey, entry);
-    
+
     if (this.cache.size > this.maxSize) {
       this._evictOldest();
     }
@@ -109,11 +109,11 @@ class CacheStore {
     return cacheKey;
   }
 
-  get(key) {
+  get (key) {
     const cacheKey = this._hash(key);
-    
+
     const entry = this.cache.get(cacheKey);
-    
+
     if (entry) {
       if (Date.now() - entry.metadata.timestamp > this.maxAge) {
         this.cache.delete(cacheKey);
@@ -146,24 +146,24 @@ class CacheStore {
     return null;
   }
 
-  _findSimilar(key, threshold) {
+  _findSimilar (key, threshold) {
     const thresholdVal = threshold != null ? threshold : this.similarityThreshold;
     const normalizedKey = this._normalizeText(key);
     let bestMatch = null;
     let bestSimilarity = 0;
-    
+
     let iterations = 0;
     for (const [cacheKey, entry] of this.cache.entries()) {
       if (++iterations > 5000) break; // 防止大缓存时完全遍历
       if (!entry || !entry.originalKey) continue;
       const similarity = this._calculateSimilarity(key, entry.originalKey);
-      
+
       if (similarity >= thresholdVal && similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = {
           response: entry.response,
           metadata: entry.metadata,
-          similarity: similarity
+          similarity
         };
       }
     }
@@ -171,7 +171,7 @@ class CacheStore {
     return bestMatch;
   }
 
-  _evictOldest() {
+  _evictOldest () {
     let oldestKey = null;
     let oldestTime = Infinity;
 
@@ -187,50 +187,50 @@ class CacheStore {
     }
   }
 
-  has(key) {
+  has (key) {
     return this.get(key) !== null;
   }
 
-  delete(key) {
+  delete (key) {
     const cacheKey = this._hash(key);
     const result = this.cache.delete(cacheKey);
     this._debouncedSave();
     return result;
   }
 
-  clear() {
+  clear () {
     this.cache.clear();
     this.stats = { hits: 0, misses: 0, savedTokens: 0 };
     this._debouncedSave();
   }
 
-  getStats() {
+  getStats () {
     return {
       ...this.stats,
       size: this.cache.size,
       maxSize: this.maxSize,
-      hitRate: this.stats.hits > 0 
+      hitRate: this.stats.hits > 0
         ? Math.round((this.stats.hits / (this.stats.hits + this.stats.misses)) * 100)
         : 0
     };
   }
 
-  getReport() {
+  getReport () {
     const stats = this.getStats();
-    
-    let report = `\n📊 缓存统计报告\n`;
-    report += `═══════════════════════════════════════════\n`;
+
+    let report = '\n📊 缓存统计报告\n';
+    report += '═══════════════════════════════════════════\n';
     report += `缓存大小: ${stats.size}/${stats.maxSize}\n`;
     report += `命中次数: ${stats.hits}\n`;
     report += `未命中次数: ${stats.misses}\n`;
     report += `命中率: ${stats.hitRate}%\n`;
     report += `节省 tokens: ${stats.savedTokens.toLocaleString()}\n`;
-    report += `═══════════════════════════════════════════\n`;
-    
+    report += '═══════════════════════════════════════════\n';
+
     return report;
   }
 
-  _debouncedSave() {
+  _debouncedSave () {
     if (this._pendingSave) return;
     this._pendingSave = true;
     if (this._saveTimer) clearTimeout(this._saveTimer);
@@ -244,7 +244,7 @@ class CacheStore {
   /**
    * 强制立即持久化
    */
-  flush() {
+  flush () {
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
@@ -253,7 +253,7 @@ class CacheStore {
     this._save();
   }
 
-  pruneExpired() {
+  pruneExpired () {
     const now = Date.now();
     let pruned = 0;
 
@@ -271,11 +271,11 @@ class CacheStore {
   /**
    * 查找与给定文本语义相似的缓存条目
    */
-  findSimilar(text, threshold) {
+  findSimilar (text, threshold) {
     return this._findSimilar(text, threshold);
   }
 
-  setTaskResponse(taskId, agentName, task, response, metadata = {}) {
+  setTaskResponse (taskId, agentName, task, response, metadata = {}) {
     const desc = typeof task === 'object' && task ? (task.description || task.title || JSON.stringify(task).substring(0, 50)) : String(task || '').substring(0, 50);
     const title = typeof task === 'object' && task ? (task.title || task.description || '') : '';
     const key = `${agentName}:${taskId}:${String(title).substring(0, 50)}:${String(desc).substring(0, 50)}`;
@@ -286,7 +286,7 @@ class CacheStore {
     });
   }
 
-  getTaskResponse(taskId, agentName, task) {
+  getTaskResponse (taskId, agentName, task) {
     const desc = typeof task === 'object' && task ? (task.description || task.title || JSON.stringify(task).substring(0, 50)) : String(task || '').substring(0, 50);
     const title = typeof task === 'object' && task ? (task.title || task.description || '') : '';
     const key = `${agentName}:${taskId}:${String(title).substring(0, 50)}:${String(desc).substring(0, 50)}`;
