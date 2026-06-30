@@ -32,10 +32,10 @@ class InteractiveSession {
   constructor (options = {}) {
     this.workspaceDir = options.workspaceDir || './workspace';
     this.configDir = options.configDir || path.join(__dirname, '../../config');
-    
+
     this.configManager = new ConfigManager();
     const savedConfig = this.configManager.getConfig();
-    
+
     this.defaultMode = options.mode || savedConfig.executionMode || 'privacy';
     this.defaultProvider = options.provider || savedConfig.provider || process.env.MODEL_PROVIDER || 'ollama';
     this.defaultModel = savedConfig.model || '';

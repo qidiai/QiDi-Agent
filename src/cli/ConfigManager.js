@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 class ConfigManager {
-  constructor() {
+  constructor () {
     this.configDir = path.join(process.env.HOME || process.env.USERPROFILE, '.qidi');
     this.configFile = path.join(this.configDir, 'config.json');
     this.defaultConfig = {
@@ -20,7 +20,7 @@ class ConfigManager {
     };
   }
 
-  getConfig() {
+  getConfig () {
     try {
       if (fs.existsSync(this.configFile)) {
         const content = fs.readFileSync(this.configFile, 'utf-8');
@@ -33,7 +33,7 @@ class ConfigManager {
     return { ...this.defaultConfig };
   }
 
-  saveConfig(config) {
+  saveConfig (config) {
     try {
       if (!fs.existsSync(this.configDir)) {
         fs.mkdirSync(this.configDir, { recursive: true });
@@ -47,7 +47,7 @@ class ConfigManager {
     }
   }
 
-  clearConfig() {
+  clearConfig () {
     try {
       if (fs.existsSync(this.configFile)) {
         fs.unlinkSync(this.configFile);
@@ -59,12 +59,12 @@ class ConfigManager {
     }
   }
 
-  hasValidConfig() {
+  hasValidConfig () {
     const config = this.getConfig();
     if (config.provider === 'ollama') {
       return true;
     }
-    if (config.provider === 'openai' || config.provider === 'anthropic' || 
+    if (config.provider === 'openai' || config.provider === 'anthropic' ||
         config.provider === 'doubao' || config.provider === 'qianfan' ||
         config.provider === 'qwen' || config.provider === 'deepseek' ||
         config.provider === 'moonshot' || config.provider === 'minimax') {
@@ -73,13 +73,13 @@ class ConfigManager {
     return false;
   }
 
-  updateConfig(key, value) {
+  updateConfig (key, value) {
     const config = this.getConfig();
     config[key] = value;
     return this.saveConfig(config);
   }
 
-  getConfigSummary() {
+  getConfigSummary () {
     const config = this.getConfig();
     const summary = {
       executionMode: config.executionMode,
@@ -92,7 +92,7 @@ class ConfigManager {
     return summary;
   }
 
-  getModeLabel(mode) {
+  getModeLabel (mode) {
     const labels = {
       privacy: '🔒 隐私模式',
       quality: '✨ 高质量模式',
@@ -101,7 +101,7 @@ class ConfigManager {
     return labels[mode] || mode;
   }
 
-  getProviderLabel(provider) {
+  getProviderLabel (provider) {
     const labels = {
       ollama: '🖥️ Ollama (本地)',
       openai: '☁️ OpenAI',

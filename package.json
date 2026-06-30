@@ -1,6 +1,6 @@
 {
   "name": "qidi-agent",
-  "version": "1.3.1",
+  "version": "2.0.0",
   "description": "启迪 Agent - 多 AI 编程工具统一编排与协作平台",
   "main": "src/cli/index.js",
   "bin": {
@@ -18,16 +18,18 @@
     "lint:ci": "eslint src/ public/ test/ --ext .js --max-warnings 0"
   },
   "keywords": [
-    "ai",
+    "ai-coding",
     "agent",
     "orchestrator",
-    "code",
-    "qidi",
+    "llm",
+    "code-generation",
     "ollama",
-    "claude",
-    "openclaw",
-    "多智能体",
-    "任务编排"
+    "multi-agent",
+    "free-ai",
+    "code-orchestration",
+    "claude-code",
+    "deepseek",
+    "copilot-alternative"
   ],
   "author": "",
   "license": "MIT",

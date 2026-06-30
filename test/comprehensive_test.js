@@ -906,7 +906,148 @@ async function testTaskOrchestrator () {
 }
 
 // ════════════════════════════════════════════════
-// 8. 工具适配器功能测试
+// 8. Multi-Provider 模式测试（新增）
+// ════════════════════════════════════════════════
+async function testMultiProviderMode () {
+  console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
+  console.log(chalk.bold.cyan('  8. Multi-Provider 并行模式测试（新增）'));
+  console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
+
+  await test('多 Provider 模式配置正确', async () => {
+    const mockProviderA = {
+      name: 'mock-a',
+      model: 'mock-a',
+      chat: async (msgs, opts) => ({ content: '```python\n# 文件路径: main.py\nprint("from A")\n```', model: 'mock-a' }),
+      generate: async (p, o) => ({ content: p, model: 'mock-a' }),
+      checkConnection: async () => true
+    };
+    const mockProviderB = {
+      name: 'mock-b',
+      model: 'mock-b',
+      chat: async (msgs, opts) => ({ content: '```python\n# 文件路径: main.py\nprint("from B")\n```', model: 'mock-b' }),
+      generate: async (p, o) => ({ content: p, model: 'mock-b' }),
+      checkConnection: async () => true
+    };
+
+    const TaskOrchestrator = require('../src/core/TaskOrchestrator');
+    const orch = new TaskOrchestrator(mockProviderA, {
+      workspaceDir: './test_tmp/multi_provider_test',
+      executionMode: 'multi',
+      providers: [mockProviderA, mockProviderB],
+      enableCache: false,
+      maxRetries: 0
+    });
+
+    assert(orch.multiProviderMode === true, 'multi 模式应启用 multiProviderMode');
+    assert(orch.providers.length === 2, '应有 2 个 provider');
+    assert(orch.executor.providers.length === 2, 'TaskExecutor 应持有 2 个 provider');
+    assert(orch.executor.multiProviderMode === true, 'TaskExecutor 应启用 multi 模式');
+  });
+
+  await test('multi 模式路由策略正确', async () => {
+    const mockProvider = {
+      name: 'mock',
+      model: 'mock',
+      chat: async () => ({ content: '', model: 'mock' }),
+      generate: async () => ({ content: '', model: 'mock' }),
+      checkConnection: async () => true
+    };
+
+    const TaskOrchestrator = require('../src/core/TaskOrchestrator');
+    const orch = new TaskOrchestrator(mockProvider, {
+      workspaceDir: './test_tmp/multi_route_test',
+      executionMode: 'multi'
+    });
+
+    assertEqual(orch.getExecutionMode(), 'multi');
+    assert(orch.routingStrategy !== null, '路由策略不应为空');
+  });
+
+  await test('ExecutionModeManager multi 模式配置完整', async () => {
+    const ExecutionModeManager = require('../src/core/ExecutionModeManager');
+    const mgr = new ExecutionModeManager();
+    const config = mgr.getModeConfig('multi');
+
+    assert(config, 'multi 模式配置不存在');
+    assertEqual(config.name, 'multi');
+    assert(config.displayName, 'multi 模式缺少 displayName');
+    assert(config.description, 'multi 模式缺少 description');
+    assert(config.useCases, 'multi 模式缺少 useCases');
+    assert(config.useCases.length > 0, 'multi 模式 useCases 不应为空');
+  });
+}
+
+// ════════════════════════════════════════════════
+// 9. refineCode 修订循环测试（新增）
+// ════════════════════════════════════════════════
+async function testRefineCodeLoop () {
+  console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
+  console.log(chalk.bold.cyan('  9. refineCode 修订循环测试（新增）'));
+  console.log(chalk.bold.cyan('══════════════════════════════════════\n'));
+
+  await test('CodeWriterAgent refineCode 调用成功', async () => {
+    let callCount = 0;
+    const mockProvider = {
+      name: 'mock',
+      model: 'mock',
+      chat: async (msgs, opts) => {
+        callCount++;
+        if (callCount === 1) {
+          return { content: '```python\ndef add(a, b):\n  return a - b  # 故意写错\n```' };
+        }
+        return { content: '```python\ndef add(a, b):\n  return a + b  # 已修正\n```' };
+      },
+      generate: async (p, o) => ({ content: p, model: 'mock' }),
+      checkConnection: async () => true
+    };
+
+    const CodeWriterAgent = require('../src/agents/CodeWriterAgent');
+    const writer = new CodeWriterAgent(mockProvider);
+
+    const result1 = await writer.writeCode(
+      { id: 'T1', title: '加法函数', description: '实现加法', language: 'python' },
+      { constraints: { language: 'python' } }
+    );
+    assert(result1.codeBlocks.length > 0, 'writeCode 应产出代码块');
+
+    const refined = await writer.refineCode(
+      { id: 'T1', title: '加法函数', language: 'python' },
+      'def add(a, b):\n  return a - b',
+      { revisionSuggestions: '返回值应该是 a+b 而非 a-b', weaknesses: ['减法写成加法'] },
+      { constraints: { language: 'python' } }
+    );
+    assert(refined.refinementApplied === true, 'refineCode 应标记 refinementApplied');
+    assert(refined.codeBlocks.length > 0, 'refineCode 应产出代码块');
+    assert(refined.codeBlocks[0].code.includes('a + b') || refined.codeBlocks[0].code.includes('a+b'),
+      'refineCode 应包含修正后的代码');
+  });
+
+  await test('CodeWriterAgent writeCode 基础功能', async () => {
+    const mockProvider = {
+      name: 'mock',
+      model: 'mock',
+      chat: async () => ({ content: '```python\ndef hello():\n  return "hello"\n```' }),
+      generate: async () => ({ content: '', model: 'mock' }),
+      checkConnection: async () => true
+    };
+
+    const CodeWriterAgent = require('../src/agents/CodeWriterAgent');
+    const writer = new CodeWriterAgent(mockProvider);
+
+    const result = await writer.writeCode(
+      { id: 'T1', title: '测试任务', description: '写一个简单函数', language: 'python' },
+      { constraints: { language: 'python' } }
+    );
+
+    assert(result !== null && result !== undefined, 'writeCode 不应返回 null/undefined');
+    assert(result.codeBlocks !== undefined, '结果应包含 codeBlocks');
+    assert(result.codeBlocks.length > 0, '应产出代码块');
+    assert(result.codeBlocks[0].language === 'python', '语言应为 python');
+  });
+}
+
+// ════════════════════════════════════════════════
+// 10. 工具适配器功能测试
 // ════════════════════════════════════════════════
 async function testAdapters () {
   console.log(chalk.bold.cyan('\n══════════════════════════════════════'));
@@ -1052,6 +1193,8 @@ async function main () {
     await testContractAssembler();
     await testMergeEngine();
     await testTaskOrchestrator();
+    await testMultiProviderMode();
+    await testRefineCodeLoop();
     await testAdapters();
     await testCLI();
     await testConfig();
