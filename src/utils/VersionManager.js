@@ -92,7 +92,9 @@ class VersionManager {
           headers: { 'User-Agent': 'qidi-agent' }
         }, (res) => {
           let data = '';
-          res.on('data', chunk => { data += chunk; });
+          res.on('data', chunk => {
+            data += chunk;
+          });
           res.on('end', () => {
             try {
               const json = JSON.parse(data);
@@ -151,8 +153,12 @@ class VersionManager {
           headers: { 'User-Agent': 'qidi-agent' }
         }, (res) => {
           let data = '';
-          res.on('data', chunk => { data += chunk; });
-          res.on('end', () => { resolve(data); });
+          res.on('data', chunk => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            resolve(data);
+          });
         }).on('error', () => resolve(null));
       } catch {
         resolve(null);

@@ -1,4 +1,5 @@
 const MergeEngine = require('../agents/MergeEngine');
+const MultiProviderRunner = require('./MultiProviderRunner');
 
 /**
  * 任务执行器：负责单任务的具体执行逻辑。
@@ -27,6 +28,17 @@ class TaskExecutor {
     this.toolAdapters = options.toolAdapters || [];
     this._getTaskRouter = options._getTaskRouter || null;
     this.providers = options.providers || [];
+
+    this.multiProviderRunner = null;
+    if (this.multiProviderMode && this.providers.length > 1) {
+      this.multiProviderRunner = new MultiProviderRunner({
+        providers: this.providers,
+        fileManager: this.fileManager,
+        onEvent: (eventName, data) => {
+          options.onEvent?.(eventName, data);
+        }
+      });
+    }
   }
 
   /**
@@ -172,8 +184,8 @@ class TaskExecutor {
       return await this._executePrivacyMode(task, enhancedContext, useSmallModel);
     }
 
-    if (this.multiProviderMode && this.providers.length > 1) {
-      return await this._executeMultiProviderMode(task, enhancedContext, useSmallModel);
+    if (this.multiProviderMode && this.multiProviderRunner) {
+      return await this.multiProviderRunner.execute(task, enhancedContext, useSmallModel);
     }
 
     let providerResult;
@@ -198,155 +210,6 @@ class TaskExecutor {
     }
 
     return finalResult;
-  }
-
-  async _executeMultiProviderMode (task, context, useSmallModel = false) {
-    context.orchestrator?.emit('multiProviderStart', {
-      task,
-      providers: this.providers.map(p => p.name || p.constructor.name),
-      count: this.providers.length
-    });
-
-    const AgentFactory = require('../agents');
-    const allResults = {};
-    const promises = this.providers.map(async (provider, index) => {
-      const providerName = provider.name || `provider_${index + 1}`;
-
-      try {
-        const agents = AgentFactory.createAll(provider);
-        const result = await agents.codeWriter?.writeCode(task, context, { useSmallModel });
-
-        allResults[providerName] = {
-          success: true,
-          result: { codeBlocks: result?.codeBlocks || [], content: result?.content || '' },
-          content: result?.content || '',
-          providerName,
-          model: result?.model || 'unknown'
-        };
-
-        context.orchestrator?.emit('multiProviderResult', {
-          task,
-          provider: providerName,
-          hasCodeBlocks: (result?.codeBlocks?.length || 0) > 0
-        });
-      } catch (error) {
-        allResults[providerName] = {
-          success: false,
-          error: error.message,
-          providerName
-        };
-        context.orchestrator?.emit('multiProviderError', { task, provider: providerName, error: error.message });
-      }
-    });
-
-    await Promise.all(promises);
-
-    const validResults = Object.keys(allResults).filter(name => allResults[name].success);
-
-    if (validResults.length === 0) {
-      context.orchestrator?.emit('multiProviderFailed', { task, error: '所有Provider都执行失败' });
-      return { content: '', codeBlocks: [], multiProviderFailed: true };
-    }
-
-    if (validResults.length === 1) {
-      const singleResult = allResults[validResults[0]];
-      return {
-        ...singleResult.result,
-        content: singleResult.content,
-        source: 'multi_provider_single',
-        providerName: validResults[0],
-        _providerCount: 1
-      };
-    }
-
-    const mergeResult = await this._mergeMultiProviderOutputs(task, allResults, context);
-
-    if (mergeResult.codeBlocks && mergeResult.codeBlocks.length > 0) {
-      this._saveCodeBlocks(task, mergeResult.codeBlocks);
-    }
-
-    return {
-      ...mergeResult,
-      source: 'multi_provider_merged',
-      _providerCount: validResults.length,
-      _providers: validResults
-    };
-  }
-
-  async _mergeMultiProviderOutputs (task, providerResults, context) {
-    const validResults = {};
-    for (const [name, result] of Object.entries(providerResults)) {
-      if (result.success) {
-        validResults[name] = result;
-      }
-    }
-
-    try {
-      const MergeEngine = require('../agents/MergeEngine');
-      const mergeEngine = new MergeEngine(this.agents.codeWriter?.provider || null, {
-        conflictResolution: 'ai_decides',
-        enableThreeWayMerge: Object.keys(validResults).length >= 3
-      });
-
-      const mergeResult = await mergeEngine.merge(validResults, context.constraints || {});
-
-      if (mergeResult.mergedCode) {
-        const mergedCodeBlocks = Object.entries(mergeResult.mergedFiles || {}).map(([filePath, code]) => ({
-          filePath,
-          language: this._getLangFromFilePath(filePath),
-          code
-        }));
-
-        const finalResult = {
-          content: mergeResult.mergedCode,
-          codeBlocks: mergedCodeBlocks.length > 0 ? mergedCodeBlocks : [],
-          mergeQuality: mergeResult.qualityAssessment,
-          mergeReport: mergeResult,
-          mergeConflicts: mergeResult.conflicts?.length || 0,
-          _providerCount: Object.keys(validResults).length
-        };
-
-        context.orchestrator?.emit('multiProviderMerged', {
-          task,
-          providers: Object.keys(validResults),
-          conflicts: mergeResult.conflicts?.length || 0,
-          quality: mergeResult.qualityAssessment
-        });
-
-        return finalResult;
-      }
-    } catch (mergeError) {
-      context.orchestrator?.emit('multiProviderMergeFailed', { task, error: mergeError.message });
-    }
-
-    return this._pickBestResultFromProviders(validResults);
-  }
-
-  _pickBestResultFromProviders (providerResults) {
-    let bestName = null;
-    let bestScore = 0;
-    let bestResult = null;
-
-    for (const [name, result] of Object.entries(providerResults)) {
-      if (!result.success) continue;
-
-      const blockCount = (result.result?.codeBlocks?.length || 0);
-      const contentLength = (result.content?.length || 0);
-      const score = blockCount * 100 + Math.min(contentLength / 10, 500);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestName = name;
-        bestResult = result;
-      }
-    }
-
-    return {
-      ...bestResult.result,
-      content: bestResult.content,
-      source: 'multi_provider_fallback',
-      providerName: bestName
-    };
   }
 
   async _executePrivacyMode (task, context, useSmallModel = false) {

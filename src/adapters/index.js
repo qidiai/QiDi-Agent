@@ -7,6 +7,9 @@ const HermesAgentAdapter = require('./HermesAgentAdapter');
 const AtomCodeAdapter = require('./AtomCodeAdapter');
 const MimoCodeAdapter = require('./MimoCodeAdapter');
 const TraeAdapter = require('./TraeAdapter');
+const WorkBuddyAdapter = require('./WorkBuddyAdapter');
+const KimiWorkAdapter = require('./KimiWorkAdapter');
+const ZCodeAdapter = require('./ZCodeAdapter');
 
 module.exports = {
   BaseToolAdapter,
@@ -18,6 +21,9 @@ module.exports = {
   AtomCodeAdapter,
   MimoCodeAdapter,
   TraeAdapter,
+  WorkBuddyAdapter,
+  KimiWorkAdapter,
+  ZCodeAdapter,
 
   createAll () {
     return [
@@ -28,7 +34,10 @@ module.exports = {
       new HermesAgentAdapter(),
       new AtomCodeAdapter(),
       new MimoCodeAdapter(),
-      new TraeAdapter()
+      new TraeAdapter(),
+      new WorkBuddyAdapter(),
+      new KimiWorkAdapter(),
+      new ZCodeAdapter()
     ];
   },
 
@@ -41,7 +50,10 @@ module.exports = {
       'hermes-agent': HermesAgentAdapter,
       'atom-code': AtomCodeAdapter,
       'mimo-code': MimoCodeAdapter,
-      trae: TraeAdapter
+      trae: TraeAdapter,
+      workbuddy: WorkBuddyAdapter,
+      kimiwork: KimiWorkAdapter,
+      zcode: ZCodeAdapter
     };
 
     const AdapterClass = adapters[name];

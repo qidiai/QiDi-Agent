@@ -1,0 +1,9 @@
+{
+  "name": "Qidi Agent Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "forwardPorts": [3000],
+  "postCreateCommand": "npm install",
+  "customSettings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  }
+}
