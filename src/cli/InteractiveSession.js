@@ -26,13 +26,21 @@ const ToolScanner = require('../core/ToolScanner');
 const AdapterFactory = require('../adapters');
 const FileManager = require('../utils/FileManager');
 const { logo, miniLogo } = require('./logo');
+const ConfigManager = require('./ConfigManager');
 
 class InteractiveSession {
   constructor (options = {}) {
     this.workspaceDir = options.workspaceDir || './workspace';
     this.configDir = options.configDir || path.join(__dirname, '../../config');
-    this.defaultMode = options.mode || 'privacy';
-    this.defaultProvider = options.provider || process.env.MODEL_PROVIDER || 'ollama';
+    
+    this.configManager = new ConfigManager();
+    const savedConfig = this.configManager.getConfig();
+    
+    this.defaultMode = options.mode || savedConfig.executionMode || 'privacy';
+    this.defaultProvider = options.provider || savedConfig.provider || process.env.MODEL_PROVIDER || 'ollama';
+    this.defaultModel = savedConfig.model || '';
+    this.defaultApiKey = savedConfig.apiKey || '';
+    this.defaultApiBase = savedConfig.apiBase || '';
 
     this.mode = this.defaultMode;
     this.registeredTools = [];
@@ -114,18 +122,25 @@ class InteractiveSession {
   async start () {
     console.log(logo);
 
-    await this._runStartupWizard();
+    const hasValidConfig = this.configManager.hasValidConfig();
+    if (hasValidConfig) {
+      await this._loadFromConfig();
+    } else {
+      await this._runStartupWizard();
+      await this._saveConfig();
+    }
 
     console.log(chalk.cyan.bold('\n  🚀 Qidi Agent 交互式编程界面'));
     console.log(chalk.gray('  ─────────────────────────────────────────'));
     console.log(chalk.gray(`  当前模式: ${this.mode === 'privacy' ? '🔒 隐私模式' : this.mode === 'efficiency' ? '⚡ 高效模式' : '✨ 高质量模式'}`));
-    console.log(chalk.gray(`  当前提供商: ${this.defaultProvider}`));
+    console.log(chalk.gray(`  当前提供商: ${this.configManager.getProviderLabel(this.defaultProvider)}`));
     if (this.selectedModel) {
       console.log(chalk.gray(`  当前模型: ${this.selectedModel}`));
     }
     console.log(chalk.gray('  多行任务：直接回车结束，或在末尾输入 ; 提交多行任务'));
     console.log(chalk.gray('  输入 help 查看命令，exit 退出，Ctrl+C 退出'));
-    console.log(chalk.yellow('  💡 提示：单行输入建议不超过 500 字，复杂任务建议使用多行模式\n'));
+    console.log(chalk.yellow('  💡 提示：单行输入建议不超过 500 字，复杂任务建议使用多行模式'));
+    console.log(chalk.yellow('  💡 提示：输入 config 查看当前配置，config reset 重置配置\n'));
 
     this._loadHistory();
     this._loadContext();
@@ -166,6 +181,39 @@ class InteractiveSession {
     await this._scanTools();
 
     console.log(chalk.cyan.bold('\n  ─────────────────── 初始化完成 ───────────────────\n'));
+  }
+
+  async _loadFromConfig () {
+    const config = this.configManager.getConfig();
+    this.mode = config.executionMode;
+    this.defaultProvider = config.provider;
+    this.selectedModel = config.model || '';
+    this.defaultApiKey = config.apiKey || '';
+    this.defaultApiBase = config.apiBase || '';
+
+    console.log(chalk.green('\n  ✅ 加载已保存的配置'));
+    console.log(chalk.gray(`     模式: ${this.configManager.getModeLabel(this.mode)}`));
+    console.log(chalk.gray(`     提供商: ${this.configManager.getProviderLabel(this.defaultProvider)}`));
+    if (this.selectedModel) {
+      console.log(chalk.gray(`     模型: ${this.selectedModel}`));
+    }
+    console.log(chalk.yellow('     (输入 config reset 可重置配置重新初始化)\n'));
+
+    if (config.scanOnStart) {
+      await this._scanTools();
+    }
+  }
+
+  _saveConfig () {
+    const config = {
+      executionMode: this.mode,
+      provider: this.defaultProvider,
+      model: this.selectedModel || '',
+      apiKey: this.defaultApiKey || '',
+      apiBase: this.defaultApiBase || '',
+      scanOnStart: this.scanned
+    };
+    this.configManager.saveConfig(config);
   }
 
   async _selectMode () {
@@ -474,6 +522,88 @@ class InteractiveSession {
     console.log('');
   }
 
+  async _cmdConfig (args) {
+    if (args.length === 0 || args[0] === 'show') {
+      this._printConfig();
+      return;
+    }
+
+    if (args[0] === 'reset') {
+      const line = await this._readLine('  确定要重置配置吗? [y/N]: ');
+      if (line.trim().toLowerCase() === 'y') {
+        this.configManager.clearConfig();
+        console.log(chalk.green('  ✅ 配置已重置，下次启动将重新初始化'));
+      } else {
+        console.log(chalk.gray('  已取消'));
+      }
+      return;
+    }
+
+    if (args[0] === 'mode') {
+      const validModes = ['privacy', 'quality', 'efficiency'];
+      if (args[1] && validModes.includes(args[1])) {
+        this.mode = args[1];
+        this.defaultMode = args[1];
+        this._saveConfig();
+        console.log(chalk.green(`  ✅ 模式已切换为: ${this.configManager.getModeLabel(this.mode)}`));
+      } else {
+        console.log(chalk.yellow('  用法: config mode <privacy|quality|efficiency>'));
+      }
+      return;
+    }
+
+    if (args[0] === 'provider') {
+      const validProviders = ['ollama', 'openai', 'anthropic', 'doubao', 'qianfan', 'dashscope', 'deepseek', 'moonshot', 'minimax'];
+      if (args[1] && validProviders.includes(args[1])) {
+        this.defaultProvider = args[1];
+        this._saveConfig();
+        console.log(chalk.green(`  ✅ 提供商已切换为: ${this.configManager.getProviderLabel(this.defaultProvider)}`));
+        if (this.defaultProvider !== 'ollama') {
+          console.log(chalk.yellow('  💡 请输入 API Key: config apikey <your-key>'));
+        }
+      } else {
+        console.log(chalk.yellow('  用法: config provider <ollama|openai|anthropic|doubao|qianfan|dashscope|deepseek|moonshot|minimax>'));
+      }
+      return;
+    }
+
+    if (args[0] === 'apikey') {
+      if (args[1]) {
+        this.defaultApiKey = args[1];
+        this._saveConfig();
+        console.log(chalk.green('  ✅ API Key 已保存'));
+      } else {
+        const key = await this._readLineHidden('  请输入 API Key: ');
+        if (key) {
+          this.defaultApiKey = key;
+          this._saveConfig();
+          console.log(chalk.green('  ✅ API Key 已保存'));
+        }
+      }
+      return;
+    }
+
+    console.log(chalk.yellow('  用法:'));
+    console.log(chalk.gray('    config / config show    - 查看当前配置'));
+    console.log(chalk.gray('    config reset            - 重置配置'));
+    console.log(chalk.gray('    config mode <mode>      - 设置执行模式'));
+    console.log(chalk.gray('    config provider <name>  - 设置模型提供商'));
+    console.log(chalk.gray('    config apikey <key>     - 设置 API Key'));
+  }
+
+  _printConfig () {
+    const summary = this.configManager.getConfigSummary();
+    console.log(chalk.cyan.bold('\n  ─────────────────── 当前配置 ───────────────────'));
+    console.log(chalk.gray(`  执行模式: ${this.configManager.getModeLabel(summary.executionMode)}`));
+    console.log(chalk.gray(`  模型提供商: ${this.configManager.getProviderLabel(summary.provider)}`));
+    console.log(chalk.gray(`  模型: ${summary.model}`));
+    console.log(chalk.gray(`  API Key: ${summary.apiKey}`));
+    console.log(chalk.gray(`  API Base: ${summary.apiBase}`));
+    console.log(chalk.gray(`  启动时扫描工具: ${summary.scanOnStart ? '是' : '否'}`));
+    console.log(chalk.yellow('\n  💡 提示: 使用 config reset 重置配置，下次启动将重新初始化向导'));
+    console.log(chalk.cyan.bold('  ────────────────────────────────────────────────\n'));
+  }
+
   _readLine (prompt) {
     return new Promise((resolve) => {
       const rl = readline.createInterface({
@@ -661,6 +791,10 @@ class InteractiveSession {
       this.lastResult = null;
       this._saveContext();
       console.log(chalk.green('  ✅ 已重置上下文记忆'));
+      return;
+
+    case 'config':
+      await this._cmdConfig(args);
       return;
 
     case 'run':
