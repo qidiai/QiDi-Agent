@@ -937,28 +937,50 @@ async function recommendMode () {
 }
 
 async function initConsole () {
-  const badge = document.getElementById('console-models-badge');
-  if (!badge) return;
+  const selector = document.getElementById('model-selector');
+  if (!selector) return;
 
   try {
     const res = await fetch('/api/agents');
     const data = await res.json();
     const agents = data.agents || [];
     const enabled = agents.filter(a => a.enabled);
+    
+    selector.innerHTML = '';
+    
     if (enabled.length === 0) {
-      badge.innerHTML = '<span style="font-size:11px;color:#dc2626;">⚠️ 无启用模型，请到「模型管理」启用</span>';
-      badge.dataset.empty = '1';
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '⚠️ 无启用模型';
+      option.disabled = true;
+      selector.appendChild(option);
+      selector.dataset.empty = '1';
     } else {
-      badge.dataset.empty = '0';
-      badge.innerHTML = enabled.map(a => {
+      selector.dataset.empty = '0';
+      
+      const allOption = document.createElement('option');
+      allOption.value = '__all__';
+      allOption.textContent = '📦 使用所有已启用模型';
+      selector.appendChild(allOption);
+      
+      enabled.forEach(a => {
         const name = a.displayName || a.name;
-        const tag = a.isLocal ? '本地' : '云端';
-        return `<span style="padding:3px 8px;background:#e0e7ff;color:#3730a3;border-radius:10px;font-size:11px;">${name} · ${tag}</span>`;
-      }).join('');
+        const tag = a.isLocal ? '🖥️' : '☁️';
+        const option = document.createElement('option');
+        option.value = a.name;
+        option.textContent = `${tag} ${name}`;
+        selector.appendChild(option);
+      });
     }
   } catch (e) {
-    badge.innerHTML = '<span style="font-size:11px;color:#dc2626;">加载失败</span>';
+    selector.innerHTML = '<option value="" disabled>加载失败</option>';
+    selector.dataset.empty = '1';
   }
+}
+
+function onModelChange () {
+  const selector = document.getElementById('model-selector');
+  if (!selector) return;
 }
 
 async function executeTask () {
@@ -968,11 +990,14 @@ async function executeTask () {
     return;
   }
 
-  const badge = document.getElementById('console-models-badge');
-  if (badge && badge.dataset.empty === '1') {
+  const selector = document.getElementById('model-selector');
+  if (selector && selector.dataset.empty === '1') {
     appendChatMessage('system', '⚠️ 当前无启用模型，请到「模型管理」页启用至少一个模型');
     return;
   }
+
+  const selectedModel = selector ? selector.value : null;
+  const models = selectedModel === '__all__' || !selectedModel ? [] : [selectedModel];
 
   const constraints = {};
   if (document.getElementById('const-c').checked) constraints.language = 'C语言';
@@ -995,6 +1020,7 @@ async function executeTask () {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         task,
+        models,
         constraints,
         mode: currentMode
       })
