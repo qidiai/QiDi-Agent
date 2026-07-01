@@ -159,10 +159,10 @@
               <p class="page-desc">与 AI 对话沟通需求，确认后点击「执行任务」按钮运行</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <div id="console-models-badge" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-height:36px;" title="在「模型管理」页启用/禁用模型">
-                <span style="font-size:11px;color:#9ca3af;">加载中...</span>
-              </div>
-              <button class="btn" style="padding:6px 10px;font-size:12px;" onclick="switchPage('agents')" title="去模型管理页选择模型">⚙️ 管理模型</button>
+              <select id="model-selector" onchange="onModelChange()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;background:white;min-width:120px;" title="选择执行任务的模型">
+                <option value="">正在加载模型...</option>
+              </select>
+              <button class="btn" style="padding:6px 10px;font-size:12px;" onclick="switchPage('agents')" title="去模型管理页启用/禁用模型">⚙️ 管理模型</button>
               <div class="mode-toggle" style="display:flex;gap:4px;background:#f3f4f6;border-radius:8px;padding:3px;">
                 <button class="mode-pill mode-pill-active" data-mode="privacy" onclick="selectMode('privacy')" title="本地拆分→云端碎片处理→本地质检→契约合并">🔒 隐私</button>
                 <button class="mode-pill" data-mode="quality" onclick="selectMode('quality')" title="云端拆分→云端处理→云端质检→AI合并">✨ 高质量</button>

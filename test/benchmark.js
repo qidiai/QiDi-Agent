@@ -15,7 +15,7 @@ const TASKS = [
   { id: 'calculator', desc: '用Python写一个支持加减乘除的计算器类', test: (code) => /class.*Calculator|def.*add|def.*divide/.test(code) }
 ];
 
-async function runSingle(task) {
+async function runSingle (task) {
   const provider = new OllamaProvider({ baseURL: 'http://localhost:11434', model: 'qwen2.5:7b' });
   const orch = new TaskOrchestrator(provider, {
     workspaceDir: `./test_tmp/bench_single_${task.id}`,
@@ -31,7 +31,7 @@ async function runSingle(task) {
   return { hasCode, avgScore, success: result.successRate >= 60 };
 }
 
-async function runMulti(task, providers) {
+async function runMulti (task, providers) {
   const orch = new TaskOrchestrator(providers[0], {
     workspaceDir: `./test_tmp/bench_multi_${task.id}`,
     executionMode: 'multi',
@@ -47,7 +47,7 @@ async function runMulti(task, providers) {
   return { hasCode, avgScore, success: result.successRate >= 60 };
 }
 
-async function main() {
+async function main () {
   const provider = new OllamaProvider({ baseURL: 'http://localhost:11434', model: 'qwen2.5:7b' });
   if (!await provider.checkConnection()) {
     console.log('⏭️  Ollama 不可用,跳过 benchmark');
@@ -74,7 +74,7 @@ async function main() {
       multi = await runMulti(task, providers);
       console.log(`  Qidi multi: ${multi.success ? '✅' : '❌'} ${multi.avgScore}分`);
     } else {
-      console.log(`  Qidi multi: ⏭️ 跳过(仅1个Provider)`);
+      console.log('  Qidi multi: ⏭️ 跳过(仅1个Provider)');
     }
     results.push({ task: task.id, single, multi });
   }
@@ -82,11 +82,13 @@ async function main() {
   const singlePass = results.filter(r => r.single.success).length;
   const multiPass = results.filter(r => !r.multi.skipped && r.multi.success).length;
   const multiTotal = results.filter(r => !r.multi.skipped).length;
-  console.log(`\n━━━ 汇总 ━━━`);
+  console.log('\n━━━ 汇总 ━━━');
   console.log(`单模型通过率: ${singlePass}/${TASKS.length} (${Math.round(singlePass / TASKS.length * 100)}%)`);
   if (multiTotal > 0) {
     console.log(`Qidi multi通过率: ${multiPass}/${multiTotal} (${Math.round(multiPass / multiTotal * 100)}%)`);
   }
-  console.log(`\n📝 结果已保存,请填入 docs/BENCHMARK.md`);
+  console.log('\n📝 结果已保存,请填入 docs/BENCHMARK.md');
 }
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch(e => {
+  console.error(e); process.exit(1);
+});

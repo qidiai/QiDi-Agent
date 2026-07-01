@@ -1160,8 +1160,17 @@ class WebUIServer {
     try {
       const taskMode = this._activeTasks.get(taskId)?.mode || 'privacy';
 
-      // 从 AgentHub 获取第一个启用 Agent 的 provider 传下去，否则 TaskSplitter 无法工作
-      const resolvedProvider = this.agentHub?.getEnabledAgents?.()?.[0]?.provider || null;
+      let resolvedProvider = null;
+      if (models && models.length > 0) {
+        const specifiedAgent = this.agentHub?.getAgent?.(models[0]);
+        if (specifiedAgent) {
+          resolvedProvider = specifiedAgent.provider;
+        }
+      }
+
+      if (!resolvedProvider) {
+        resolvedProvider = this.agentHub?.getEnabledAgents?.()?.[0]?.provider || null;
+      }
 
       const executor = new RealTaskExecutor({
         workspaceDir: `${this.workspaceDir}/${taskId}`,
