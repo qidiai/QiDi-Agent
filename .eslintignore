@@ -1,0 +1,2 @@
+# Browser code - uses global browser APIs (alert, localStorage, etc.)
+public/js/app.js
