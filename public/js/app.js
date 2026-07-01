@@ -441,7 +441,7 @@ function showEditModelModal (name) {
   document.getElementById('model-type').disabled = true;
   document.getElementById('model-baseurl').value = agent.apiConfig?.baseURL || '';
   document.getElementById('model-model').value = agent.model || '';
-  document.getElementById('model-apikey').value = '';
+  document.getElementById('model-apikey').value = agent.apiConfig?.hasApiKey ? '******' : '';
   document.getElementById('model-description').value = agent.description || '';
   document.getElementById('model-timeout').value = '60000';
   document.getElementById('model-modal').style.display = 'flex';

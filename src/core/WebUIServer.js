@@ -796,7 +796,8 @@ class WebUIServer {
           lastActive: status.lastActive || null,
           apiConfig: {
             baseURL: agentConfig.config?.baseURL || '',
-            model: agentConfig.config?.model || ''
+            model: agentConfig.config?.model || '',
+            hasApiKey: !!agentConfig.config?.apiKey
           }
         });
       }
@@ -1385,7 +1386,7 @@ class WebUIServer {
         config: {
           baseURL: modelData.baseURL || config.agents[modelKey].config.baseURL,
           model: modelData.model || config.agents[modelKey].config.model,
-          apiKey: modelData.apiKey || config.agents[modelKey].config.apiKey,
+          apiKey: modelData.apiKey && modelData.apiKey !== '******' ? modelData.apiKey : config.agents[modelKey].config.apiKey,
           timeout: modelData.timeout || config.agents[modelKey].config.timeout || 60000
         }
       };
