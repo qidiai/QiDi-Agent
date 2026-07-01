@@ -1166,6 +1166,16 @@ class WebUIServer {
         const specifiedAgent = this.agentHub?.getAgent?.(models[0]);
         if (specifiedAgent) {
           resolvedProvider = specifiedAgent.provider;
+        } else {
+          const agentConfig = this.agentHub?.config?.agents?.[models[0]];
+          if (agentConfig) {
+            try {
+              const ProviderFactory = require('../providers');
+              resolvedProvider = ProviderFactory.create(agentConfig.provider, agentConfig.config);
+            } catch (e) {
+              logger.error(`创建指定模型 Provider 失败: ${e.message}`);
+            }
+          }
         }
       }
 

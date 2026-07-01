@@ -105,7 +105,6 @@ class RealTaskExecutor extends EventEmitter {
   }
 
   async _loadProviders () {
-    // 优先使用外部传入的 provider（来自 AgentHub），不重复扫描线上模型
     if (this.provider) {
       this.enabledProviders.push({
         name: this.provider.name || 'webui-agent',
@@ -113,6 +112,7 @@ class RealTaskExecutor extends EventEmitter {
         config: {}
       });
       this.emit('providerConnected', { name: this.provider.name || 'webui-agent' });
+      return;
     }
 
     const configPath = path.join(__dirname, '../../config/agents.json');
