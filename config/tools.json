@@ -1,7 +1,105 @@
 {
-  "scannedAt": 1782818729015,
-  "tools": [],
-  "registered": [
-    "zcode"
-  ]
+  "scannedAt": 1782659379056,
+  "tools": [
+    {
+      "name": "open-code",
+      "displayName": "Open Code",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "opencode"
+    },
+    {
+      "name": "trae",
+      "displayName": "Trae CN",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "trae"
+    },
+    {
+      "name": "claude-code",
+      "displayName": "Claude Code",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "claude"
+    },
+    {
+      "name": "openclaw",
+      "displayName": "OpenClaw",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "openclaw"
+    },
+    {
+      "name": "mimo-code",
+      "displayName": "Mimo Code",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "mimo"
+    },
+    {
+      "name": "atom-code",
+      "displayName": "AtomCode",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "atomcode"
+    },
+    {
+      "name": "hermes-agent",
+      "displayName": "Hermes Agent",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "hermes"
+    },
+    {
+      "name": "qoder",
+      "displayName": "Qoder",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "qoder"
+    },
+    {
+      "name": "kimi-work",
+      "displayName": "KimiWork",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "kimi-work"
+    },
+    {
+      "name": "workbuddy",
+      "displayName": "WorkBuddy",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "workbuddy"
+    },
+    {
+      "name": "zcode",
+      "displayName": "ZCode",
+      "detected": false,
+      "status": "offline",
+      "version": null,
+      "installPath": null,
+      "command": "zcode"
+    }
+  ],
+  "registered": []
 }

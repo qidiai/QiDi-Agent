@@ -5,7 +5,8 @@
 > **Free AI models orchestrate to write code that rivals top-tier LLMs — at zero cost.**
 
 <p align="center">
-  <img src="docs/images/demo-multi.gif" width="700" alt="Qidi Multi-Provider Demo">
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=AI%20code%20generation%20demo%20interface%20showing%20parallel%20execution%20of%20multiple%20AI%20models%20generating%20code%20side%20by%20side%20with%20progress%20bars%20and%20quality%20scores%20on%20dark%20theme&image_size=landscape_16_9" width="700" alt="Qidi Multi-Provider Demo">
+  <!-- TODO: Replace with actual demo GIF -->
 </p>
 
 <p align="center">
@@ -17,7 +18,6 @@
 
 <p align="center">
   <a href="#quick-start">🚀 Quick Start</a> ·
-  <a href="./docs/BENCHMARK.md">📊 Benchmark</a> ·
   <a href="./README.zh-CN.md">简体中文</a> ·
   <a href="./CONTRIBUTING.md">🤝 Contributing</a>
 </p>
@@ -31,12 +31,14 @@
 ## See It In Action
 
 <p align="center">
-  <img src="docs/images/demo-webui.gif" width="700" alt="Web Management Interface">
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20web%20management%20dashboard%20for%20AI%20code%20orchestration%20with%20task%20list%2C%20execution%20logs%2C%20and%20model%20selection%20panels%20clean%20UI%20dark%20mode&image_size=landscape_16_9" width="700" alt="Web Management Interface">
+  <!-- TODO: Replace with actual demo GIF -->
 </p>
 
 <p align="center">
   <em>Output that actually runs 👇</em><br>
-  <img src="docs/images/demo-result.gif" width="400" alt="Generated Snake Game Running">
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=terminal%20showing%20generated%20snake%20game%20running%20with%20green%20text%20on%20black%20background%20classic%20retro%20game%20style&image_size=square" width="400" alt="Generated Snake Game Running">
+  <!-- TODO: Replace with actual demo GIF -->
 </p>
 
 ---

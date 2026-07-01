@@ -69,6 +69,7 @@ $RECYCLE.BIN/
 logs/
 *.pid
 .pid
+config/tools.json
 
 # ==========================================
 # 临时测试/调试/演示产物
