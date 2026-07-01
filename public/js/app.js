@@ -57,7 +57,7 @@ function switchPage (page) {
   document.getElementById('page-title').textContent = titles[page] || '仪表盘';
 
   if (page === 'dashboard') loadDashboard();
-  if (page === 'console') initConsole();
+  if (page === 'console') initModelSelector();
   if (page === 'tools') loadTools();
   if (page === 'agents') loadAgents();
   if (page === 'routing') loadRoutingConfig();
@@ -71,6 +71,7 @@ function switchPage (page) {
 
 async function loadAllData () {
   await loadDashboard();
+  initModelSelector();
 }
 
 async function loadDashboard () {
@@ -936,7 +937,7 @@ async function recommendMode () {
   }
 }
 
-async function initConsole () {
+async function initModelSelector () {
   const selector = document.getElementById('model-selector');
   if (!selector) return;
 
