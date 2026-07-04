@@ -38,9 +38,12 @@ class EmergenceEvaluator {
   /**
    * 评估涌现效应
    * @param {Object} params - { multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }
+   * @param {Object} options - { allowEstimated: 是否允许估算基线（默认 true） }
    */
-  async evaluate({ multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }) {
+  async evaluate({ multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }, options = {}) {
     try {
+      const allowEstimated = options.allowEstimated !== false;
+
       // 尝试获取基线
       let baseline = singleToolQuality;
       let baselineSource = 'explicit';
@@ -50,6 +53,16 @@ class EmergenceEvaluator {
         const dbResult = this._getBaselineFromDB(tools, taskType);
         baseline = dbResult.quality;
         baselineSource = dbResult.source;
+      }
+
+      // 数据库也没基线 → 尝试估算
+      if ((baseline === null || baseline === undefined) && allowEstimated) {
+        const estimated = this._estimateBaseline(tools, taskType);
+        if (estimated !== null) {
+          baseline = estimated;
+          baselineSource = 'estimated';
+          logger.info(`[EmergenceEvaluator] 使用估算基线: ${baseline.toFixed(3)}（基于历史数据估算）`);
+        }
       }
 
       if (baseline === null || baseline === undefined) {
@@ -65,7 +78,8 @@ class EmergenceEvaluator {
           mode,
           tools: tools || [],
           taskType: taskType || 'unknown',
-          controlGroup: null
+          controlGroup: null,
+          baselineSource: 'none'
         };
         this.history.push(noBaselineRecord);
         await this._saveHistory();
@@ -85,11 +99,11 @@ class EmergenceEvaluator {
 
       let verdict;
       if (emerged) {
-        verdict = 'EMERGENT';
+        verdict = baselineSource === 'estimated' ? 'EMERGENT_ESTIMATED' : 'EMERGENT';
       } else if (emergenceGain > 0) {
-        verdict = 'MARGINAL';
+        verdict = baselineSource === 'estimated' ? 'MARGINAL_ESTIMATED' : 'MARGINAL';
       } else {
-        verdict = 'NEGATIVE';
+        verdict = baselineSource === 'estimated' ? 'NEGATIVE_ESTIMATED' : 'NEGATIVE';
       }
 
       const controlGroup = {
@@ -122,6 +136,101 @@ class EmergenceEvaluator {
       logger.warn(`[EmergenceEvaluator] 评估失败: ${e.message}`);
       return { emergenceGain: 0, emerged: false, verdict: 'ERROR', baseline: null, controlGroup: null, baselineSource: 'error' };
     }
+  }
+
+  /**
+   * 估算基线（当无显式基线且数据库无记录时）
+   * 策略：全局历史均值的 90%（保守估计，避免假涌现）
+   */
+  _estimateBaseline(tools, taskType) {
+    // 收集所有历史质量数据
+    const validRecords = this.history.filter(r =>
+      r.verdict !== 'NO_CONTROL_GROUP' &&
+      r.verdict !== 'ERROR' &&
+      typeof r.multiToolQuality === 'number'
+    );
+
+    if (validRecords.length === 0) return null;
+
+    // 同任务类型的历史均值
+    if (taskType) {
+      const sameType = validRecords.filter(r => r.taskType === taskType);
+      if (sameType.length >= 3) {
+        const avg = sameType.reduce((s, r) => s + r.multiToolQuality, 0) / sameType.length;
+        return avg * 0.9; // 保守估计
+      }
+    }
+
+    // 全局历史均值的 90%
+    const avg = validRecords.reduce((s, r) => s + r.multiToolQuality, 0) / validRecords.length;
+    return avg * 0.9;
+  }
+
+  /**
+   * 强制获取基线（主动跑一次单工具执行作为基线）
+   * @param {Function} singleToolRunner - async (tool) => quality 的函数
+   * @param {string} toolName - 单工具名
+   * @param {string} taskType - 任务类型
+   */
+  async ensureBaseline(singleToolRunner, toolName, taskType) {
+    // 检查数据库中是否已有该 tool+taskType 的基线
+    if (toolName && taskType) {
+      const key = `${toolName}:${taskType}`;
+      const existing = this._baselineDB.byToolTaskType[key];
+      if (existing && existing.count >= 3) {
+        logger.info(`[EmergenceEvaluator] 基线已存在: ${toolName}+${taskType} (${existing.count} 条记录)`);
+        return { success: true, quality: existing.avgQuality, source: 'cached' };
+      }
+    }
+
+    // 主动跑一次单工具执行
+    if (typeof singleToolRunner === 'function') {
+      try {
+        logger.info(`[EmergenceEvaluator] 主动获取基线: ${toolName} + ${taskType}`);
+        const quality = await singleToolRunner(toolName);
+        if (typeof quality === 'number' && quality > 0) {
+          this.recordBaseline(quality, toolName, taskType);
+          return { success: true, quality, source: 'fresh' };
+        }
+        return { success: false, error: 'invalid quality', source: 'none' };
+      } catch (e) {
+        logger.warn(`[EmergenceEvaluator] 主动基线获取失败: ${e.message}`);
+        return { success: false, error: e.message, source: 'none' };
+      }
+    }
+
+    return { success: false, error: 'no runner provided', source: 'none' };
+  }
+
+  /**
+   * 预热基线数据库（系统启动时调用，异步）
+   * @param {Array} tools - [{ name, taskType }]
+   * @param {Function} singleToolRunner - async (tool) => quality
+   */
+  async preWarmBaseline(tools, singleToolRunner) {
+    if (!Array.isArray(tools) || tools.length === 0) return;
+
+    // 只为缺基线的组合预热
+    const needWarm = tools.filter(({ name, taskType }) => {
+      const key = `${name}:${taskType}`;
+      const existing = this._baselineDB.byToolTaskType[key];
+      return !existing || existing.count < 3;
+    });
+
+    if (needWarm.length === 0) {
+      logger.info(`[EmergenceEvaluator] 基线数据库已完整，无需预热`);
+      return;
+    }
+
+    logger.info(`[EmergenceEvaluator] 开始预热 ${needWarm.length} 个基线组合`);
+    for (const { name, taskType } of needWarm) {
+      try {
+        await this.ensureBaseline(singleToolRunner, name, taskType);
+      } catch (e) {
+        // 静默失败，继续下一个
+      }
+    }
+    logger.info(`[EmergenceEvaluator] 基线预热完成`);
   }
 
   /**

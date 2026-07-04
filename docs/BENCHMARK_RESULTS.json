@@ -1,0 +1,179 @@
+{
+  "testDate": "2026-07-04T15:11:13.742Z",
+  "mode": "mock",
+  "results": [
+    {
+      "id": "B1",
+      "name": "简单 Python 函数",
+      "difficulty": "simple",
+      "language": "python",
+      "singleTool": {
+        "quality": 87,
+        "timeMs": 0,
+        "details": {
+          "length": 55.00000000000001,
+          "functions": 100,
+          "comments": 100,
+          "errorHandling": 100,
+          "overall": 87
+        }
+      },
+      "multiTool": {
+        "quality": 87,
+        "timeMs": 0,
+        "details": {
+          "length": 55.00000000000001,
+          "functions": 100,
+          "comments": 100,
+          "errorHandling": 100,
+          "overall": 87
+        }
+      },
+      "emergence": {
+        "gain": 0,
+        "gainPercent": 0,
+        "verdict": "NEGATIVE ❌"
+      }
+    },
+    {
+      "id": "B2",
+      "name": "JS Web 应用",
+      "difficulty": "medium",
+      "language": "javascript",
+      "singleTool": {
+        "quality": 60,
+        "timeMs": 0,
+        "details": {
+          "length": 12.5,
+          "functions": 100,
+          "comments": 50,
+          "errorHandling": 60,
+          "overall": 60
+        }
+      },
+      "multiTool": {
+        "quality": 60,
+        "timeMs": 0,
+        "details": {
+          "length": 12.5,
+          "functions": 100,
+          "comments": 50,
+          "errorHandling": 60,
+          "overall": 60
+        }
+      },
+      "emergence": {
+        "gain": 0,
+        "gainPercent": 0,
+        "verdict": "NEGATIVE ❌"
+      }
+    },
+    {
+      "id": "B3",
+      "name": "C 系统编程",
+      "difficulty": "medium-hard",
+      "language": "c",
+      "singleTool": {
+        "quality": 56,
+        "timeMs": 0,
+        "details": {
+          "length": 6.25,
+          "functions": 75,
+          "comments": 100,
+          "errorHandling": 60,
+          "overall": 56
+        }
+      },
+      "multiTool": {
+        "quality": 56,
+        "timeMs": 0,
+        "details": {
+          "length": 6.25,
+          "functions": 75,
+          "comments": 100,
+          "errorHandling": 60,
+          "overall": 56
+        }
+      },
+      "emergence": {
+        "gain": 0,
+        "gainPercent": 0,
+        "verdict": "NEGATIVE ❌"
+      }
+    },
+    {
+      "id": "B4",
+      "name": "TypeScript 重构",
+      "difficulty": "hard",
+      "language": "typescript",
+      "singleTool": {
+        "quality": 60,
+        "timeMs": 0,
+        "details": {
+          "length": 12,
+          "functions": 100,
+          "comments": 50,
+          "errorHandling": 60,
+          "overall": 60
+        }
+      },
+      "multiTool": {
+        "quality": 60,
+        "timeMs": 0,
+        "details": {
+          "length": 12,
+          "functions": 100,
+          "comments": 50,
+          "errorHandling": 60,
+          "overall": 60
+        }
+      },
+      "emergence": {
+        "gain": 0,
+        "gainPercent": 0,
+        "verdict": "NEGATIVE ❌"
+      }
+    },
+    {
+      "id": "B5",
+      "name": "跨语言集成",
+      "difficulty": "very-hard",
+      "language": "javascript",
+      "singleTool": {
+        "quality": 36,
+        "timeMs": 0,
+        "details": {
+          "length": 18.333333333333332,
+          "functions": 0,
+          "comments": 100,
+          "errorHandling": 100,
+          "overall": 36
+        }
+      },
+      "multiTool": {
+        "quality": 36,
+        "timeMs": 0,
+        "details": {
+          "length": 18.333333333333332,
+          "functions": 0,
+          "comments": 100,
+          "errorHandling": 100,
+          "overall": 36
+        }
+      },
+      "emergence": {
+        "gain": 0,
+        "gainPercent": 0,
+        "verdict": "NEGATIVE ❌"
+      }
+    }
+  ],
+  "summary": {
+    "taskCount": 5,
+    "avgSingleToolQuality": 59.8,
+    "avgMultiToolQuality": 59.8,
+    "avgEmergenceGain": 0,
+    "emergentCount": 0,
+    "conclusion": "协作无明显涌现"
+  }
+}

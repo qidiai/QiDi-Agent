@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "qidi-agent": {
+      "command": "node",
+      "args": ["./src/mcp/index.js"],
+      "env": {
+        "MODEL_PROVIDER": "ollama",
+        "OLLAMA_MODEL": "qwen2.5:7b",
+        "OLLAMA_MODEL_SMALL": "qwen2.5:3b"
+      }
+    }
+  }
+}

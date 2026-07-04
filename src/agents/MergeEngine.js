@@ -114,6 +114,7 @@ class MergeEngine extends BaseAgent {
       }
 
       // AST 结构化冲突检测
+      let astSummary = null;
       if (this.enableASTConflictDetection) {
         const astVersions = versions.map(v => ({
           agentName: v.agentName,
@@ -123,13 +124,38 @@ class MergeEngine extends BaseAgent {
         }));
         const astResult = this.astConflictDetector.detect(astVersions);
         astConflicts.push(...astResult.conflicts);
+
+        // 生成 AST 冲突摘要（供 AI prompt 使用）
+        astSummary = this._buildASTSummary(astResult);
+
+        // critical 冲突直接给出建议方案（不让 AI 自由发挥）
+        const criticalConflicts = astResult.conflicts.filter(c =>
+          c.severity === 'critical' || c.type === 'signature'
+        );
+        if (criticalConflicts.length > 0) {
+          // 自动选择参数最完整的版本作为强制建议
+          for (const conflict of criticalConflicts) {
+            const resolution = this._resolveCriticalASTConflict(conflict, versions);
+            if (resolution) {
+              allConflicts.push({
+                location: `${filePath}::${conflict.name || 'unknown'}`,
+                description: `[AST-CRITICAL] ${conflict.description}`,
+                resolutions: versions.map(v => v.agentName),
+                chosenResolution: resolution.chosenAgent,
+                reason: resolution.reason,
+                conflictType: 'ast_signature',
+                severity: 'critical'
+              });
+            }
+          }
+        }
       }
 
       let mergeResult;
       if (this.enableThreeWayMerge && versions.length >= 3) {
-        mergeResult = await this._threeWayMerge(filePath, versions, constraints);
+        mergeResult = await this._threeWayMerge(filePath, versions, constraints, astSummary);
       } else {
-        mergeResult = await this._mergeFileVersions(filePath, versions, constraints);
+        mergeResult = await this._mergeFileVersions(filePath, versions, constraints, astSummary);
       }
       mergedFiles[filePath] = mergeResult.mergedCode;
       allConflicts.push(...mergeResult.conflicts);
@@ -186,9 +212,76 @@ class MergeEngine extends BaseAgent {
   }
 
   /**
+   * 构建 AST 冲突摘要（供 AI prompt 使用）
+   */
+  _buildASTSummary (astResult) {
+    if (!astResult || !astResult.conflicts || astResult.conflicts.length === 0) {
+      return null;
+    }
+
+    const lines = ['【AST 结构化冲突分析】'];
+    for (const c of astResult.conflicts) {
+      const severity = c.severity || 'unknown';
+      const type = c.type || 'unknown';
+      const name = c.name || c.element || 'unknown';
+      lines.push(`- [${severity.toUpperCase()}] ${type} 冲突: ${name} - ${c.description}`);
+    }
+    if (astResult.summary) {
+      lines.push(`【AST 统计】${astResult.summary}`);
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * 解决 critical AST 冲突（不让 AI 自由发挥）
+   * 策略：选择参数最完整 + 实现最长的版本
+   */
+  _resolveCriticalASTConflict (conflict, versions) {
+    if (!conflict || versions.length === 0) return null;
+
+    let bestVersion = null;
+    let bestScore = -1;
+    let reason = '';
+
+    for (const v of versions) {
+      const content = v.content || '';
+      let score = 0;
+
+      // 基于冲突类型评分
+      if (conflict.type === 'signature' && conflict.name) {
+        // 函数签名冲突：选择参数最多的版本
+        const funcMatch = content.match(new RegExp(`function\\s+${conflict.name}\\s*\\(([^)]*)\\)`));
+        if (funcMatch) {
+          const params = funcMatch[1].split(',').filter(p => p.trim());
+          score = params.length * 10;
+        }
+      }
+
+      // 内容长度加分
+      score += Math.min(content.length / 100, 30);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestVersion = v;
+        reason = `AST 评分最高 (${score.toFixed(1)}): 参数完整度+实现长度`;
+      }
+    }
+
+    if (!bestVersion) {
+      bestVersion = versions[0];
+      reason = '默认选择第一个版本';
+    }
+
+    return {
+      chosenAgent: bestVersion.agentName,
+      reason
+    };
+  }
+
+  /**
    * 三路合并算法：基于AST级分析的智能合并
    */
-  async _threeWayMerge (filePath, versions, constraints) {
+  async _threeWayMerge (filePath, versions, constraints, astSummary = null) {
     const sortedVersions = this._sortVersionsByQuality(versions);
     const baseVersion = sortedVersions[0];
     const compareVersions = sortedVersions.slice(1);
@@ -213,7 +306,7 @@ class MergeEngine extends BaseAgent {
       });
     }
 
-    const prompt = this._buildThreeWayMergePrompt(filePath, sortedVersions, constraints, conflictMap);
+    const prompt = this._buildThreeWayMergePrompt(filePath, sortedVersions, constraints, conflictMap, astSummary);
 
     try {
       const result = await this.sendWithRetry(prompt, { temperature: 0.2 });
@@ -369,7 +462,7 @@ class MergeEngine extends BaseAgent {
     };
   }
 
-  _buildThreeWayMergePrompt (filePath, versions, constraints, conflictMap) {
+  _buildThreeWayMergePrompt (filePath, versions, constraints, conflictMap, astSummary = null) {
     let prompt = `请执行三路合并：\n\n文件: ${filePath}\n约束: ${JSON.stringify(constraints)}\n\n`;
 
     prompt += `【基准版本】(${versions[0].agentName}):\n\`\`\`\n${versions[0].content}\n\`\`\`\n\n`;
@@ -378,13 +471,17 @@ class MergeEngine extends BaseAgent {
       prompt += `【版本${i}】(${versions[i].agentName}):\n\`\`\`\n${versions[i].content}\n\`\`\`\n\n`;
     }
 
+    if (astSummary) {
+      prompt += `${astSummary}\n\n`;
+    }
+
     prompt += '【语义冲突分析】\n';
     for (const [name, conflict] of Object.entries(conflictMap)) {
       prompt += `- ${name}: ${conflict.description} -> 建议选择 ${conflict.bestVersion?.agentName || 'manual'}\n`;
     }
     prompt += '\n';
 
-    prompt += `请基于以上语义分析，智能合并代码：
+    prompt += `请基于以上语义分析${astSummary ? '和 AST 结构化分析' : ''}，智能合并代码：
 1. 优先使用基准版本的结构
 2. 对于有冲突的函数，选择语义分析建议的版本
 3. 融合各版本的优点（更完整的参数、更明确的返回类型等）
@@ -888,10 +985,10 @@ class MergeEngine extends BaseAgent {
   /**
    * 合并同一文件的多版本。
    */
-  async _mergeFileVersions (filePath, versions, constraints) {
+  async _mergeFileVersions (filePath, versions, constraints, astSummary = null) {
     if (versions.length === 2) {
       // 简单两路合并：先算差异，再让AI判断
-      return await this._twoWayMerge(filePath, versions[0], versions[1], constraints);
+      return await this._twoWayMerge(filePath, versions[0], versions[1], constraints, astSummary);
     }
 
     // 多路合并：先两两合并，再最终合并
@@ -900,7 +997,7 @@ class MergeEngine extends BaseAgent {
     const allImprovements = [];
 
     for (let i = 1; i < versions.length; i++) {
-      const result = await this._twoWayMerge(filePath, { content: current }, versions[i], constraints);
+      const result = await this._twoWayMerge(filePath, { content: current }, versions[i], constraints, astSummary);
       current = result.mergedCode;
       allConflicts.push(...result.conflicts);
       allImprovements.push(...result.improvements);
@@ -909,8 +1006,12 @@ class MergeEngine extends BaseAgent {
     return { mergedCode: current, conflicts: allConflicts, improvements: allImprovements };
   }
 
-  async _twoWayMerge (filePath, versionA, versionB, constraints) {
-    const prompt = `请合并以下两个版本的代码：\n\n文件: ${filePath}\n约束: ${JSON.stringify(constraints)}\n\n【版本A】(${versionA.agentName || 'Agent1'}):\n\`\`\`\n${versionA.content}\n\`\`\`\n\n【版本B】(${versionB.agentName || 'Agent2'}):\n\`\`\`\n${versionB.content}\n\`\`\`\n\n请分析差异，选择最佳方案，输出 JSON。`;
+  async _twoWayMerge (filePath, versionA, versionB, constraints, astSummary = null) {
+    let prompt = `请合并以下两个版本的代码：\n\n文件: ${filePath}\n约束: ${JSON.stringify(constraints)}\n\n【版本A】(${versionA.agentName || 'Agent1'}):\n\`\`\`\n${versionA.content}\n\`\`\`\n\n【版本B】(${versionB.agentName || 'Agent2'}):\n\`\`\`\n${versionB.content}\n\`\`\`\n\n`;
+    if (astSummary) {
+      prompt += `${astSummary}\n\n`;
+    }
+    prompt += `请分析差异${astSummary ? '（参考 AST 结构化分析）' : ''}，选择最佳方案，输出 JSON。`;
 
     try {
       const result = await this.sendOnce(prompt);

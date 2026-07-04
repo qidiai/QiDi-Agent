@@ -89,3 +89,27 @@ tmp_*/
 最终检测报告_AtomCode.md
 SCORE_REPORT.md
 ANALYSIS_REPORT.md
+
+# ==========================================
+# 运行时数据 (RegAgent 启动后生成, 不应提交)
+# ==========================================
+data/
+checkpoints/
+config/chat_memory/
+config/tool_learning/
+test_workspace/
+test_stress_config*/
+nonexistent_dir/
+
+# ==========================================
+# 外部带入的实验产物 (Python 测试残留)
+# ==========================================
+atom-code/
+openclaw/
+config.py
+handler.py
+qidi_rpc.js
+n.includes('Contract')
+*.pyc
+__pycache__/
+.pytest_cache/

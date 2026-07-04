@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "version": "1.0.0",
+  "description": "G6: 增强模块统一配置 — 控制 P0-P3 新增模块的启用/禁用和参数",
+  "modules": {
+    "testRunner": {
+      "enabled": true,
+      "workspaceDir": "./workspace",
+      "timeout": 30000,
+      "languages": ["javascript", "python", "c", "cpp", "go", "rust", "java"],
+      "autoRun": true
+    },
+    "mcpClient": {
+      "enabled": true,
+      "configPath": "./config/mcp_servers.json",
+      "autoConnect": false
+    },
+    "vectorMemoryStore": {
+      "enabled": true,
+      "persistDir": "./memory/vector",
+      "embeddingDimension": 128,
+      "maxEntries": 10000
+    },
+    "streamManager": {
+      "enabled": true,
+      "chunkInterval": 50
+    },
+    "budgetManager": {
+      "enabled": true,
+      "totalBudget": 1000000,
+      "alarmThreshold": 0.8,
+      "criticalThreshold": 0.95,
+      "autoDegrade": true,
+      "persistPath": "./config/budget_state.json"
+    },
+    "retryManager": {
+      "enabled": true,
+      "defaultMaxRetries": 3,
+      "baseDelay": 1000,
+      "maxDelay": 30000,
+      "backoffFactor": 2,
+      "jitter": true
+    },
+    "gitIntegration": {
+      "enabled": false,
+      "workspaceDir": "./workspace",
+      "branchPrefix": "qidi/",
+      "autoCommit": true,
+      "autoRollback": true
+    },
+    "sandboxExecutor": {
+      "enabled": true,
+      "mode": "in-process",
+      "timeout": 10000,
+      "maxMemory": 128,
+      "allowedCommands": ["node", "python", "python3", "gcc", "g++", "go", "cargo"]
+    },
+    "approvalWorkflow": {
+      "enabled": false,
+      "autoApproveOnTimeout": true,
+      "timeout": 60000,
+      "checkpoints": {
+        "pre_execute": { "enabled": false, "description": "任务执行前审批" },
+        "post_quality": { "enabled": false, "description": "质检后审批", "minScore": 60 },
+        "pre_merge": { "enabled": false, "description": "合并前审批" }
+      }
+    },
+    "distributedExecutor": {
+      "enabled": false,
+      "mode": "local",
+      "maxWorkers": 4,
+      "masterPort": 9721,
+      "taskTimeout": 300000,
+      "heartbeatInterval": 15000
+    },
+    "contractValidator": {
+      "enabled": true,
+      "strictMode": false,
+      "validateInput": true,
+      "validateOutput": true,
+      "validateInterface": true
+    }
+  },
+  "integration": {
+    "injectIntoOrchestrator": true,
+    "injectIntoExecutor": true,
+    "injectIntoWebUI": true,
+    "injectIntoTUI": true
+  }
+}
