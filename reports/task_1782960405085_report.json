@@ -1,0 +1,77 @@
+{
+  "id": "task_1782960405085",
+  "timestamp": "2026-07-02T02:51:50.937Z",
+  "duration": 305852,
+  "originalTask": "C:\\Users\\ASUS\\CodeBuddy\\toubiao ??",
+  "success": false,
+  "constraints": {
+    "language": "Rust",
+    "techStack": "Rust标准库 + serde_json用于数据序列化",
+    "platform": "Windows",
+    "framework": "无特定框架，使用标准库",
+    "style": "Rust标准编码风格，使用cargo项目结构",
+    "fileExtension": ".rs"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "项目初始化与架构设计",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 64201,
+      "generatedFiles": 11,
+      "qualityScore": 30
+    },
+    {
+      "id": "T2",
+      "title": "核心业务逻辑实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 58449,
+      "generatedFiles": 1,
+      "qualityScore": 30
+    },
+    {
+      "id": "T3",
+      "title": "数据持久化实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 47263,
+      "generatedFiles": 1,
+      "qualityScore": 30
+    },
+    {
+      "id": "T4",
+      "title": "命令行界面实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 51162,
+      "generatedFiles": 1,
+      "qualityScore": 30
+    },
+    {
+      "id": "T5",
+      "title": "测试与质量检查",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 60576,
+      "generatedFiles": 1,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 5,
+    "passed": 0,
+    "averageScore": 28
+  }
+}

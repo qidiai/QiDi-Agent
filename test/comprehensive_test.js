@@ -444,12 +444,14 @@ async function testTaskRouter () {
     const strategies = router.getStrategies();
 
     assert(Array.isArray(strategies), 'strategies 应为数组');
-    assertEqual(strategies.length, 4, '应有4种策略');
+    assertEqual(strategies.length, 6, '应有6种策略');
     const names = strategies.map(s => s.name);
     assert(names.includes('round_robin'), '缺少 round_robin');
     assert(names.includes('capability'), '缺少 capability');
+    assert(names.includes('top_n'), '缺少 top_n');
     assert(names.includes('manual'), '缺少 manual');
     assert(names.includes('broadcast'), '缺少 broadcast');
+    assert(names.includes('synchrony'), '缺少 synchrony');
   });
 }
 
@@ -868,7 +870,7 @@ async function testTaskOrchestrator () {
 
     orchestrator.setExecutionMode('quality');
     assertEqual(orchestrator.getExecutionMode(), 'quality');
-    assertEqual(orchestrator.routingStrategy, 'capability');
+    assertEqual(orchestrator.routingStrategy, 'top_n');
   });
 
   await test('TaskOrchestrator 初始化正常', async () => {
@@ -889,7 +891,7 @@ async function testTaskOrchestrator () {
     const orchestrator = new TaskOrchestrator(provider, { workspaceDir: './test_workspace' });
     const strategies = orchestrator.getRoutingStrategies();
     assert(Array.isArray(strategies), 'strategies 应为数组');
-    assertEqual(strategies.length, 4, '应有4种路由策略');
+    assertEqual(strategies.length, 6, '应有6种路由策略');
   });
 
   await test('模式推荐功能正常', async () => {

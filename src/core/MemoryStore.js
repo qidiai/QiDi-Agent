@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 class MemoryStore {
   constructor (options = {}) {
@@ -32,7 +33,7 @@ class MemoryStore {
       const filePath = path.join(this.persistDir, this.persistFile);
       if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf-8');
-        this.store = JSON.parse(data);
+        this.store = safeJsonParse(data, { global: {}, tasks: {}, tags: {} });
         this._rebuildTagIndex();
       }
     } catch (e) {

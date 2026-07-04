@@ -8,6 +8,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 const inquirer = require('inquirer');
 const path = require('path');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 const ProviderFactory = require('../providers');
 const TaskOrchestrator = require('../core/TaskOrchestrator');
@@ -771,6 +772,211 @@ program
   });
 
 program
+  .command('health')
+  .description('检查 AI 工具健康状态')
+  .option('-t, --tool <name>', '检查指定工具')
+  .option('-l, --list', '列出所有工具状态')
+  .option('-r, --report', '生成健康报告')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🔍 AI 工具健康检查\n'));
+
+    const ToolHealthChecker = require('../core/ToolHealthChecker');
+    const healthChecker = new ToolHealthChecker({ timeout: 5000 });
+    healthChecker.registerAdapters(AdapterFactory.createAll());
+
+    if (options.tool) {
+      const adapter = AdapterFactory.createAll().find(a => a.name === options.tool || a.displayName === options.tool);
+      if (!adapter) {
+        console.log(chalk.red(`❌ 未找到工具: ${options.tool}\n`));
+        process.exit(1);
+      }
+
+      const result = await healthChecker.check(adapter);
+      const statusIcon = result.status === 'healthy' ? '✅' : '❌';
+      const statusColor = result.status === 'healthy' ? chalk.green : chalk.red;
+
+      console.log(`  ${statusIcon} ${chalk.cyan(result.displayName)}: ${statusColor(result.status)}`);
+      if (result.responseTime) {
+        console.log(`     响应时间: ${chalk.gray(`${result.responseTime}ms`)}`);
+      }
+      if (result.error) {
+        console.log(`     错误: ${chalk.red(result.error)}`);
+      }
+      console.log('');
+    } else if (options.list) {
+      const status = healthChecker.getStatus();
+      const unhealthy = Object.entries(status).filter(([_, v]) => v.status !== 'healthy');
+
+      console.log(chalk.bold.cyan('📊 工具健康状态:\n'));
+      for (const [name, info] of Object.entries(status)) {
+        const adapter = AdapterFactory.createAll().find(a => a.name === name);
+        const statusIcon = info.status === 'healthy' ? '✅' : info.status === 'unknown' ? '❓' : '❌';
+        const statusColor = info.status === 'healthy' ? chalk.green : info.status === 'unknown' ? chalk.yellow : chalk.red;
+
+        console.log(`  ${statusIcon} ${chalk.cyan(adapter?.displayName || name)}: ${statusColor(info.status)}`);
+        if (info.responseTime) {
+          console.log(`     响应时间: ${chalk.gray(`${info.responseTime}ms`)}`);
+        }
+        if (info.error) {
+          console.log(`     错误: ${chalk.red(info.error)}`);
+        }
+      }
+
+      if (unhealthy.length > 0) {
+        console.log(chalk.yellow(`\n⚠️  ${unhealthy.length} 个工具状态异常\n`));
+      } else {
+        console.log(chalk.green('\n✅ 所有工具状态正常\n'));
+      }
+    } else if (options.report) {
+      const report = healthChecker.getHealthReport();
+
+      console.log(chalk.bold.cyan('═══════════════════════════════════════════'));
+      console.log(chalk.bold.cyan('           📋 工具健康报告'));
+      console.log(chalk.bold.cyan('═══════════════════════════════════════════\n'));
+
+      console.log(`  检查时间: ${chalk.gray(report.timestamp)}`);
+      console.log(`  总工具数: ${chalk.cyan(report.summary.total)}`);
+      console.log(`  健康: ${chalk.green(report.summary.healthy)}`);
+      console.log(`  异常: ${chalk.red(report.summary.unhealthy)}`);
+      console.log(`  未知: ${chalk.yellow(report.summary.unknown)}\n`);
+
+      console.log(chalk.bold('  详细状态:\n'));
+      for (const tool of report.tools) {
+        const statusIcon = tool.status === 'healthy' ? '✅' : tool.status === 'unknown' ? '❓' : '❌';
+        const statusColor = tool.status === 'healthy' ? chalk.green : tool.status === 'unknown' ? chalk.yellow : chalk.red;
+
+        console.log(`  ${statusIcon} ${chalk.cyan(tool.displayName)}: ${statusColor(tool.status)}`);
+        if (tool.responseTime) {
+          console.log(`     响应时间: ${chalk.gray(`${tool.responseTime}ms`)}`);
+        }
+        if (tool.error) {
+          console.log(`     错误: ${chalk.red(tool.error)}`);
+        }
+        if (tool.history && tool.history.length > 0) {
+          const recent = tool.history.slice(-3);
+          console.log(`     最近记录: ${recent.map(h => h.status === 'healthy' ? '✓' : '✗').join(' ')}`);
+        }
+      }
+      console.log('');
+    } else {
+      const results = await healthChecker.checkAll();
+      const healthy = results.filter(r => r.status === 'healthy').length;
+      const unhealthy = results.filter(r => r.status === 'unhealthy').length;
+
+      console.log(chalk.bold.cyan('📊 健康检查结果:\n'));
+      for (const result of results) {
+        const statusIcon = result.status === 'healthy' ? '✅' : '❌';
+        const statusColor = result.status === 'healthy' ? chalk.green : chalk.red;
+
+        console.log(`  ${statusIcon} ${chalk.cyan(result.displayName)}: ${statusColor(result.status)}`);
+        if (result.responseTime) {
+          console.log(`     响应时间: ${chalk.gray(`${result.responseTime}ms`)}`);
+        }
+        if (result.error) {
+          console.log(`     错误: ${chalk.red(result.error)}`);
+        }
+      }
+
+      console.log('\n' + chalk.bold('总结:'));
+      console.log(`  ✅ 健康: ${chalk.green(healthy)}`);
+      console.log(`  ❌ 异常: ${chalk.red(unhealthy)}`);
+      console.log(`  📊 健康率: ${chalk.cyan(`${Math.round((healthy / results.length) * 100)}%`)}\n`);
+    }
+  });
+
+// ═══════════════════════════════════════════
+// adaptive 命令族 - 自适应智能编排（P1）
+// ═══════════════════════════════════════════
+program
+  .command('adaptive')
+  .description('自适应智能编排（推荐工具/策略/模式）')
+  .option('-r, --recommend <task>', '获取推荐方案')
+  .option('-m, --mode <mode>', '设置编排模式 (auto|manual|hybrid)')
+  .option('-s, --status', '查看编排状态')
+  .option('-p, --prefs <json>', '更新用户偏好 (JSON 字符串)')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🤖 自适应智能编排\n'));
+
+    const TaskOrchestrator = require('../core/TaskOrchestrator');
+    const orch = new TaskOrchestrator({});
+
+    if (options.recommend) {
+      console.log(chalk.gray(`分析任务: ${options.recommend}\n`));
+      try {
+        const tools = await new (require('../utils/ToolScanner'))().scanAndConnect({ autoConnect: false });
+        const rec = orch.getAdaptiveRecommendation(options.recommend, tools || []);
+        console.log(chalk.green('✅ 推荐方案:'));
+        console.log(`  语言: ${chalk.cyan(rec.features.language)}`);
+        console.log(`  类型: ${chalk.cyan(rec.features.taskType)}`);
+        console.log(`  复杂度: ${chalk.cyan(rec.features.complexity)}`);
+        console.log(`  规模: ${chalk.cyan(rec.features.scale)}`);
+        console.log(`  隐私: ${chalk.cyan(rec.features.privacySensitivity)}`);
+        console.log(`  推荐工具: ${chalk.yellow(rec.tools.map(t => t.displayName).join(' + '))}`);
+        console.log(`  策略: ${chalk.yellow(rec.strategy)} | 模式: ${chalk.yellow(rec.mode)}`);
+        console.log(`  工具数: ${rec.toolCount}`);
+        console.log(`  置信度: ${chalk.green(Math.round(rec.confidence * 100) + '%')}`);
+        console.log(`  理由: ${chalk.gray(rec.reasoning || '')}`);
+      } catch (e) {
+        console.log(chalk.red(`❌ 获取推荐失败: ${e.message}`));
+      }
+      console.log('');
+      return;
+    }
+
+    if (options.mode) {
+      const validModes = ['auto', 'manual', 'hybrid'];
+      if (!validModes.includes(options.mode)) {
+        console.log(chalk.red(`❌ 无效模式: ${options.mode}，可选: ${validModes.join(', ')}`));
+        return;
+      }
+      orch.setOrchestrationMode(options.mode);
+      const modeNames = { auto: '自适应（全自动）', manual: '手动（用户控制）', hybrid: '混合（推荐+确认）' };
+      console.log(chalk.green(`✅ 编排模式已切换: ${modeNames[options.mode]}`));
+      console.log(chalk.gray(`\n说明:`));
+      console.log(chalk.gray(`  auto: 系统分析任务后自动应用最佳工具+策略+模式`));
+      console.log(chalk.gray(`  manual: 完全跳过推荐，用户自选工具+策略+模式`));
+      console.log(chalk.gray(`  hybrid: 系统推荐但需用户确认后才应用（默认）`));
+      console.log('');
+      return;
+    }
+
+    if (options.status) {
+      const mode = orch.getOrchestrationMode();
+      const modeNames = { auto: '自适应', manual: '手动', hybrid: '混合' };
+      console.log(chalk.green('📊 编排状态:'));
+      console.log(`  当前模式: ${chalk.cyan(modeNames[mode] || mode)}`);
+      console.log(`  推荐引擎: ${chalk.green('已启用')}`);
+      console.log(`  工具学习: ${chalk.green('已加载')}`);
+      console.log('');
+      return;
+    }
+
+    if (options.prefs) {
+      try {
+        const prefs = JSON.parse(options.prefs);
+        const result = orch.adaptiveOrchestrator.updatePreferences(prefs);
+        console.log(chalk.green('✅ 偏好已更新:'));
+        console.log(JSON.stringify(result.preferences, null, 2));
+      } catch (e) {
+        console.log(chalk.red(`❌ 解析 JSON 失败: ${e.message}`));
+        console.log(chalk.gray('示例: qidi adaptive --prefs \'{"privacySensitivity":"high","maxParallelTools":5}\''));
+      }
+      console.log('');
+      return;
+    }
+
+    // 默认显示帮助
+    console.log(chalk.gray('用法:'));
+    console.log('  qidi adaptive --recommend "用 Python 写一个爬虫"');
+    console.log('  qidi adaptive --mode auto');
+    console.log('  qidi adaptive --status');
+    console.log('  qidi adaptive --prefs \'{"privacySensitivity":"high","maxParallelTools":5}\'');
+    console.log('');
+  });
+
+program
   .command('web')
   .description('启动 Web UI 管理界面')
   .option('-p, --port <port>', '端口号', '3000')
@@ -810,6 +1016,24 @@ program
       }
       process.exit(1);
     }
+  });
+
+program
+  .command('chat')
+  .description('启动聊天式编程助手（类似 Claude Code）')
+  .option('-m, --mode <mode>', '执行模式: privacy|quality', 'privacy')
+  .option('-p, --provider <provider>', '模型提供商', '')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .action(async (options) => {
+    const ChatSession = require('./ChatSession');
+    
+    const session = new ChatSession({
+      mode: options.mode,
+      provider: options.provider || undefined,
+      workspaceDir: options.workspace
+    });
+    
+    await session.start();
   });
 
 program
@@ -988,6 +1212,11 @@ program
     console.log('    ' + chalk.white('-H, --host <host>') + chalk.gray('  主机地址 (默认 127.0.0.1)'));
     console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录'));
     console.log('');
+    console.log(chalk.cyan('  qidi mcp') + chalk.gray('     启动 MCP 服务器 (Model Context Protocol)'));
+    console.log('    ' + chalk.white('-m, --mode <mode>') + chalk.gray('  默认执行模式 (默认 privacy)'));
+    console.log('    ' + chalk.white('-p, --provider') + chalk.gray('  默认模型提供商'));
+    console.log('    ' + chalk.white('-w, --workspace') + chalk.gray('  工作目录'));
+    console.log('');
 
     console.log(chalk.bold.yellow('💡 快速示例'));
     console.log(chalk.green('  qidi scan') + chalk.gray('                          # 扫描本机 AI 工具'));
@@ -995,8 +1224,30 @@ program
     console.log(chalk.green('  qidi run -t "写贪吃蛇" --mode quality') + chalk.gray('  # 高质量模式'));
     console.log(chalk.green('  qidi multi -t "REST API" -m parallel') + chalk.gray('  # 多Agent并行'));
     console.log(chalk.green('  qidi web -p 8080') + chalk.gray('               # Web UI 指定端口'));
+    console.log(chalk.green('  qidi mcp') + chalk.gray('                          # 启动 MCP 服务器'));
     console.log(chalk.green('  qidi help') + chalk.gray('                          # 显示本指南'));
     console.log('');
+  });
+
+// ────────────────── mcp 命令（MCP 协议服务器）──────────────────
+program
+  .command('mcp')
+  .description('启动 MCP (Model Context Protocol) 服务器，将 Qidi 能力暴露给 MCP 兼容客户端')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .option('-m, --mode <mode>', '默认执行模式: privacy|quality|efficiency|multi', 'privacy')
+  .option('-p, --provider <provider>', '默认模型提供商', process.env.MODEL_PROVIDER || 'ollama')
+  .action(async (options) => {
+    const MCPServer = require('../mcp/MCPServer');
+
+    const server = new MCPServer({
+      workspaceDir: options.workspace,
+      configDir: path.join(__dirname, '../../config'),
+      reportDir: './reports',
+      defaultProvider: options.provider,
+      defaultMode: options.mode
+    });
+
+    await server.start();
   });
 
 // ────────────────── config 命令 ──────────────────
@@ -1010,7 +1261,7 @@ program
 
     if (options.show) {
       try {
-        const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+        const config = safeJsonParse(fs.readFileSync(configFile, 'utf8'), {});
         console.log(chalk.cyan('\n⚙️ 当前配置:\n'));
         console.log(JSON.stringify(config, null, 2));
       } catch {
@@ -1021,6 +1272,227 @@ program
       console.log(chalk.green(`\n✅ 日志级别已设置为: ${options.level}\n`));
     } else {
       program.outputHelp();
+    }
+  });
+
+// ────────────────── G4: 增强模块命令 ──────────────────
+
+// ── test 命令 ──
+program
+  .command('test')
+  .description('G4: 运行测试')
+  .option('-f, --file <path>', '测试文件路径')
+  .option('-l, --language <lang>', '测试语言', 'javascript')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🧪 测试执行器\n'));
+
+    const TestRunner = require('../core/TestRunner');
+    const runner = new TestRunner({ workspaceDir: options.workspace });
+
+    try {
+      const fs2 = require('fs');
+      let testCode = '';
+      if (options.file && fs2.existsSync(options.file)) {
+        testCode = fs2.readFileSync(options.file, 'utf-8');
+      } else {
+        console.log(chalk.yellow('⚠️  未指定测试文件，运行语法检查模式'));
+        testCode = '';
+      }
+
+      const result = await runner.runTests({
+        testCode,
+        language: options.language,
+        workspaceDir: options.workspace
+      });
+
+      console.log(chalk.bold('\n📊 测试结果:\n'));
+      console.log(`  通过: ${chalk.green(result.passed || 0)}/${result.total || 0}`);
+      console.log(`  失败: ${chalk.red(result.failed || 0)}`);
+      if (result.duration) {
+        console.log(`  耗时: ${chalk.gray(result.duration + 'ms')}`);
+      }
+      if (result.output) {
+        console.log(chalk.gray('\n  输出:\n' + result.output));
+      }
+      console.log('');
+    } catch (e) {
+      console.log(chalk.red(`\n❌ 测试失败: ${e.message}\n`));
+      process.exit(1);
+    }
+  });
+
+// ── budget 命令 ──
+program
+  .command('budget')
+  .description('G4: Token 预算管理')
+  .option('-s, --set <tokens>', '设置总预算')
+  .option('-r, --report', '生成预算报告')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('💰 Token 预算管理\n'));
+
+    const BudgetManager = require('../core/BudgetManager');
+    const bm = new BudgetManager({ totalBudget: parseInt(options.set) || 1000000 });
+
+    if (options.set) {
+      console.log(chalk.green(`✅ 总预算已设置为: ${parseInt(options.set).toLocaleString()} tokens`));
+    }
+
+    if (options.report) {
+      const report = bm.generateReport();
+      console.log(chalk.bold('\n📋 预算报告:\n'));
+      console.log(`  总预算: ${chalk.cyan(report.totalBudget.toLocaleString())}`);
+      console.log(`  已使用: ${chalk.yellow(report.usedTokens.toLocaleString())} (${report.usageRate}%)`);
+      console.log(`  剩余: ${chalk.green(report.remaining.toLocaleString())}`);
+      if (report.byPhase && Object.keys(report.byPhase).length > 0) {
+        console.log(chalk.bold('\n  各阶段消耗:'));
+        for (const [phase, data] of Object.entries(report.byPhase)) {
+          console.log(`    ${phase}: ${data.tokens.toLocaleString()} tokens`);
+        }
+      }
+      console.log('');
+    } else if (!options.set) {
+      console.log(chalk.gray('  使用 --set 设置预算, --report 生成报告'));
+      console.log('');
+    }
+  });
+
+// ── git 命令 ──
+program
+  .command('git')
+  .description('G4: Git 集成管理')
+  .option('-s, --status', '查看 Git 状态')
+  .option('-b, --branch <name>', '创建任务分支')
+  .option('-c, --commit <msg>', '提交变更')
+  .option('-r, --rollback [savepoint]', '回滚到保存点')
+  .option('-w, --workspace <dir>', '工作目录', './workspace')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🌿 Git 集成管理\n'));
+
+    const GitIntegration = require('../core/GitIntegration');
+    const git = new GitIntegration({ workspaceDir: options.workspace });
+
+    if (options.status) {
+      console.log(`  启用: ${git.isEnabled() ? chalk.green('是') : chalk.red('否')}`);
+      console.log(`  当前分支: ${chalk.cyan(git.getCurrentBranch())}`);
+      const savepoints = git.getSavepoints ? git.getSavepoints() : [];
+      if (savepoints.length > 0) {
+        console.log(chalk.bold('\n  保存点:'));
+        savepoints.forEach(sp => {
+          console.log(`    ${chalk.cyan(sp.id)} - ${sp.message || '无消息'} (${sp.timestamp})`);
+        });
+      }
+      console.log('');
+    } else if (options.branch) {
+      git.createTaskBranch(options.branch);
+      console.log(chalk.green(`✅ 已创建分支: ${options.branch}\n`));
+    } else if (options.commit) {
+      const hash = git.commitChanges(Date.now().toString(), options.commit);
+      if (hash) {
+        console.log(chalk.green(`✅ 已提交: ${hash}\n`));
+      } else {
+        console.log(chalk.yellow('⚠️  无变更可提交\n'));
+      }
+    } else if (options.rollback) {
+      git.rollback(typeof options.rollback === 'string' ? options.rollback : undefined);
+      console.log(chalk.green('✅ 已回滚\n'));
+    } else {
+      console.log(chalk.gray('  使用 --status 查看状态, --branch 创建分支, --commit 提交, --rollback 回滚'));
+      console.log('');
+    }
+  });
+
+// ── sandbox 命令 ──
+program
+  .command('sandbox')
+  .description('G4: 沙箱执行代码')
+  .option('-c, --code <code>', '要执行的代码')
+  .option('-f, --file <path>', '代码文件路径')
+  .option('-l, --language <lang>', '语言', 'javascript')
+  .option('-t, --timeout <ms>', '超时(毫秒)', '10000')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🔬 沙箱执行器\n'));
+
+    const SandboxExecutor = require('../core/SandboxExecutor');
+    const sandbox = new SandboxExecutor({ timeout: parseInt(options.timeout) });
+
+    let code = options.code || '';
+    if (!code && options.file) {
+      const fs2 = require('fs');
+      if (fs2.existsSync(options.file)) {
+        code = fs2.readFileSync(options.file, 'utf-8');
+      } else {
+        console.log(chalk.red(`❌ 文件不存在: ${options.file}\n`));
+        process.exit(1);
+      }
+    }
+
+    if (!code) {
+      console.log(chalk.yellow('⚠️  请通过 --code 或 --file 提供代码'));
+      console.log('');
+      return;
+    }
+
+    try {
+      const result = await sandbox.execute(code, options.language, { timeout: parseInt(options.timeout) });
+      console.log(chalk.bold('\n📊 执行结果:\n'));
+      console.log(`  状态: ${result.success ? chalk.green('成功') : chalk.red('失败')}`);
+      if (result.stdout) {
+        console.log(`  输出:\n${chalk.gray(result.stdout)}`);
+      }
+      if (result.stderr) {
+        console.log(`  错误:\n${chalk.red(result.stderr)}`);
+      }
+      if (result.duration) {
+        console.log(`  耗时: ${chalk.gray(result.duration + 'ms')}`);
+      }
+      console.log('');
+    } catch (e) {
+      console.log(chalk.red(`\n❌ 执行失败: ${e.message}\n`));
+      process.exit(1);
+    }
+  });
+
+// ── approval 命令 ──
+program
+  .command('approval')
+  .description('G4: 人工审批工作流')
+  .option('-l, --list', '列出待审批')
+  .option('-a, --approve <id>', '批准审批')
+  .option('-r, --reject <id>', '拒绝审批')
+  .option('-m, --message <msg>', '审批消息', '')
+  .action(async (options) => {
+    printLogo({ mini: true });
+    console.log(chalk.bold.cyan('🔐 审批工作流\n'));
+
+    const ApprovalWorkflow = require('../core/ApprovalWorkflow');
+    const aw = new ApprovalWorkflow();
+
+    if (options.list) {
+      const pending = aw.getPendingApprovals();
+      if (pending.length === 0) {
+        console.log(chalk.gray('  无待审批项\n'));
+      } else {
+        console.log(chalk.bold('  待审批项:'));
+        pending.forEach(p => {
+          console.log(`    ${chalk.cyan(p.id)} - ${p.type} - ${p.data?.task || '未知'} (${p.timestamp})`);
+        });
+        console.log('');
+      }
+    } else if (options.approve) {
+      const result = aw.approve(options.approve, options.message);
+      console.log(chalk.green(`✅ 已批准: ${options.approve}\n`));
+    } else if (options.reject) {
+      const result = aw.reject(options.reject, options.message);
+      console.log(chalk.yellow(`⚠️  已拒绝: ${options.reject}\n`));
+    } else {
+      console.log(chalk.gray('  使用 --list 查看, --approve 批准, --reject 拒绝'));
+      console.log('');
     }
   });
 

@@ -11,6 +11,17 @@ const ToolScanner = require('../core/ToolScanner');
 const AdapterFactory = require('../adapters');
 const FileManager = require('../utils/FileManager');
 
+// P0-P3 新模块
+let TestRunner, MCPClient, VectorMemoryStore, BudgetManager, GitIntegration, SandboxExecutor, ApprovalWorkflow, StreamManager;
+try { TestRunner = require('../core/TestRunner'); } catch (_) {}
+try { MCPClient = require('../mcp/MCPClient'); } catch (_) {}
+try { VectorMemoryStore = require('../core/VectorMemoryStore'); } catch (_) {}
+try { BudgetManager = require('../core/BudgetManager'); } catch (_) {}
+try { GitIntegration = require('../core/GitIntegration'); } catch (_) {}
+try { SandboxExecutor = require('../core/SandboxExecutor'); } catch (_) {}
+try { ApprovalWorkflow = require('../core/ApprovalWorkflow'); } catch (_) {}
+try { StreamManager = require('../utils/StreamManager'); } catch (_) {}
+
 /**
  * TUI 会话管理
  *
@@ -39,8 +50,71 @@ class TUISession extends EventEmitter {
     // TUI 事件适配器
     this.eventAdapter = null;
 
+    // P0-P3 模块实例（延迟初始化）
+    this.testRunner = null;
+    this.mcpClient = null;
+    this.vectorMemory = null;
+    this.budgetManager = null;
+    this.gitIntegration = null;
+    this.sandboxExecutor = null;
+    this.approvalWorkflow = null;
+    this.streamManager = null;
+
     // 确保目录存在
     this._ensureDirs();
+  }
+
+  /**
+   * 初始化增强模块
+   */
+  async initEnhancedModules () {
+    // TestRunner
+    if (TestRunner && !this.testRunner) {
+      this.testRunner = new TestRunner({ workspaceDir: this.workspaceDir });
+      this.emit('module:ready', { module: 'TestRunner' });
+    }
+
+    // BudgetManager
+    if (BudgetManager && !this.budgetManager) {
+      this.budgetManager = new BudgetManager({ totalBudget: 200000 });
+      this.budgetManager.on('alarm', (data) => this.emit('budget:alarm', data));
+      this.budgetManager.on('critical', (data) => this.emit('budget:critical', data));
+    }
+
+    // GitIntegration
+    if (GitIntegration && !this.gitIntegration) {
+      this.gitIntegration = new GitIntegration({ workspaceDir: this.workspaceDir });
+      if (this.gitIntegration.isEnabled()) {
+        this.emit('git:ready', { branch: this.gitIntegration.getCurrentBranch() });
+      }
+    }
+
+    // SandboxExecutor
+    if (SandboxExecutor && !this.sandboxExecutor) {
+      this.sandboxExecutor = new SandboxExecutor({ workspaceDir: this.workspaceDir, level: 'process' });
+    }
+
+    // ApprovalWorkflow
+    if (ApprovalWorkflow && !this.approvalWorkflow) {
+      this.approvalWorkflow = new ApprovalWorkflow({});
+      this.approvalWorkflow.on('approvalRequested', (req) => this.emit('approval:requested', req));
+    }
+
+    // StreamManager
+    if (StreamManager && !this.streamManager) {
+      this.streamManager = new StreamManager();
+    }
+
+    // VectorMemoryStore
+    if (VectorMemoryStore && !this.vectorMemory) {
+      this.vectorMemory = new VectorMemoryStore({});
+    }
+
+    // MCPClient
+    if (MCPClient && !this.mcpClient) {
+      this.mcpClient = new MCPClient({});
+      try { await this.mcpClient.loadFromConfig(); } catch (_) {}
+    }
   }
 
   _ensureDirs () {
@@ -132,11 +206,21 @@ class TUISession extends EventEmitter {
         }
       }
 
+      // 初始化增强模块
+      await this.initEnhancedModules();
+
       // 创建编排器
       this.orchestrator = new TaskOrchestrator(this.provider, {
         workspaceDir: this.workspaceDir,
         toolAdapters: this.registeredTools,
-        executionMode: this.mode
+        executionMode: this.mode,
+        testRunner: this.testRunner,
+        budgetManager: this.budgetManager,
+        gitIntegration: this.gitIntegration,
+        sandboxExecutor: this.sandboxExecutor,
+        approvalWorkflow: this.approvalWorkflow,
+        streamManager: this.streamManager,
+        vectorMemory: this.vectorMemory
       });
 
       // 附加 TUI 事件适配器
@@ -263,8 +347,55 @@ class TUISession extends EventEmitter {
       toolsScanned: this.scanned,
       toolsCount: this.registeredTools.length,
       recentTasksCount: this.recentTasks.length,
-      recentReportsCount: this.recentReportIds.length
+      recentReportsCount: this.recentReportIds.length,
+      // 增强模块状态
+      testRunner: this.testRunner ? 'ready' : 'unavailable',
+      budget: this.budgetManager ? this.budgetManager.generateReport() : null,
+      git: this.gitIntegration ? {
+        enabled: this.gitIntegration.isEnabled(),
+        branch: this.gitIntegration.getCurrentBranch()
+      } : null,
+      sandbox: this.sandboxExecutor ? this.sandboxExecutor.getStatus() : null,
+      approvals: this.approvalWorkflow ? this.approvalWorkflow.getStats() : null,
+      vectorMemory: this.vectorMemory ? this.vectorMemory.getStats() : null,
+      mcpServers: this.mcpClient ? this.mcpClient.getStatus() : []
     };
+  }
+
+  /**
+   * 获取预算报告
+   */
+  getBudgetReport () {
+    return this.budgetManager ? this.budgetManager.generateReport() : null;
+  }
+
+  /**
+   * 审批操作
+   */
+  approve (approvalId, comment = '') {
+    return this.approvalWorkflow ? this.approvalWorkflow.approve(approvalId, 'tui-user', comment) : false;
+  }
+
+  rejectApproval (approvalId, comment = '') {
+    return this.approvalWorkflow ? this.approvalWorkflow.reject(approvalId, 'tui-user', comment) : false;
+  }
+
+  /**
+   * Git 操作
+   */
+  gitStatus () {
+    return this.gitIntegration ? {
+      branch: this.gitIntegration.getCurrentBranch(),
+      changedFiles: this.gitIntegration.getChangedFiles(),
+      log: this.gitIntegration.getLog(10)
+    } : null;
+  }
+
+  /**
+   * 回滚
+   */
+  rollback (commitHash = null) {
+    return this.gitIntegration ? this.gitIntegration.rollback(commitHash) : false;
   }
 }
 

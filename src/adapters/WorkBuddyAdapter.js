@@ -107,18 +107,8 @@ class WorkBuddyAdapter extends BaseToolAdapter {
       throw new Error('WorkBuddy 未安装或未找到');
     }
 
-    try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
-      if (result.success) {
-        this.status = 'online';
-        return { success: true, message: 'WorkBuddy 连接成功' };
-      }
-      this.status = 'offline';
-      return { success: false, message: 'WorkBuddy 不可用' };
-    } catch (e) {
-      this.status = 'error';
-      return { success: false, message: e.message };
-    }
+    this.status = 'online';
+    return { success: true, message: 'WorkBuddy 已就绪' };
   }
 
   async execute (task, options = {}) {

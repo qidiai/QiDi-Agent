@@ -1,0 +1,18 @@
+{
+  "originalTask": "C:\\Users\\ASUS\\Documents\\trae_projects\\ai-orchestrator 分析项目优缺点,有无bug,可优化方向",
+  "successRate": 0,
+  "totalTasks": 4,
+  "completedTasks": 0,
+  "failedTasks": 4,
+  "constraints": {
+    "platform": "控制台"
+  },
+  "keywords": "无",
+  "tags": [
+    "失败",
+    "无"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 0
+}

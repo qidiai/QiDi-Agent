@@ -13,6 +13,7 @@ const ExecutionModeManager = require('./ExecutionModeManager');
 const TaskScheduler = require('./TaskScheduler');
 const TaskExecutor = require('./TaskExecutor');
 const ToolLearning = require('./ToolLearning');
+const AdaptiveOrchestrator = require('./AdaptiveOrchestrator');
 
 /**
  * 任务编排器（门面）：负责完整的任务生命周期管理。
@@ -119,6 +120,32 @@ class TaskOrchestrator extends EventEmitter {
       approvalHistory: []
     };
 
+    // ═══════════════ P0-P3 增强模块接入 ═══════════════
+    this.testRunner = options.testRunner || null;
+    this.budgetManager = options.budgetManager || null;
+    this.gitIntegration = options.gitIntegration || null;
+    this.sandboxExecutor = options.sandboxExecutor || null;
+    this.approvalWorkflow = options.approvalWorkflow || null;
+    this.streamManager = options.streamManager || null;
+    this.vectorMemory = options.vectorMemory || null;
+    this.contractValidator = options.contractValidator || null;
+    this.retryManager = options.retryManager || null;
+    this.mcpClient = options.mcpClient || null;
+
+    // 将 TestRunner 注入 TesterAgent
+    if (this.testRunner && this.agents.tester) {
+      this.agents.tester.setTestRunner(this.testRunner);
+    }
+
+    // 将 MCP 工具适配器纳入路由池
+    if (this.mcpClient) {
+      const mcpAdapters = this.mcpClient.getToolAdapters();
+      if (mcpAdapters.length > 0) {
+        this.toolAdapters = [...this.toolAdapters, ...mcpAdapters];
+        this.toolRouter = null; // 强制重建路由器
+      }
+    }
+
     this.executor = new TaskExecutor({
       privacyMode: this.privacyMode,
       routingStrategy: this.routingStrategy,
@@ -138,7 +165,17 @@ class TaskOrchestrator extends EventEmitter {
       contractAssembler: this.contractAssembler,
       toolAdapters: this.toolAdapters,
       providers: this.providers,
-      _getTaskRouter: () => this._getTaskRouter()
+      _getTaskRouter: () => this._getTaskRouter(),
+      // P0-P3 增强模块
+      testRunner: this.testRunner,
+      budgetManager: this.budgetManager,
+      gitIntegration: this.gitIntegration,
+      sandboxExecutor: this.sandboxExecutor,
+      approvalWorkflow: this.approvalWorkflow,
+      streamManager: this.streamManager,
+      vectorMemory: this.vectorMemory,
+      contractValidator: this.contractValidator,
+      retryManager: this.retryManager
     });
 
     // 任务状态
@@ -151,6 +188,20 @@ class TaskOrchestrator extends EventEmitter {
     this.toolLearning = new ToolLearning({
       learningDir: options.learningDir || './config/tool_learning'
     });
+
+    // ═══════════════ 自适应智能编排器 ═══════════════
+    this.adaptiveOrchestrator = new AdaptiveOrchestrator({
+      capabilityTree: this.modeManager.capabilityTree,
+      toolLearning: this.toolLearning,
+      orchestrationMode: options.orchestrationMode || 'hybrid', // auto/manual/hybrid
+      privacySensitivity: options.privacySensitivity,
+      qualityPriority: options.qualityPriority,
+      efficiencyPriority: options.efficiencyPriority,
+      maxParallelTools: options.maxParallelTools,
+      preferredTools: options.preferredTools,
+      excludedTools: options.excludedTools,
+      learningDir: options.learningDir
+    });
   }
 
   // ── 路由器 ──
@@ -159,6 +210,7 @@ class TaskOrchestrator extends EventEmitter {
     if (!this.toolRouter) {
       this.toolRouter = new TaskRouter(this.toolAdapters, {
         strategy: this.routingStrategy,
+        topN: this.options.topN || 3,
         manualRouting: this.manualRouting,
         privacyMode: this.privacyMode,
         toolOnlyMode: this.privacyMode,
@@ -232,13 +284,110 @@ class TaskOrchestrator extends EventEmitter {
     this._getTaskRouter().setManualRouting(routingTable);
   }
 
+  // ═══════════════════════════════════════════
+  // 自适应智能编排 API
+  // ═══════════════════════════════════════════
+
+  /**
+   * 获取自适应编排推荐（不修改状态）
+   * @param {string} taskDescription - 任务描述
+   * @returns {Object} 推荐结果
+   */
+  getAdaptiveRecommendation (taskDescription) {
+    return this.adaptiveOrchestrator.recommend(
+      taskDescription,
+      this.toolAdapters.map(a => ({ name: a.name, displayName: a.displayName, status: a.status }))
+    );
+  }
+
+  /**
+   * 应用自适应推荐（手动确认后执行）
+   * @param {Object} recommendation - 推荐结果
+   */
+  applyAdaptiveRecommendation (recommendation) {
+    if (recommendation.mode && recommendation.mode !== this.modeManager.getCurrentMode()) {
+      this.setExecutionMode(recommendation.mode);
+    }
+    if (recommendation.strategy && recommendation.strategy !== this.routingStrategy) {
+      this.routingStrategy = recommendation.strategy;
+      this.toolRouter = null;
+      if (this.executor) {
+        this.executor.routingStrategy = this.routingStrategy;
+      }
+    }
+    if (recommendation.tools && recommendation.tools.length > 0) {
+      const recommendedNames = recommendation.tools.map(t => t.name);
+      this.toolAdapters = this.toolAdapters.filter(a => recommendedNames.includes(a.name));
+      this.toolRouter = null;
+    }
+    return { success: true, applied: recommendation };
+  }
+
+  /**
+   * 设置编排模式
+   * @param {string} mode - auto（自适应）/ manual（手动）/ hybrid（混合）
+   */
+  setOrchestrationMode (mode) {
+    return this.adaptiveOrchestrator.setOrchestrationMode(mode);
+  }
+
+  /**
+   * 获取当前编排模式
+   */
+  getOrchestrationMode () {
+    return this.adaptiveOrchestrator.orchestrationMode;
+  }
+
+  /**
+   * 更新用户偏好（隐私敏感度、质量优先级等）
+   */
+  updateAdaptivePreferences (preferences) {
+    return this.adaptiveOrchestrator.updatePreferences(preferences);
+  }
+
+  /**
+   * 获取自适应编排状态
+   */
+  getAdaptiveStatus () {
+    return this.adaptiveOrchestrator.getStatus();
+  }
+
   // ── 生命周期 ──
 
   async initialize () {
     this.emit('init', { provider: this.provider.name });
     this.tokenCounter.reset();
     this.modelRouter.reset();
+
+    if (this.toolAdapters && this.toolAdapters.length > 0) {
+      await this._connectTools();
+    }
+
     return true;
+  }
+
+  async _connectTools () {
+    const ToolScanner = require('./ToolScanner');
+    const scanner = new ToolScanner({
+      silentScan: true,
+      autoConfirm: true
+    });
+    scanner.registerAdapters(this.toolAdapters);
+    const scanResult = await scanner.scan();
+
+    for (const tool of scanResult.enabled) {
+      try {
+        await scanner.connect(tool.name);
+      } catch (e) {
+        console.log(`连接工具 ${tool.name} 失败: ${e.message}`);
+      }
+    }
+
+    this.connectedTools = scanResult.enabled || [];
+    console.log(`\n📡 已连接工具: ${this.connectedTools.length} 个`);
+    if (this.connectedTools.length > 0) {
+      console.log(`   工具列表: ${this.connectedTools.map(t => t.name).join(', ')}`);
+    }
   }
 
   async runTask (taskDescription, context = {}) {
@@ -258,6 +407,81 @@ class TaskOrchestrator extends EventEmitter {
 
     try {
       this.emit('taskStart', { task: taskDescription });
+
+      // ═══ G1: 任务执行前 — Git 分支创建 ═══
+      if (this.gitIntegration && this.gitIntegration.isEnabled()) {
+        const runId = this._currentRunId;
+        this.gitIntegration.createTaskBranch(runId);
+        this.emit('git:branchCreated', { branch: `${this.gitIntegration.branchPrefix}${runId}` });
+      }
+
+      // ═══ G1: 任务执行前 — 预算检查 ═══
+      if (this.budgetManager) {
+        if (!this.budgetManager.canProceed(10000)) {
+          throw new Error('Token 预算已耗尽，无法执行任务');
+        }
+        if (this.budgetManager.shouldDegrade(10000)) {
+          this.emit('budget:degrade', { remaining: this.budgetManager.getRemaining() });
+        }
+      }
+
+      // ═══ G1: 任务执行前 — 审批 ═══
+      if (this.approvalWorkflow) {
+        const approval = await this.approvalWorkflow.requestApproval('pre_execute', {
+          task: taskDescription
+        });
+        if (!approval.approved) {
+          throw new Error(`任务执行被拒绝: ${approval.comment || '无理由'}`);
+        }
+      }
+
+      // ═══ G1: 流式输出开始 ═══
+      if (this.streamManager) {
+        this.streamManager.start();
+        this.streamManager.status('splitting', { task: taskDescription });
+      }
+
+      // ═══ 自适应智能编排：auto/hybrid 模式自动推荐配置 ═══
+      const orchestrationMode = this.adaptiveOrchestrator.orchestrationMode;
+      let adaptiveRecommendation = null;
+      if (orchestrationMode !== 'manual' && this.toolAdapters.length > 0) {
+        adaptiveRecommendation = this.adaptiveOrchestrator.recommend(
+          taskDescription,
+          this.toolAdapters.map(a => ({ name: a.name, displayName: a.displayName, status: a.status }))
+        );
+
+        this.emit('adaptiveRecommendation', adaptiveRecommendation);
+
+        // auto 模式：自动应用推荐
+        if (orchestrationMode === 'auto') {
+          // 应用推荐的模式
+          if (adaptiveRecommendation.mode && adaptiveRecommendation.mode !== this.modeManager.getCurrentMode()) {
+            this.setExecutionMode(adaptiveRecommendation.mode);
+          }
+          // 应用推荐的策略
+          if (adaptiveRecommendation.strategy && adaptiveRecommendation.strategy !== this.routingStrategy) {
+            this.routingStrategy = adaptiveRecommendation.strategy;
+            this.toolRouter = null; // 强制重建路由器
+            if (this.executor) {
+              this.executor.routingStrategy = this.routingStrategy;
+            }
+          }
+          // 应用推荐的工具组合（覆盖 toolAdapters）
+          if (adaptiveRecommendation.tools.length > 0) {
+            const recommendedNames = adaptiveRecommendation.tools.map(t => t.name);
+            this.toolAdapters = this.toolAdapters.filter(a => recommendedNames.includes(a.name));
+            this.toolRouter = null; // 强制重建路由器
+          }
+          this.emit('adaptiveApplied', {
+            mode: adaptiveRecommendation.mode,
+            strategy: adaptiveRecommendation.strategy,
+            tools: adaptiveRecommendation.tools.map(t => t.name),
+            confidence: adaptiveRecommendation.confidence
+          });
+        }
+        // hybrid 模式：仅推荐不强制，由用户在 WebUI/CLI 决定是否接受
+        // manual 模式：完全跳过推荐，使用用户已选工具
+      }
 
       const projectContext = {
         ...context,
@@ -315,6 +539,69 @@ class TaskOrchestrator extends EventEmitter {
       // 3. 最终审查与合并
       const finalResult = await this._finalReview(taskDescription, splitResult);
 
+      // ═══ G1: 任务完成后 — Git 提交 ═══
+      if (this.gitIntegration && this.gitIntegration.isEnabled() && finalResult.successRate >= 60) {
+        const commitHash = this.gitIntegration.commitChanges(this._currentRunId, 
+          `Qidi Agent: 任务完成 (成功率 ${finalResult.successRate}%)`);
+        if (commitHash) {
+          this.emit('git:committed', { hash: commitHash });
+        }
+      }
+
+      // ═══ G1: 任务完成后 — 语义记忆存储 ═══
+      if (this.vectorMemory && finalResult.successRate >= 60) {
+        try {
+          const qualityScores = finalResult.tasks
+            .filter(t => t.qualityScore !== null)
+            .map(t => t.qualityScore);
+          const avgQuality = qualityScores.length > 0
+            ? Math.round(qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length)
+            : 0;
+          await this.vectorMemory.store(taskDescription, {
+            taskTitle: taskDescription.substring(0, 200),
+            language: finalResult.constraints?.language || 'unknown',
+            qualityScore: avgQuality,
+            successRate: finalResult.successRate,
+            runId: this._currentRunId,
+            taskType: 'completed'
+          });
+        } catch (_) {}
+      }
+
+      // ═══ G1: 任务完成后 — 预算记录 ═══
+      if (this.budgetManager) {
+        const tokenStats = this.tokenCounter.getStats();
+        this.budgetManager.record('orchestrator', 'TaskOrchestrator',
+          this.provider?.model || 'unknown',
+          tokenStats.totalInputTokens || 0,
+          tokenStats.totalOutputTokens || 0);
+      }
+
+      // ═══ P4: 自适应学习闭环 — 任务完成后回写结果 ═══
+      if (this.adaptiveOrchestrator && adaptiveRecommendation) {
+        try {
+          this.adaptiveOrchestrator.recordOutcome(
+            adaptiveRecommendation.timestamp,
+            finalResult.successRate >= 0.6,
+            avgQuality,
+            {
+              taskType: adaptiveRecommendation.features?.taskType || 'unknown',
+              language: adaptiveRecommendation.features?.language || 'unknown',
+              duration: finalResult.duration || 0,
+              successRate: finalResult.successRate
+            }
+          );
+          logger.info(`[Adaptive] 学习闭环已更新: 推荐ID=${adaptiveRecommendation.timestamp}, 成功率=${finalResult.successRate}`);
+        } catch (e) {
+          logger.warn('[Adaptive] 学习闭环失败: ' + e.message);
+        }
+      }
+
+      // ═══ G1: 流式输出完成 ═══
+      if (this.streamManager) {
+        this.streamManager.done({ successRate: finalResult.successRate });
+      }
+
       this.emit('taskComplete', {
         success: true,
         result: finalResult,
@@ -336,6 +623,18 @@ class TaskOrchestrator extends EventEmitter {
       return finalResult;
     } catch (error) {
       this.emit('taskError', { error: error.message });
+
+      // ═══ G1: 失败时 — Git 回滚 ═══
+      if (this.gitIntegration && this.gitIntegration.isEnabled()) {
+        this.gitIntegration.rollback();
+        this.emit('git:rolledBack', { reason: error.message });
+      }
+
+      // ═══ G1: 流式输出错误 ═══
+      if (this.streamManager) {
+        this.streamManager.error(error);
+      }
+
       this.isRunning = false;
       throw error;
     }
@@ -388,6 +687,7 @@ class TaskOrchestrator extends EventEmitter {
         id: t.id,
         title: t.title,
         status: t.status,
+        result: t.result,
         qualityScore: t.result?.quality?.qualityScore || null,
         toolResults: t.result?.quality?.toolResults || null,
         toolName: t.result?.toolName || null,
@@ -548,7 +848,16 @@ class TaskOrchestrator extends EventEmitter {
       totalCount: this.tasks.length,
       constraints: this.memory.getAllGlobals(),
       tokenStats: this.tokenCounter.getStats(),
-      cacheStats: this.cacheStore.getStats()
+      cacheStats: this.cacheStore.getStats(),
+      // G1: 增强模块状态
+      budget: this.budgetManager ? this.budgetManager.generateReport() : null,
+      git: this.gitIntegration ? {
+        enabled: this.gitIntegration.isEnabled(),
+        branch: this.gitIntegration.getCurrentBranch()
+      } : null,
+      approvals: this.approvalWorkflow ? this.approvalWorkflow.getStats() : null,
+      vectorMemory: this.vectorMemory ? this.vectorMemory.getStats() : null,
+      mcpServers: this.mcpClient ? this.mcpClient.getStatus() : []
     };
   }
 

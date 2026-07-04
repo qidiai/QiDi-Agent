@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const fs = require('fs');
 const path = require('path');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 /**
  * 任务调度器：负责任务状态管理、依赖调度、执行循环和重试逻辑。
@@ -31,6 +32,7 @@ class TaskScheduler extends EventEmitter {
   async executeLoop (tasks, executeFn, context, runId = null) {
     let completedCount = 0;
     const totalCount = tasks.length;
+    const parallelLimit = context.parallelLimit || 3; // 并发限制
 
     while (completedCount < totalCount) {
       const readyTasks = this._getReadyTasks(tasks);
@@ -49,23 +51,49 @@ class TaskScheduler extends EventEmitter {
         break;
       }
 
-      for (const task of readyTasks) {
-        const currentIndex = tasks.indexOf(task);
-        task.status = 'in_progress';
-        this._currentTaskIndex = currentIndex;
+      // ═══ 真并行执行：就绪任务分批并行，而非串行 ═══
+      // 按并发限制分批
+      const batches = [];
+      for (let i = 0; i < readyTasks.length; i += parallelLimit) {
+        batches.push(readyTasks.slice(i, i + parallelLimit));
+      }
 
-        // 在执行每个任务前检查是否被暂停
+      for (const batch of batches) {
+        // 在执行前检查是否被暂停
         await this._waitForResume();
 
-        this.emit('taskStart_sub', {
-          task,
-          index: currentIndex,
-          total: totalCount,
-          constraints: context.constraints || {}
+        // 并行执行当前批次
+        const promises = batch.map(async (task) => {
+          const currentIndex = tasks.indexOf(task);
+          task.status = 'in_progress';
+
+          this.emit('taskStart_sub', {
+            task,
+            index: currentIndex,
+            total: totalCount,
+            constraints: context.constraints || {}
+          });
+
+          try {
+            const result = await executeFn(task, context);
+            return { task, result, currentIndex, error: null };
+          } catch (error) {
+            return { task, result: null, currentIndex, error };
+          }
         });
 
-        try {
-          const result = await executeFn(task, context);
+        const results = await Promise.allSettled(promises);
+
+        // 处理结果
+        for (const settled of results) {
+          if (settled.status !== 'fulfilled') continue;
+          const { task, result, currentIndex, error } = settled.value;
+
+          if (error) {
+            await this._handleTaskError(task, error, context);
+            continue;
+          }
+
           task.result = result;
 
           if (result.needsRevision) {
@@ -84,8 +112,6 @@ class TaskScheduler extends EventEmitter {
 
             this._autoCheckpoint(runId, tasks);
           }
-        } catch (error) {
-          await this._handleTaskError(task, error, context);
         }
       }
     }
@@ -296,7 +322,7 @@ class TaskScheduler extends EventEmitter {
     if (!fs.existsSync(filePath)) return null;
 
     try {
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const data = safeJsonParse(fs.readFileSync(filePath, 'utf-8'), null);
       return data;
     } catch {
       return null;
@@ -312,7 +338,7 @@ class TaskScheduler extends EventEmitter {
     return fs.readdirSync(this.checkpointDir)
       .filter(f => f.endsWith('.json'))
       .map(f => {
-        const data = JSON.parse(fs.readFileSync(path.join(this.checkpointDir, f), 'utf-8'));
+        const data = safeJsonParse(fs.readFileSync(path.join(this.checkpointDir, f), 'utf-8'), {});
         return {
           runId: f.replace('.json', ''),
           savedAt: data.savedAt,

@@ -19,6 +19,7 @@ const os = require('os');
 const readline = require('readline');
 const chalk = require('chalk');
 const ora = require('ora');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 const ProviderFactory = require('../providers');
 const TaskOrchestrator = require('../core/TaskOrchestrator');
@@ -82,7 +83,7 @@ class InteractiveSession {
   _loadHistory () {
     try {
       if (fs.existsSync(this._historyFile)) {
-        this.history = JSON.parse(fs.readFileSync(this._historyFile, 'utf-8')) || [];
+        this.history = safeJsonParse(fs.readFileSync(this._historyFile, 'utf-8'), []);
       }
     } catch (_) {
       this.history = [];
@@ -100,7 +101,7 @@ class InteractiveSession {
   _loadContext () {
     try {
       if (fs.existsSync(this._ctxFile)) {
-        const ctx = JSON.parse(fs.readFileSync(this._ctxFile, 'utf-8'));
+        const ctx = safeJsonParse(fs.readFileSync(this._ctxFile, 'utf-8'), {});
         this.recentTasks = ctx.recentTasks || [];
         this.recentReportIds = ctx.recentReportIds || [];
       }

@@ -82,18 +82,8 @@ class OpenCodeAdapter extends BaseToolAdapter {
       throw new Error('Open Code 未安装或未找到');
     }
 
-    try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
-      if (result.success) {
-        this.status = 'online';
-        return { success: true, message: 'Open Code 连接成功' };
-      }
-      this.status = 'offline';
-      return { success: false, message: 'Open Code 不可用' };
-    } catch (e) {
-      this.status = 'error';
-      return { success: false, message: e.message };
-    }
+    this.status = 'online';
+    return { success: true, message: 'Open Code 已就绪' };
   }
 
   async execute (task, options = {}) {

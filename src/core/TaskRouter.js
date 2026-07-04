@@ -1,9 +1,15 @@
+const SynchronyMeter = require('./SynchronyMeter');
+const EmergenceEvaluator = require('./EmergenceEvaluator');
+
 /**
  * 任务路由引擎：决定每个子任务应该派发给哪个工具。
- * 支持三种路由策略：
+ * 支持多种路由策略：
  * - round_robin：轮询分发，每个工具轮流执行
  * - capability：根据工具能力智能匹配
+ * - top_n：选前N个最优工具并行执行
  * - manual：根据预定义路由表手动指定
+ * - broadcast：广播模式，所有工具都执行
+ * - synchrony：根据历史三模态同步强度决定分派方式
  *
  * 隐私保护原理：
  * - 每个子任务只发给一个工具
@@ -16,6 +22,7 @@ class TaskRouter {
     this.adapters = adapters;
     this.options = {
       strategy: options.strategy || 'round_robin',
+      topN: options.topN || 3,
       manualRouting: options.manualRouting || {},
       capabilities: options.capabilities || this._buildDefaultCapabilities(),
       roundRobinIndex: 0,
@@ -27,12 +34,14 @@ class TaskRouter {
     this.circuitBreakers = {};
     this.circuitBreakerConfig = {
       failureThreshold: options.failureThreshold || 3,
+      resetTimeout: options.resetTimeout || 30000,
       successThreshold: options.successThreshold || 2,
       timeoutSeconds: options.timeoutSeconds || 60,
       errorRateThreshold: options.errorRateThreshold || 0.6,
       minRequests: options.minRequests || 10
     };
-
+    this.synchronyMeter = options.synchronyMeter || new SynchronyMeter();
+    this.emergenceEvaluator = options.emergenceEvaluator || new EmergenceEvaluator();
     this.toolLearning = options.toolLearning || null;
   }
 
@@ -262,6 +271,12 @@ class TaskRouter {
         providerInvolved: false
       },
       {
+        name: 'top_n',
+        description: '选前N个最优工具(并行+对比选优)',
+        privacyLevel: 'medium',
+        providerInvolved: true
+      },
+      {
         name: 'manual',
         description: '手动指定 - 通过路由表精确控制每个任务类型派发给哪个工具',
         privacyLevel: 'high',
@@ -271,6 +286,12 @@ class TaskRouter {
         name: 'broadcast',
         description: '广播模式（传统）- 所有工具都执行所有任务，用于质量比较',
         privacyLevel: 'low',
+        providerInvolved: true
+      },
+      {
+        name: 'synchrony',
+        description: '同步驱动 - 根据历史三模态同步强度动态决定分派方式',
+        privacyLevel: 'medium',
         providerInvolved: true
       }
     ];
@@ -407,10 +428,14 @@ class TaskRouter {
       return this._routeRoundRobin(task, available);
     case 'capability':
       return this._routeByCapability(task, available);
+    case 'top_n':
+      return this._routeTopN(task, available, this.options.topN || 3);
     case 'manual':
       return this._routeManual(task, available);
     case 'broadcast':
       return { adapter: available, reason: '广播模式：所有工具执行', isBroadcast: true };
+    case 'synchrony':
+      return this._routeSynchrony(task, available);
     default:
       return this._routeRoundRobin(task, available);
     }
@@ -487,6 +512,40 @@ class TaskRouter {
   }
 
   /**
+   * 选前 N 个最优工具（并行 + 对比选优）
+   */
+  _routeTopN (task, available, n = 3) {
+    const scores = available.map(adapter => {
+      const caps = this.options.capabilities[adapter.name] || {};
+      const score = this._calculateCapabilityScore(task, caps, adapter.name);
+      return { adapter, score, reason: this._explainCapabilityMatch(task, caps, score) };
+    });
+
+    scores.sort((a, b) => b.score - a.score);
+    const matched = scores.filter(s => s.score > 0);
+    const selected = matched.slice(0, n);
+
+    if (selected.length === 0) {
+      const fallback = available.slice(0, n);
+      return {
+        adapter: fallback,
+        reason: `无精确能力匹配,取前 ${fallback.length} 个可用工具`,
+        strategy: 'top_n',
+        isBroadcast: fallback.length > 1,
+        allScores: scores.map(s => ({ tool: s.adapter.name, score: s.score }))
+      };
+    }
+
+    return {
+      adapter: selected.map(s => s.adapter),
+      reason: `按能力选前 ${selected.length} 个: ${selected.map(s => s.adapter.displayName).join(', ')}`,
+      strategy: 'top_n',
+      isBroadcast: selected.length > 1,
+      allScores: scores.map(s => ({ tool: s.adapter.name, score: s.score }))
+    };
+  }
+
+  /**
    * 计算任务与工具能力的匹配度
    */
   _calculateCapabilityScore (task, caps, toolName) {
@@ -557,6 +616,18 @@ class TaskRouter {
           details.push(`学习惩罚: ${learningBonus.toFixed(1)}`);
         }
       }
+    }
+
+    // 7. Hebbian协同加成（移植L7社会智能：协同成功的工具对连接强度+0.5）
+    if (this.emergenceEvaluator) {
+      try {
+        const recentEmerged = this.emergenceEvaluator.getRecentEmerged(3);
+        const inEmergedTeam = recentEmerged.some(r => r.tools && r.tools.includes(toolName));
+        if (inEmergedTeam) {
+          score += 0.5;
+          details.push('协同加成: +0.5 (近期涌现团队)');
+        }
+      } catch (e) { /* 不阻断 */ }
     }
 
     return score;
@@ -630,6 +701,34 @@ class TaskRouter {
       strategy: 'manual',
       originalMapping: `${task.role} -> ${toolName}`
     };
+  }
+
+  /**
+   * 同步驱动路由：根据历史三模态同步强度决定分派方式
+   * S>0.7 → 单工具深度执行（协同已成熟，无需并行浪费）
+   * 0.4<S<0.7 → 取Top2并行（协同不稳，双保险）
+   * S<0.4 → 单工具fallback（协同差，并行只会产出更多垃圾）
+   */
+  _routeSynchrony (task, adapters) {
+    const avgS = this.synchronyMeter.getAverageSync(5) || 0.5;
+    const details = [];
+
+    let assignment;
+    if (avgS > 0.7) {
+      const best = this._routeByCapability(task, adapters);
+      assignment = best;
+      details.push(`S=${avgS.toFixed(2)}高同步 → 单工具深度执行 (${best.adapter?.displayName || best.adapter?.name || 'none'})`);
+    } else if (avgS > 0.4) {
+      const top2 = this._routeTopN(task, adapters, 2);
+      assignment = top2;
+      details.push(`S=${avgS.toFixed(2)}中同步 → 双工具并行保险`);
+    } else {
+      const best = this._routeByCapability(task, adapters);
+      assignment = best;
+      details.push(`S=${avgS.toFixed(2)}低同步 → 单工具fallback (协同反效果)`);
+    }
+
+    return { ...assignment, strategy: 'synchrony', reason: details.join('; '), syncScore: avgS };
   }
 
   /**

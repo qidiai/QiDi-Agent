@@ -1,0 +1,59 @@
+{
+  "id": "task_1782901550833",
+  "timestamp": "2026-07-01T10:26:34.351Z",
+  "duration": 43518,
+  "originalTask": "???Python HTTP???,??GET?POST??,??JSON????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库（urllib或http.client）或第三方库（requests）",
+    "platform": "跨平台",
+    "framework": "无特定框架",
+    "style": "PEP 8",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "设计HTTP客户端接口和架构",
+      "status": "failed",
+      "provider": null,
+      "duration": 5162,
+      "generatedFiles": 0,
+      "qualityScore": null
+    },
+    {
+      "id": "T2",
+      "title": "实现HttpClient类及GET和POST方法",
+      "status": "failed",
+      "provider": null,
+      "duration": 4986,
+      "generatedFiles": 0,
+      "qualityScore": null
+    },
+    {
+      "id": "T3",
+      "title": "编写单元测试验证GET和POST功能",
+      "status": "failed",
+      "provider": null,
+      "duration": 5096,
+      "generatedFiles": 0,
+      "qualityScore": null
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 0,
+    "passed": 0,
+    "averageScore": 0
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "id": "task_1782895578207",
+  "timestamp": "2026-07-01T08:47:18.899Z",
+  "duration": 60692,
+  "originalTask": "??????Python Hello World??",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库",
+    "platform": "跨平台",
+    "framework": "无",
+    "style": "PEP 8",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "编写Hello World程序",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 1667,
+      "generatedFiles": 0,
+      "qualityScore": 98
+    },
+    {
+      "id": "T2",
+      "title": "代码审查与质量检查",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 10184,
+      "generatedFiles": 0,
+      "qualityScore": 61
+    },
+    {
+      "id": "T3",
+      "title": "功能测试",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 2434,
+      "generatedFiles": 0,
+      "qualityScore": 96
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [],
+  "qualityMetrics": {
+    "totalChecked": 3,
+    "passed": 2,
+    "averageScore": 85
+  }
+}

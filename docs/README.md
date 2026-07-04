@@ -22,6 +22,7 @@
 ## 🚀 快速入口
 
 - **第一次使用** → 先看 [OPERATION_GUIDE.md](./OPERATION_GUIDE.md) 的"快速启动"
+- **想用聊天式编程助手** → 看 [CLI_GUIDE.md](./CLI_GUIDE.md) 的"聊天式界面（chat）"
 - **想用命令行交互编程** → 看 [CLI_GUIDE.md](./CLI_GUIDE.md) 的"交互式 REPL"
 - **想用浏览器图形界面** → 看 [WEBUI_GUIDE.md](./WEBUI_GUIDE.md) 的"Agent 页"
 - **想二次开发/集成** → 看 [API.md](./API.md) 的 REST API 参考

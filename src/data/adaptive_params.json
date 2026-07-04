@@ -1,0 +1,21 @@
+{
+  "taskClassifier": {
+    "pathWeight": 0.8,
+    "codeWeight": 0.6,
+    "chatThreshold": 0.3
+  },
+  "taskRouter": {
+    "topN": 3,
+    "minScore": 0.5,
+    "broadcastThreshold": 0.7
+  },
+  "systemPrompt": {
+    "verbosity": "medium",
+    "toolMentionEnabled": true,
+    "fileOpsEnabled": true
+  },
+  "retryPolicy": {
+    "maxRetries": 2,
+    "backoffFactor": 1.5
+  }
+}

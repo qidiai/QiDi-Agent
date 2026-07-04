@@ -1,6 +1,7 @@
 const BaseToolAdapter = require('./BaseToolAdapter');
 const path = require('path');
 const fs = require('fs');
+const { StructuredOutputParser, ContextInjector, IncrementalCollector, CapabilityProbe } = require('../utils/NativeAPIAdapter');
 
 class ClaudeCodeAdapter extends BaseToolAdapter {
   constructor (options = {}) {
@@ -133,10 +134,19 @@ class ClaudeCodeAdapter extends BaseToolAdapter {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    const taskFile = path.join(outputDir, 'task.md');
-    fs.writeFileSync(taskFile, task, 'utf-8');
+    // 使用增量采集器记录基线
+    const collector = new IncrementalCollector();
+    collector.snapshot(outputDir);
 
-    const args = ['-p', task];
+    // 使用上下文注入器增强任务提示
+    const enhancedTask = options.context
+      ? ContextInjector.buildEnhancedPrompt(task, options.context)
+      : task;
+
+    const taskFile = path.join(outputDir, 'task.md');
+    fs.writeFileSync(taskFile, enhancedTask, 'utf-8');
+
+    const args = ['-p', enhancedTask];
 
     const result = await this._runCommand(this.command, args, {
       timeout: options.timeout || 300000,
@@ -146,30 +156,47 @@ class ClaudeCodeAdapter extends BaseToolAdapter {
     });
 
     let outputContent = result.stdout || '';
-    let codeBlocks = this._extractCodeBlocks(outputContent);
+
+    // 使用结构化输出解析器
+    const parsed = StructuredOutputParser.parse(outputContent);
+    let codeBlocks = parsed.codeBlocks;
 
     const outputFile = path.join(outputDir, 'output.md');
     if (fs.existsSync(outputFile)) {
       outputContent = fs.readFileSync(outputFile, 'utf-8');
-      codeBlocks = this._extractCodeBlocks(outputContent);
+      const parsedFile = StructuredOutputParser.parse(outputContent);
+      codeBlocks = parsedFile.codeBlocks;
     }
 
-    const generatedFiles = [];
-    try {
-      const files = fs.readdirSync(outputDir);
-      for (const f of files) {
-        const filePath = path.join(outputDir, f);
-        const stat = fs.statSync(filePath);
-        if (stat.isFile()) {
-          generatedFiles.push({
-            path: f,
-            content: fs.readFileSync(filePath, 'utf-8'),
-            size: stat.size,
-            mtime: stat.mtime.getTime()
-          });
+    // 使用增量采集器收集变更
+    let generatedFiles = [];
+    const changes = collector.collectChanges(outputDir);
+    generatedFiles = collector.readChanges(outputDir, changes).map(c => ({
+      path: c.path,
+      content: c.content,
+      size: c.size,
+      mtime: c.mtime,
+      action: c.action
+    }));
+
+    // 如果增量采集无结果，回退到全量扫描
+    if (generatedFiles.length === 0) {
+      try {
+        const files = fs.readdirSync(outputDir);
+        for (const f of files) {
+          const filePath = path.join(outputDir, f);
+          const stat = fs.statSync(filePath);
+          if (stat.isFile() && f !== 'task.md') {
+            generatedFiles.push({
+              path: f,
+              content: fs.readFileSync(filePath, 'utf-8'),
+              size: stat.size,
+              mtime: stat.mtime.getTime()
+            });
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
 
     const unifiedResult = this._normalizeResult({
       taskId,
@@ -189,12 +216,25 @@ class ClaudeCodeAdapter extends BaseToolAdapter {
       metadata: {
         version: this.version || 'unknown',
         command: this.command || '',
-        options: { ...options }
+        options: { ...options },
+        structuredOutput: {
+          jsonBlocks: parsed.jsonBlocks.length,
+          fileChanges: parsed.fileChanges.length,
+          references: parsed.references.length,
+          errors: parsed.errors.length
+        }
       }
     });
 
     this.executionHistory.push(unifiedResult);
     return unifiedResult;
+  }
+
+  /**
+   * 探测工具能力
+   */
+  async probeCapabilities () {
+    return await CapabilityProbe.probe(this);
   }
 
   async collectOutput (taskId) {

@@ -154,12 +154,22 @@ class ToolExecutor extends EventEmitter {
       );
 
       result.success = execResult.success !== false;
-      result.output = execResult.stdout || execResult.content || '';
+      result.output = execResult;
       result.error = execResult.stderr || execResult.error || null;
 
-      // 执行后扫描文件
-      const filesAfter = this._scanWorkspace(workspace);
-      result.generatedFiles = this._diffFiles(filesBefore, filesAfter);
+      // 优先使用工具适配器返回的生成文件列表
+      if (execResult.generatedFiles && execResult.generatedFiles.length > 0) {
+        result.generatedFiles = execResult.generatedFiles.map(f => ({
+          path: f.path,
+          status: f.status || 'added',
+          size: f.size,
+          content: f.content
+        }));
+      } else {
+        // 回退：扫描工作空间对比文件差异
+        const filesAfter = this._scanWorkspace(workspace);
+        result.generatedFiles = this._diffFiles(filesBefore, filesAfter);
+      }
 
       // 更新工具状态
       this._updateToolStatus(adapter.name, result.success);
@@ -346,10 +356,23 @@ class ToolExecutor extends EventEmitter {
   }
 
   /**
+   * 设置正在使用的工具（排除这些工具）
+   */
+  setInUseTools (toolNames) {
+    this.inUseTools = toolNames || [];
+  }
+
+  /**
    * 选择最佳工具
    */
   selectBestTool (subtask, preferredTools = null) {
-    const availableTools = this.getAvailableTools();
+    let availableTools = this.getAvailableTools();
+
+    if (availableTools.length === 0) return null;
+
+    // 排除正在使用的工具
+    const inUse = this.inUseTools || [];
+    availableTools = availableTools.filter(t => !inUse.includes(t));
 
     if (availableTools.length === 0) return null;
 
@@ -366,7 +389,7 @@ class ToolExecutor extends EventEmitter {
     // 简单任务用轻量工具
     if (complexity === 'low' || role === 'architect') {
       const lightweight = availableTools.find(t =>
-        ['qoder', 'opencode', 'atomcode', 'mimocode'].includes(t)
+        ['opencode', 'atomcode', 'mimocode'].includes(t)
       );
       if (lightweight) return lightweight;
     }
@@ -393,6 +416,9 @@ class ToolExecutor extends EventEmitter {
       if (adapter.isAvailable && adapter.isAvailable()) {
         const status = this.toolStatus.get(name);
         if (status && status.available) {
+          if (adapter.headlessSupported === false) {
+            continue;
+          }
           available.push(name);
         }
       }

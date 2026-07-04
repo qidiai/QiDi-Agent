@@ -5,8 +5,7 @@
 > **Free AI models orchestrate to write code that rivals top-tier LLMs — at zero cost.**
 
 <p align="center">
-  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=AI%20code%20generation%20demo%20interface%20showing%20parallel%20execution%20of%20multiple%20AI%20models%20generating%20code%20side%20by%20side%20with%20progress%20bars%20and%20quality%20scores%20on%20dark%20theme&image_size=landscape_16_9" width="700" alt="Qidi Multi-Provider Demo">
-  <!-- TODO: Replace with actual demo GIF -->
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Professional%20AI%20code%20orchestration%20platform%20dashboard%20dark%20theme%20showing%20multiple%20AI%20models%20parallel%20execution%20with%20real-time%20progress%20bars%2C%20code%20quality%20scores%2C%20and%20task%20splitting%20visualization%2C%20modern%20UI%20design&image_size=landscape_16_9" width="700" alt="Qidi Multi-Provider Demo">
 </p>
 
 <p align="center">
@@ -31,14 +30,12 @@
 ## See It In Action
 
 <p align="center">
-  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20web%20management%20dashboard%20for%20AI%20code%20orchestration%20with%20task%20list%2C%20execution%20logs%2C%20and%20model%20selection%20panels%20clean%20UI%20dark%20mode&image_size=landscape_16_9" width="700" alt="Web Management Interface">
-  <!-- TODO: Replace with actual demo GIF -->
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Modern%20AI%20programming%20web%20console%20interface%20dark%20theme%20with%20model%20selection%20dropdown%2C%20task%20input%20area%2C%20execution%20logs%20panel%2C%20code%20output%20preview%2C%20professional%20developer%20tool%20UI&image_size=landscape_16_9" width="700" alt="Web Management Interface">
 </p>
 
 <p align="center">
   <em>Output that actually runs 👇</em><br>
-  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=terminal%20showing%20generated%20snake%20game%20running%20with%20green%20text%20on%20black%20background%20classic%20retro%20game%20style&image_size=square" width="400" alt="Generated Snake Game Running">
-  <!-- TODO: Replace with actual demo GIF -->
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Windows%20command%20prompt%20terminal%20showing%20Python%20snake%20game%20running%2C%20green%20ASCII%20art%20snake%20on%20black%20background%2C%20score%20display%2C%20game%20grid%2C%20retro%20terminal%20gaming%20style&image_size=square" width="400" alt="Generated Snake Game Running">
 </p>
 
 ---
@@ -270,7 +267,7 @@ npm test      # 53 smoke tests, 100% passing
 - [x] WorkBuddy/KimiWork/ZCode adapters
 - [ ] Recursive splitting (decompose large tasks)
 - [ ] Streaming output + WebSocket
-- [ ] MCP protocol support
+- [x] MCP protocol support
 - [ ] Plugin system
 - [ ] Team collaboration edition
 

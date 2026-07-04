@@ -8,7 +8,9 @@ const ProviderFactory = require('../providers');
 const MergeEngine = require('../agents/MergeEngine');
 const ExecutionModeManager = require('./ExecutionModeManager');
 const ConfirmPrompt = require('../utils/ConfirmPrompt');
+const { safeJsonParse } = require('../utils/SafeParser');
 const logger = require('../utils/Logger')('RealTaskExecutor');
+const adapters = require('../adapters');
 
 class RealTaskExecutor extends EventEmitter {
   constructor (options = {}) {
@@ -18,6 +20,7 @@ class RealTaskExecutor extends EventEmitter {
     this.workspaceDir = options.workspaceDir || process.cwd();
     this.maxConcurrent = options.maxConcurrent || 3;
     this.timeout = options.timeout || 600000;
+    this.selectedTools = options.selectedTools || [];
 
     // 执行模式
     this.modeManager = new ExecutionModeManager();
@@ -33,6 +36,11 @@ class RealTaskExecutor extends EventEmitter {
       maxConcurrent: this.maxConcurrent,
       defaultTimeout: this.timeout
     });
+
+    // 设置正在使用的工具（排除这些工具）
+    if (options.inUseTools) {
+      this.toolExecutor.setInUseTools(options.inUseTools);
+    }
 
     this.agents = AgentFactory.createAll(options.provider, {
       splitter: {
@@ -98,6 +106,26 @@ class RealTaskExecutor extends EventEmitter {
     await this._loadProviders();
     await this._scanTools();
 
+    if (this.enabledProviders.length > 0) {
+      this.provider = this.enabledProviders[0].provider;
+      const modeConfig = this.modeManager.getModeConfig();
+      this.agents = AgentFactory.createAll(this.provider, {
+        splitter: {
+          enableSelfCheck: modeConfig.splitter.enableSelfCheck,
+          maxSubtasks: modeConfig.splitter.maxSubtasks
+        },
+        qualityChecker: {
+          enableStaticCheck: modeConfig.qualityCheck.enableStaticCheck,
+          enableCompilation: modeConfig.qualityCheck.enableCompilation,
+          enableLint: modeConfig.qualityCheck.enableLint,
+          enableTest: modeConfig.qualityCheck.enableTest,
+          minQualityScore: modeConfig.qualityCheck.minQualityScore,
+          enableAI: modeConfig.qualityCheck.enableAI
+        }
+      });
+      logger.info(`已更新 provider 和 agents，使用: ${this.enabledProviders[0].name}`);
+    }
+
     return {
       providers: this.enabledProviders.length,
       tools: this.connectedTools.length
@@ -118,12 +146,12 @@ class RealTaskExecutor extends EventEmitter {
     const configPath = path.join(__dirname, '../../config/agents.json');
     if (fs.existsSync(configPath)) {
       try {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), {});
         if (config.agents) {
           for (const [key, agentConfig] of Object.entries(config.agents)) {
             if (agentConfig.enabled) {
               try {
-                const provider = ProviderFactory.create(key, agentConfig.config);
+                const provider = ProviderFactory.create(agentConfig.provider, agentConfig.config);
                 const connected = await provider.checkConnection().catch(() => false);
                 if (connected) {
                   this.enabledProviders.push({
@@ -152,7 +180,14 @@ class RealTaskExecutor extends EventEmitter {
     if (this.options.toolScanner) {
       const registered = this.options.toolScanner.getRegisteredTools();
       if (registered && registered.length > 0) {
-        this.connectedTools = registered.map(t => ({ name: t.name, ...t }));
+        // 如果用户指定了选中的工具，则只使用这些工具
+        let filteredTools = registered;
+        if (this.selectedTools.length > 0) {
+          filteredTools = registered.filter(t => this.selectedTools.includes(t.name));
+          logger.info(`[任务启动] 用户选中工具: ${this.selectedTools.join(', ')}, 可用: ${filteredTools.length} 个`);
+        }
+        
+        this.connectedTools = filteredTools.map(t => ({ name: t.name, ...t }));
         for (const tool of this.connectedTools) {
           const adapter = this.options.toolScanner.getTool(tool.name);
           if (adapter) {
@@ -171,7 +206,17 @@ class RealTaskExecutor extends EventEmitter {
         silentScan: this.options.silentScan,
         autoConfirm: this.options.autoConfirm
       });
+      scanner.registerAdapters(adapters.createAll());
       const scanResult = await scanner.scan();
+
+      // 自动连接所有启用的工具
+      for (const tool of scanResult.enabled) {
+        try {
+          await scanner.connect(tool.name);
+        } catch (e) {
+          logger.warn(`连接工具 ${tool.name} 失败: ${e.message}`);
+        }
+      }
 
       // 只连接用户确认启用的工具
       this.connectedTools = scanResult.enabled || [];
@@ -224,6 +269,8 @@ class RealTaskExecutor extends EventEmitter {
     this.emit('taskStart', { taskId, task: taskDescription });
 
     try {
+      await this.initialize();
+
       const splitResult = await this._splitTask(taskDescription);
 
       this.emit('taskSplit', {
@@ -311,34 +358,15 @@ class RealTaskExecutor extends EventEmitter {
       };
     }
 
-    // 3. 优先使用真实工具执行
+    // 3. 多工具执行：根据当前模式选择策略
     if (hasTools) {
-      const selectedTool = this.toolExecutor.selectBestTool(subtask);
-
-      if (selectedTool) {
-        this.emit('providerSelected', { subtask: subtask.title, tool: selectedTool });
-
-        try {
-          const toolResult = await this.toolExecutor.executeTask(subtask, {
-            preferredTools: [selectedTool],
-            timeout: this.timeout,
-            workspace: this.workspaceDir
-          });
-
-          return {
-            success: toolResult.success,
-            duration: Date.now() - startTime,
-            tool: selectedTool,
-            provider: null,
-            output: toolResult,
-            generatedFiles: toolResult.generatedFiles || [],
-            stdout: toolResult.output || '',
-            stderr: toolResult.error || ''
-          };
-        } catch (e) {
-          this.emit('toolExecutionError', { tool: selectedTool, error: e.message });
-          // 工具执行失败，降级到 AI 提供商
-        }
+      const mode = this.currentMode || 'public';
+      if (mode === 'public' && availableTools.length > 1) {
+        // ── 公开模式：并行多工具分发 ──
+        return await this._executeParallelTools(subtask, availableTools, startTime);
+      } else {
+        // ── 隐私/单工具模式：串行尝试 ──
+        return await this._executeSerialTools(subtask, availableTools, startTime);
       }
     }
 
@@ -385,6 +413,128 @@ class RealTaskExecutor extends EventEmitter {
       output: null,
       generatedFiles: []
     };
+  }
+
+  // ── 并行多工具执行（公开模式）──
+  async _executeParallelTools (subtask, tools, startTime) {
+    this.emit('parallelToolExecution', { subtask: subtask.title, tools, timeout: 120000 });
+
+    const promises = tools.map(async (toolName) => {
+      this.emit('providerSelected', { subtask: subtask.title, tool: toolName });
+      try {
+        return {
+          toolName,
+          result: await this.toolExecutor.executeTask(subtask, {
+            preferredTools: [toolName],
+            timeout: 120000,
+            workspace: this.workspaceDir
+          })
+        };
+      } catch (e) {
+        return { toolName, result: { success: false, error: e.message } };
+      }
+    });
+
+    const rawResults = await Promise.allSettled(promises);
+
+    // 收集所有成功结果
+    const successful = [];
+    for (const r of rawResults) {
+      if (r.status === 'fulfilled') {
+        const { toolName, result } = r.value;
+        if (result.success && result.generatedFiles?.length > 0) {
+          successful.push({ toolName, result });
+        } else {
+          this.emit('toolExecutionError', { tool: toolName, error: result.error || '工具执行成功但未生成代码文件' });
+        }
+      }
+    }
+
+    if (successful.length === 0) {
+      // 全失败 → 降级到串行模式
+      this.emit('parallelToolExecution', { subtask: subtask.title, status: 'all_failed_degrading' });
+      return await this._executeSerialTools(subtask, tools, startTime);
+    }
+
+    // 仅一个工具成功 → 直接返回
+    if (successful.length === 1) {
+      const { toolName, result } = successful[0];
+      return {
+        success: true,
+        duration: Date.now() - startTime,
+        tool: toolName,
+        provider: null,
+        output: result,
+        generatedFiles: result.generatedFiles || [],
+        stdout: result.output || '',
+        stderr: result.error || '',
+        parallelMode: false
+      };
+    }
+
+    // 多个工具成功 → 使用 MergeEngine 合并最优输出
+    this.emit('parallelToolExecution', { subtask: subtask.title, status: 'merging', count: successful.length });
+    const mergeEngine = new MergeEngine(this.provider, { conflictResolution: 'auto' });
+    const resultsForMerge = {};
+    for (const { toolName, result } of successful) {
+      const outputCode = (result.output || result.codeBlocks?.map(b => b.code).join('\n\n') || '');
+      resultsForMerge[toolName] = { success: true, output: outputCode, codeBlocks: result.codeBlocks || [], files: result.generatedFiles || [] };
+    }
+    const mergeResult = await mergeEngine.merge(resultsForMerge, { task: subtask });
+    this.emit('mergeComplete', { subtask: subtask.title, files: Object.keys(mergeResult.mergedFiles || {}).length });
+
+    return {
+      success: true,
+      duration: Date.now() - startTime,
+      merged: true,
+      tool: successful.map(s => s.toolName).join('+'),
+      provider: null,
+      output: mergeResult,
+      generatedFiles: Object.keys(mergeResult.mergedFiles || {}),
+      stdout: mergeResult.mergedCode || '',
+      stderr: '',
+      parallelMode: true,
+      toolResults: successful
+    };
+  }
+
+  // ── 串行单工具执行（隐私/降级模式）──
+  async _executeSerialTools (subtask, tools, startTime) {
+    for (const toolName of tools) {
+      this.emit('providerSelected', { subtask: subtask.title, tool: toolName });
+
+      try {
+        const toolResult = await this.toolExecutor.executeTask(subtask, {
+          preferredTools: [toolName],
+          timeout: 30000,
+          workspace: this.workspaceDir
+        });
+
+        if (toolResult.success) {
+          const genFiles = toolResult.generatedFiles || [];
+          if (genFiles.length > 0) {
+            return {
+              success: toolResult.success,
+              duration: Date.now() - startTime,
+              tool: toolName,
+              provider: null,
+              output: toolResult,
+              generatedFiles: genFiles,
+              stdout: toolResult.output || '',
+              stderr: toolResult.error || ''
+            };
+          } else {
+            this.emit('toolExecutionError', { tool: toolName, error: '工具执行成功但未生成代码文件，跳过其他工具直接降级到AI' });
+            break;
+          }
+        } else {
+          this.emit('toolExecutionError', { tool: toolName, error: toolResult.error || '工具执行失败' });
+        }
+      } catch (e) {
+        this.emit('toolExecutionError', { tool: toolName, error: e.message });
+      }
+    }
+    return { success: false, error: '所有工具执行失败', duration: Date.now() - startTime, tool: null, provider: null, output: null, generatedFiles: [] };
   }
 
   /**
@@ -448,7 +598,7 @@ class RealTaskExecutor extends EventEmitter {
 
   _extractGeneratedFiles (result, constraints) {
     const files = [];
-    const content = result.content || '';
+    const content = (result.content || '').replace(/\r\n/g, '\n');
 
     const codeBlocks = content.match(/```(\w+)?\s*\n([\s\S]*?)\n```/g) || [];
 
@@ -519,10 +669,27 @@ class RealTaskExecutor extends EventEmitter {
     for (const result of executionResults) {
       if (!result.success || !result.output) continue;
 
+      const output = result.output;
+      let contentToCheck = '';
+      
+      if (output.codeBlocks && output.codeBlocks.length > 0) {
+        contentToCheck = output.codeBlocks.map(cb => `\`\`\`${cb.language}\n${cb.code}\n\`\`\``).join('\n');
+      } else if (output.content) {
+        contentToCheck = output.content;
+      } else if (typeof output === 'string') {
+        contentToCheck = output;
+      } else if (output.output) {
+        contentToCheck = output.output;
+      } else if (output.rawOutput) {
+        contentToCheck = output.rawOutput;
+      }
+
+      if (!contentToCheck) continue;
+
       const qualityChecker = this.agents.qualityChecker;
       const qualityResult = await qualityChecker.checkQuality(
         result.subtask,
-        result.output.content,
+        contentToCheck,
         { constraints }
       );
 

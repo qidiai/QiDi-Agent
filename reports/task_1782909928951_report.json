@@ -1,0 +1,50 @@
+{
+  "id": "task_1782909928951",
+  "timestamp": "2026-07-01T12:58:07.294Z",
+  "duration": 758343,
+  "originalTask": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ??????;4)PUT /api/users/:id ????;5)DELETE /api/users/:id ???????????,?????????????????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "FastAPI, Pydantic, Uvicorn",
+    "platform": "跨平台",
+    "framework": "FastAPI",
+    "style": "PEP 8, 类型注解",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "架构设计与数据模型定义",
+      "status": "completed",
+      "provider": null,
+      "duration": 106757,
+      "generatedFiles": 0,
+      "qualityScore": 30
+    },
+    {
+      "id": "T2",
+      "title": "实现路由处理器与内存存储",
+      "status": "completed",
+      "provider": null,
+      "duration": 612523,
+      "generatedFiles": 1,
+      "qualityScore": 30
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 2,
+    "passed": 0,
+    "averageScore": 30
+  }
+}

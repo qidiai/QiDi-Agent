@@ -1,0 +1,50 @@
+{
+  "id": "task_1782907651534",
+  "timestamp": "2026-07-01T12:11:00.682Z",
+  "duration": 209148,
+  "originalTask": "??????Python Hello World??",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库",
+    "platform": "跨平台",
+    "framework": "无",
+    "style": "PEP 8",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "编写Hello World脚本",
+      "status": "completed",
+      "provider": null,
+      "duration": 69471,
+      "generatedFiles": 1,
+      "qualityScore": 20
+    },
+    {
+      "id": "T2",
+      "title": "测试Hello World脚本",
+      "status": "completed",
+      "provider": null,
+      "duration": 129701,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 2,
+    "passed": 0,
+    "averageScore": 20
+  }
+}

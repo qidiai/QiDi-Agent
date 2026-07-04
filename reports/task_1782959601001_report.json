@@ -1,0 +1,68 @@
+{
+  "id": "task_1782959601001",
+  "timestamp": "2026-07-02T02:39:22.766Z",
+  "duration": 361765,
+  "originalTask": "C:\\Users\\ASUS\\Documents\\trae_projects\\ai-orchestrator ??????",
+  "success": false,
+  "constraints": {
+    "language": "TypeScript",
+    "techStack": "React + Node.js + Express + MongoDB",
+    "platform": "Web",
+    "framework": "Next.js",
+    "style": "ESLint + Prettier",
+    "fileExtension": ".ts,.tsx,.json,.md"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "架构设计与文档",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 73494,
+      "generatedFiles": 9,
+      "qualityScore": 17
+    },
+    {
+      "id": "T2",
+      "title": "核心后端服务实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 67401,
+      "generatedFiles": 5,
+      "qualityScore": 64
+    },
+    {
+      "id": "T3",
+      "title": "前端UI与状态管理实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 67733,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T4",
+      "title": "测试框架配置与单元测试编写",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 69831,
+      "generatedFiles": 7,
+      "qualityScore": 53
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 4,
+    "passed": 0,
+    "averageScore": 39
+  }
+}

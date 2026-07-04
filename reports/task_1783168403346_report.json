@@ -1,0 +1,70 @@
+{
+  "id": "task_1783168403346",
+  "timestamp": "2026-07-04T12:34:30.951Z",
+  "duration": 67605,
+  "originalTask": "C:\\Users\\ASUS\\Documents\\trae_projects\\ai-orchestrator 分析项目优缺点,有无bug,可优化方向\n\n约束条件：platform: 控制台",
+  "success": false,
+  "constraints": {
+    "language": "TypeScript, Rust",
+    "techStack": "未知（需从项目文件推断）",
+    "platform": "控制台",
+    "framework": "未知（需从项目文件推断）",
+    "style": "清晰、结构化、可维护",
+    "fileExtension": ".ts, .rs, .json, .md 等"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "项目结构与环境分析",
+      "status": "failed",
+      "provider": null,
+      "duration": 12450,
+      "generatedFiles": 0,
+      "qualityScore": null
+    },
+    {
+      "id": "T2",
+      "title": "代码质���与Bug扫描",
+      "status": "failed",
+      "provider": null,
+      "duration": 11023,
+      "generatedFiles": 0,
+      "qualityScore": null
+    },
+    {
+      "id": "T3",
+      "title": "架构与设计评估",
+      "status": "failed",
+      "provider": null,
+      "duration": 11246,
+      "generatedFiles": 0,
+      "qualityScore": null
+    },
+    {
+      "id": "T4",
+      "title": "性能与可优化方向分析",
+      "status": "failed",
+      "provider": null,
+      "duration": 10747,
+      "generatedFiles": 0,
+      "qualityScore": null
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "self-evolve",
+    "qoder",
+    "zcode",
+    "openclaw",
+    "mimo-code",
+    "atom-code"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 0,
+    "passed": 0,
+    "averageScore": 0
+  }
+}

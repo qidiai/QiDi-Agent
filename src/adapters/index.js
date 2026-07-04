@@ -10,6 +10,7 @@ const TraeAdapter = require('./TraeAdapter');
 const WorkBuddyAdapter = require('./WorkBuddyAdapter');
 const KimiWorkAdapter = require('./KimiWorkAdapter');
 const ZCodeAdapter = require('./ZCodeAdapter');
+const SelfEvolveAdapter = require('./SelfEvolveAdapter');
 
 module.exports = {
   BaseToolAdapter,
@@ -24,6 +25,7 @@ module.exports = {
   WorkBuddyAdapter,
   KimiWorkAdapter,
   ZCodeAdapter,
+  SelfEvolveAdapter,
 
   createAll () {
     return [
@@ -37,7 +39,8 @@ module.exports = {
       new TraeAdapter(),
       new WorkBuddyAdapter(),
       new KimiWorkAdapter(),
-      new ZCodeAdapter()
+      new ZCodeAdapter(),
+      new SelfEvolveAdapter()
     ];
   },
 
@@ -53,7 +56,9 @@ module.exports = {
       trae: TraeAdapter,
       workbuddy: WorkBuddyAdapter,
       kimiwork: KimiWorkAdapter,
-      zcode: ZCodeAdapter
+      zcode: ZCodeAdapter,
+      'self-evolve': SelfEvolveAdapter,
+      selfevolve: SelfEvolveAdapter
     };
 
     const AdapterClass = adapters[name];

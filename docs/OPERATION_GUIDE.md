@@ -22,6 +22,9 @@ npx qidi run -t "写一个贪吃蛇游戏" --mode quality
 # 执行任务（多模型并行模式）
 npx qidi run -t "创建待办事项应用" --mode multi
 
+# 启动聊天式编程助手（类似 Claude Code）
+npx qidi chat
+
 # 启动 Web UI
 npx qidi web
 
@@ -37,6 +40,7 @@ npx qidi help
 |------|------|---------|
 | `run` | 运行单个代码任务 | `qidi run -t "任务" --mode privacy` |
 | `multi` | 多模型并行模式（v1.3.0新增） | `qidi run -t "任务" --mode multi` |
+| `chat` | 聊天式编程助手（类似 Claude Code） | `qidi chat --mode quality` |
 | `interactive` | 交互式编程界面（REPL） | `qidi interactive --mode quality` |
 | `scan` | 扫描本机 AI 编程工具 | `qidi scan --connect --save` |
 | `connect` | 连接 AI 编程工具 | `qidi connect --auto` |
@@ -91,7 +95,56 @@ qidi run -t "写一个爬虫" --verbose
 
 ---
 
-### 3.2 `multi` — 多模型并行模式（v1.3.0 新增）
+### 3.2 `chat` — 聊天式编程助手（v1.3.1 新增）
+
+**聊天式编程助手**参考 Claude Code 的交互体验，支持自然语言对话和 `/` 命令系统。
+
+```bash
+qidi chat [选项]
+```
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `-m, --mode <mode>` | 执行模式：`privacy` \| `quality` | `privacy` |
+| `-p, --provider <name>` | 模型提供商：`ollama` \| `openai` \| `anthropic` | `ollama` |
+| `-w, --workspace <dir>` | 工作目录 | `./workspace` |
+
+**交互方式**：
+- 直接输入文字 → 发送聊天消息（AI 流式回复）
+- `/run <任务>` → 执行编程任务
+- `/help` → 查看命令帮助
+- `/exit` → 退出聊天
+
+**常用命令**：
+| 命令 | 作用 |
+|------|------|
+| `/run <任务>` | 执行编程任务 |
+| `/ls [dir]` | 列出目录文件 |
+| `/view <path>` | 查看文件内容（带语法高亮） |
+| `/scan` | 扫描 AI 工具 |
+| `/mode <privacy\|quality>` | 切换执行模式 |
+| `/provider <ollama\|openai>` | 切换模型提供商 |
+| `/history` | 查看聊天历史 |
+| `/status` | 查看当前状态 |
+
+**示例**：
+```bash
+# 启动聊天式界面（默认隐私模式）
+qidi chat
+
+# 高质量模式
+qidi chat --mode quality
+
+# 使用 OpenAI
+qidi chat --provider openai
+
+# 指定工作目录
+qidi chat -w ./my-project
+```
+
+---
+
+### 3.3 `multi` — 多模型并行模式（v1.3.0 新增）
 
 **多模型并行模式**通过多个 LLM Provider 并行生成代码，使用 MergeEngine 智能合并结果，提升代码质量。适用于无外部编程工具时的编程场景。
 

@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const logger = require('./Logger')('VersionManager');
+const { safeJsonParse } = require('./SafeParser');
 
 class VersionManager {
   constructor (options = {}) {
@@ -26,7 +27,7 @@ class VersionManager {
    */
   _loadVersion () {
     try {
-      const pkg = JSON.parse(fs.readFileSync(this.packagePath, 'utf8'));
+      const pkg = safeJsonParse(fs.readFileSync(this.packagePath, 'utf8'), {});
       return {
         version: pkg.version || '1.0.0',
         name: pkg.name || 'qidi-agent',
@@ -97,7 +98,7 @@ class VersionManager {
           });
           res.on('end', () => {
             try {
-              const json = JSON.parse(data);
+              const json = safeJsonParse(data, {});
               // 支持 GitHub releases 格式
               const version = json.tag_name?.replace(/^v/, '') || json.version;
               resolve(version);
@@ -176,7 +177,7 @@ class VersionManager {
 
       if (fs.existsSync(historyFile)) {
         try {
-          history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+          history = safeJsonParse(fs.readFileSync(historyFile, 'utf8'), []);
         } catch {
           history = [];
         }
@@ -211,7 +212,7 @@ class VersionManager {
     try {
       const historyFile = path.join(this.cacheDir, 'version_history.json');
       if (fs.existsSync(historyFile)) {
-        return JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+        return safeJsonParse(fs.readFileSync(historyFile, 'utf8'), []);
       }
     } catch {
       // ignore

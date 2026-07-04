@@ -1,3 +1,5 @@
+const AgentCapabilityTree = require('./AgentCapabilityTree');
+
 /**
  * 执行模式管理器
  *
@@ -24,6 +26,7 @@
 
 class ExecutionModeManager {
   constructor () {
+    this.defaultProvider = process.env.MODEL_PROVIDER || 'ollama';
     this.modes = this._defineModes();
     this.currentMode = 'privacy';
     this.autoModeEnabled = true;
@@ -34,12 +37,15 @@ class ExecutionModeManager {
       efficiency: { total: 0, success: 0, avgQuality: 0 },
       multi: { total: 0, success: 0, avgQuality: 0 }
     };
+    this.capabilityTree = new AgentCapabilityTree();
   }
 
   /**
    * 定义两种完整模式配置
    */
   _defineModes () {
+    const cloudProvider = this.defaultProvider === 'ollama' ? 'openai' : this.defaultProvider;
+
     return {
       privacy: {
         name: 'privacy',
@@ -128,7 +134,7 @@ class ExecutionModeManager {
         // 拆分配置
         splitter: {
           location: 'cloud', // 云端拆分
-          providerType: 'openai', // 使用 OpenAI 兼容云端（DeepSeek/Claude 等）
+          providerType: cloudProvider, // 使用配置的云端模型（DeepSeek/Claude 等）
           enableSelfCheck: true, // AI 自检
           maxSubtasks: 15,
           enableCoverageCheck: true,
@@ -168,8 +174,8 @@ class ExecutionModeManager {
 
         // 路由配置
         routing: {
-          defaultStrategy: 'capability',
-          strategies: ['capability', 'round_robin', 'manual', 'broadcast'],
+          defaultStrategy: 'top_n',
+          strategies: ['top_n', 'capability', 'round_robin', 'manual', 'broadcast'],
           privacyLevel: 'medium'
         },
 
@@ -202,7 +208,7 @@ class ExecutionModeManager {
         // 拆分配置
         splitter: {
           location: 'cloud', // 云端拆分（用最强模型拆解复杂任务）
-          providerType: 'openai', // 使用 DeepSeek/Claude 等
+          providerType: cloudProvider, // 使用配置的云端模型（DeepSeek/Claude 等）
           enableSelfCheck: true,
           maxSubtasks: 20, // 支持更多子任务
           enableCoverageCheck: true,
@@ -581,6 +587,21 @@ class ExecutionModeManager {
     const recommendation = this.recommendMode(taskDescription);
     let finalMode = recommendation.mode;
 
+    let levelOverride = null;
+    try {
+      const allLevels = this.capabilityTree.getAllLevels();
+      const maxLevel = Object.values(allLevels)
+        .map(p => p.level)
+        .sort((a, b) => parseInt(b.slice(1)) - parseInt(a.slice(1)))[0];
+      if (maxLevel) {
+        const recommendedByLevel = this.capabilityTree.recommendModeForLevel(maxLevel);
+        if (recommendedByLevel !== finalMode && parseInt(maxLevel.slice(1)) >= 7) {
+          levelOverride = { from: finalMode, to: recommendedByLevel, level: maxLevel };
+          finalMode = recommendedByLevel;
+        }
+      }
+    } catch (e) { /* 不阻断 */ }
+
     const historicalFactor = this._evaluateHistoricalPerformance(finalMode);
     if (historicalFactor.shouldOverride && historicalFactor.bestMode) {
       finalMode = historicalFactor.bestMode;
@@ -595,11 +616,12 @@ class ExecutionModeManager {
       mode: finalMode,
       changed,
       reason: changed
-        ? `自动切换模式: ${recommendation.reason}${historicalFactor.shouldOverride ? '（历史性能覆盖）' : ''}`
+        ? `自动切换模式: ${recommendation.reason}${levelOverride ? '（能力层级覆盖）' : ''}${historicalFactor.shouldOverride ? '（历史性能覆盖）' : ''}`
         : `保持当前模式: ${this.modes[finalMode].displayName}`,
       autoModeEnabled: this.autoModeEnabled,
       recommendation,
-      historicalFactor
+      historicalFactor,
+      levelOverride
     };
   }
 

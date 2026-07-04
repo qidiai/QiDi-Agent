@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const createLogger = require('../utils/Logger');
+const { safeJsonParse } = require('../utils/SafeParser');
+const AgentCapabilityTree = require('./AgentCapabilityTree');
 
 const logger = createLogger('ToolLearning');
 
@@ -22,6 +24,7 @@ class ToolLearning {
     this.history = [];
     this.toolProfiles = {};
     this.taskTypeProfiles = {};
+    this.capabilityTree = options.capabilityTree || new AgentCapabilityTree();
 
     this._load();
   }
@@ -29,7 +32,7 @@ class ToolLearning {
   _load () {
     try {
       if (fs.existsSync(this.dataFile)) {
-        const data = JSON.parse(fs.readFileSync(this.dataFile, 'utf-8'));
+        const data = safeJsonParse(fs.readFileSync(this.dataFile, 'utf-8'), {});
         this.history = data.history || [];
         this.toolProfiles = data.toolProfiles || {};
         this.taskTypeProfiles = data.taskTypeProfiles || {};
@@ -108,6 +111,8 @@ class ToolLearning {
         roleStats: {},
         strengthAreas: [],
         weaknessAreas: [],
+        capabilityLevel: 'L1',
+        capabilityScore: 0,
         lastUpdated: null
       };
     }
@@ -134,6 +139,12 @@ class ToolLearning {
     this._updateComplexityStats(profile, entry);
     this._updateRoleStats(profile, entry);
     this._analyzeStrengthWeakness(profile);
+
+    try {
+      const levelAssessment = this.capabilityTree.assessLevel(toolName, profile);
+      profile.capabilityLevel = levelAssessment.level;
+      profile.capabilityScore = levelAssessment.score;
+    } catch (e) { /* 不阻断 */ }
   }
 
   _updateLanguageStats (profile, entry) {

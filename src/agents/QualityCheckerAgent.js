@@ -2,6 +2,7 @@ const BaseAgent = require('./BaseAgent');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 const QUALITY_PROMPT = `你是一位资深质量保障负责人，负责审核代码质量和系统一致性。
 
@@ -261,6 +262,7 @@ class QualityCheckerAgent extends BaseAgent {
       role: '质量审核员',
       systemPrompt: QUALITY_PROMPT,
       temperature: 0.3,
+      enableStructuredOutput: false,
       ...options
     });
     this.enableStaticCheck = options.enableStaticCheck !== false;
@@ -268,20 +270,111 @@ class QualityCheckerAgent extends BaseAgent {
     this.enableLint = options.enableLint !== false;
     this.enableTest = options.enableTest !== false;
     this.toolRunner = new ToolRunner();
+    this.testRunner = options.testRunner || null; // 延迟加载
     this.minQualityScore = options.minQualityScore || 75;
     this.gates = {
       earlySafety: { enabled: true, passThreshold: 0, failAction: 'block' },
       compile: { enabled: true, passThreshold: 0, failAction: 'block' },
       lint: { enabled: true, passThreshold: 0, failAction: 'warn' },
       aiReview: { enabled: true, passThreshold: 75, failAction: 'block' },
-      integration: { enabled: false, passThreshold: 0, failAction: 'warn' }
+      integration: { enabled: true, passThreshold: 50, failAction: 'warn' }
     };
     this.earlySafetyRules = {
       fileDeletion: { enabled: true, patterns: [/rm\s+/, /unlink\s*/, /deleteFile\s*/, /remove\s+/, /fs\.unlink/, /fs\.rm/, /path\.remove/] },
-      networkAccess: { enabled: true, patterns: [/http:\/*/, /https:\/*/, /fetch\s*\(/, /axios\./, /request\s*\(/, /socket\./, /net\./, /http\.get/, /http\.post/] },
+      networkAccess: { enabled: true, patterns: [/fetch\s*\(/, /axios\./, /requests\./, /urllib\.request/, /socket\./, /net\./, /http\.get\s*\(/, /http\.post\s*\(/, /http\.request\s*\(/] },
       permissionElevation: { enabled: true, patterns: [/sudo\s+/, /chmod\s+/, /chown\s+/, /setuid/, /setgid/, /ACL/, /permission/] },
       systemCommands: { enabled: true, patterns: [/exec\s*\(/, /spawn\s*\(/, /child_process/, /system\s*\(/, /shell\./] },
       sensitiveData: { enabled: true, patterns: [/password\s*=/, /secret\s*=/, /api[_\-\s]?key/, /token\s*=/, /private[_\-\s]?key/] }
+    };
+
+    // 安全审计知识库
+    this.securityKnowledgeBase = {
+      // OWASP Top 10 安全风险
+      owasp: {
+        injection: {
+          patterns: [
+            { lang: 'sql', regex: /(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+.*(?:\+\s*|\$\{|%s|format|f['"]).*\b(?:FROM|INTO|SET|WHERE|VALUES)/gi, severity: 'critical', desc: 'SQL注入风险：字符串拼接SQL' },
+            { lang: 'javascript', regex: /eval\s*\(/g, severity: 'critical', desc: '代码注入风险：使用eval()' },
+            { lang: 'python', regex: /eval\s*\(|exec\s*\(/g, severity: 'critical', desc: '代码注入风险：使用eval()/exec()' },
+            { lang: 'c', regex: /system\s*\(|popen\s*\(/g, severity: 'high', desc: '命令注入风险：使用system()/popen()' }
+          ]
+        },
+        xss: {
+          patterns: [
+            { lang: 'javascript', regex: /innerHTML\s*=/g, severity: 'high', desc: 'XSS风险：使用innerHTML赋值' },
+            { lang: 'javascript', regex: /document\.write\s*\(/g, severity: 'high', desc: 'XSS风险：使用document.write()' },
+            { lang: 'javascript', regex: /dangerouslySetInnerHTML/g, severity: 'medium', desc: 'XSS风险：React dangerouslySetInnerHTML' }
+          ]
+        },
+        bufferOverflow: {
+          patterns: [
+            { lang: 'c', regex: /gets\s*\(/g, severity: 'critical', desc: '缓冲区溢出：使用gets()' },
+            { lang: 'c', regex: /strcpy\s*\(/g, severity: 'high', desc: '缓冲区溢出：使用strcpy()，建议strncpy()' },
+            { lang: 'c', regex: /strcat\s*\(/g, severity: 'high', desc: '缓冲区溢出：使用strcat()，建议strncat()' },
+            { lang: 'c', regex: /sprintf\s*\(/g, severity: 'high', desc: '缓冲区溢出：使用sprintf()，建议snprintf()' },
+            { lang: 'c', regex: /scanf\s*\([^)]*%s/g, severity: 'high', desc: '缓冲区溢出：scanf %s无长度限制' }
+          ]
+        },
+        insecureCrypto: {
+          patterns: [
+            { lang: 'all', regex: /(?:MD5|SHA1|md5|sha1)\s*\(/g, severity: 'high', desc: '不安全哈希：使用MD5/SHA1' },
+            { lang: 'all', regex: /(?:DES|des|RC4|rc4)\s*(?:Encrypt|Decrypt|new|create)?\s*\(/g, severity: 'high', desc: '不安全加密：使用DES/RC4' },
+            { lang: 'all', regex: /(?:AES|aes).*(?:ECB|ecb)/g, severity: 'medium', desc: '不安全加密模式：AES-ECB' },
+            { lang: 'all', regex: /Math\.random\s*\(/g, severity: 'medium', desc: '不安全随机数：使用Math.random()' },
+            { lang: 'all', regex: /random\.random\s*\(/g, severity: 'medium', desc: '不安全随机数：使用random.random()' }
+          ]
+        },
+        hardCodedSecrets: {
+          patterns: [
+            { lang: 'all', regex: /(?:password|passwd|pwd)\s*=\s*['"][^'"]+['"]/gi, severity: 'critical', desc: '硬编码密码' },
+            { lang: 'all', regex: /(?:api[_-]?key|apikey)\s*=\s*['"][^'"]+['"]/gi, severity: 'critical', desc: '硬编码API密钥' },
+            { lang: 'all', regex: /(?:secret|token)\s*=\s*['"][^'"]+['"]/gi, severity: 'critical', desc: '硬编码密钥/令牌' },
+            { lang: 'all', regex: /(?:AKIA|aws)_.{16}/g, severity: 'critical', desc: '疑似AWS密钥' },
+            { lang: 'all', regex: /ghp_[a-zA-Z0-9]{36}/g, severity: 'critical', desc: '疑似GitHub令牌' }
+          ]
+        },
+        insecureDeserialization: {
+          patterns: [
+            { lang: 'python', regex: /pickle\.loads?\s*\(/g, severity: 'high', desc: '不安全反序列化：pickle' },
+            { lang: 'python', regex: /yaml\.load\s*\(/g, severity: 'high', desc: '不安全反序列化：yaml.load()，建议yaml.safe_load()' },
+            { lang: 'java', regex: /ObjectInputStream/g, severity: 'high', desc: '不安全反序列化：ObjectInputStream' },
+            { lang: 'javascript', regex: /JSON\.parse\s*\(\s*eval/g, severity: 'high', desc: '不安全解析：JSON.parse(eval())' }
+          ]
+        },
+        pathTraversal: {
+          patterns: [
+            { lang: 'all', regex: /\.\.\//g, severity: 'medium', desc: '路径穿越风险：检测到../' },
+            { lang: 'all', regex: /\.\.\\\\/g, severity: 'medium', desc: '路径穿越风险：检测到..\\' },
+            { lang: 'javascript', regex: /fs\.(read|write|access|stat)\s*\([^)]*\breq\b/g, severity: 'high', desc: '路径穿越：直接使用用户输入访问文件' }
+          ]
+        },
+        ssrf: {
+          patterns: [
+            { lang: 'all', regex: /(?:fetch|axios|requests|urllib)\s*\(\s*[^)]*\breq\b/g, severity: 'high', desc: 'SSRF风险：使用用户输入发起HTTP请求' },
+            { lang: 'all', regex: /(?:fetch|axios|requests|urllib)\s*\(\s*[^)]*input/g, severity: 'high', desc: 'SSRF风险：使用用户输入发起HTTP请求' }
+          ]
+        },
+        insecureConfig: {
+          patterns: [
+            { lang: 'javascript', regex: /process\.env\.NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]0['"]/g, severity: 'critical', desc: '不安全配置：禁用TLS证书验证' },
+            { lang: 'python', regex: /verify\s*=\s*False/g, severity: 'high', desc: '不安全配置：禁用SSL验证' },
+            { lang: 'all', regex: /debug\s*=\s*True/g, severity: 'medium', desc: '不安全配置：生产环境开启debug模式' }
+          ]
+        },
+        memorySafety: {
+          patterns: [
+            { lang: 'c', regex: /malloc\s*\([^)]*\)\s*(?!.*free)/g, severity: 'medium', desc: '内存泄漏风险：malloc未配对free' },
+            { lang: 'c', regex: /free\s*\([^)]*\)\s*;[^}]*free\s*\(\s*\1/g, severity: 'high', desc: '双重释放风险：重复free' },
+            { lang: 'rust', regex: /unsafe\s*\{/g, severity: 'medium', desc: 'Rust unsafe块：需要人工审查' }
+          ]
+        }
+      },
+      // 代码质量坏味道
+      codeSmells: {
+        longFunction: { check: (code) => { const lines = code.split('\n').length; return lines > 100 ? { severity: 'medium', desc: `函数过长: ${lines}行` } : null; } },
+        deepNesting: { check: (code) => { const maxDepth = (code.match(/\{/g) || []).length; return maxDepth > 6 ? { severity: 'low', desc: `嵌套过深: ${maxDepth}层` } : null; } },
+        duplicateCode: { check: (code) => { const lines = code.split('\n').filter(l => l.trim().length > 10); const unique = new Set(lines); return (lines.length - unique.size) > lines.length * 0.3 ? { severity: 'medium', desc: '代码重复率过高' } : null; } }
+      }
     };
   }
 
@@ -327,9 +420,14 @@ class QualityCheckerAgent extends BaseAgent {
     }
 
     if (this.enableCompilation && this.gates.compile.enabled && code) {
-      gateResults.compileResult = this.toolRunner.compileCode(code, language);
-      if (!gateResults.compileResult.compiled) {
-        return this._handleGateFailure('compile', gateResults, task);
+      const compiledLanguages = ['c', 'cpp', 'c++', 'java', 'go', 'rust'];
+      if (compiledLanguages.includes(language?.toLowerCase())) {
+        gateResults.compileResult = this.toolRunner.compileCode(code, language);
+        if (!gateResults.compileResult.compiled) {
+          return this._handleGateFailure('compile', gateResults, task);
+        }
+      } else {
+        gateResults.compileResult = { compiled: true, errors: '', warnings: '', executable: null };
       }
     }
 
@@ -548,38 +646,63 @@ class QualityCheckerAgent extends BaseAgent {
     const violations = [...(base.constraintViolations || [])];
     const securityIssues = [...(base.securityIssues || [])];
 
+    // 加权评分：AI评分 40% + 编译检查 20% + 静态分析 15% + 安全扫描 10% + 集成测试 15%
+    let weightedScore = score * 0.4; // AI评分权重 40%
+
     if (compileResult && !compileResult.compiled) {
-      score = Math.min(50, score);
+      weightedScore += 10; // 编译失败：权重区得0分
       violations.push('编译失败: ' + (compileResult.errors || '未知错误').substring(0, 100));
-    } else if (compileResult && compileResult.warnings) {
-      const warnCount = (compileResult.warnings.match(/warning/g) || []).length;
-      if (warnCount > 3) {
-        score = Math.max(0, score - 10);
+    } else if (compileResult && compileResult.compiled) {
+      weightedScore += 20; // 编译通过：满分20
+      if (compileResult.warnings) {
+        const warnCount = (compileResult.warnings.match(/warning/g) || []).length;
+        if (warnCount > 3) {
+          weightedScore -= 5;
+        }
       }
+    } else {
+      weightedScore += 15; // 无需编译的语言：给15分
     }
 
+    // 静态分析权重 15%
     if (lintResult && !lintResult.passed) {
-      score = Math.max(0, score - 15);
-      violations.push(`静态检查未通过 (${lintResult.tool})`);
+      const issueCount = lintResult.issues ? lintResult.issues.length : 0;
+      weightedScore += Math.max(0, 15 - issueCount * 2);
+      violations.push(`静态检查未通过 (${lintResult.tool}): ${issueCount} issues`);
+    } else if (lintResult && lintResult.passed) {
+      weightedScore += 15;
+    } else {
+      weightedScore += 10;
     }
 
+    // 安全扫描权重 10%
+    if (staticCheckResults.securityIssues.length > 0) {
+      const penalty = Math.min(10, staticCheckResults.securityIssues.length * 3);
+      weightedScore += Math.max(0, 10 - penalty);
+      securityIssues.push(...staticCheckResults.securityIssues);
+    } else {
+      weightedScore += 10;
+    }
+
+    // 集成测试权重 15%
     if (testResult && testResult.failed > 0) {
       const failRate = testResult.failed / (testResult.passed + testResult.failed);
-      score = Math.max(0, score - Math.round(30 * failRate));
+      weightedScore += Math.max(0, 15 - Math.round(15 * failRate));
       violations.push(`测试失败: ${testResult.failed} 个失败`);
+    } else if (testResult && testResult.passed > 0) {
+      weightedScore += 15;
+    } else {
+      weightedScore += 7; // 无测试环境：给一半分数
     }
 
+    // 约束违规扣分
     if (staticCheckResults.constraintViolations.length > 0) {
-      const penalty = Math.min(30, staticCheckResults.constraintViolations.length * 8);
-      score = Math.max(0, score - penalty);
+      const penalty = Math.min(20, staticCheckResults.constraintViolations.length * 5);
+      weightedScore = Math.max(0, weightedScore - penalty);
       violations.push(...staticCheckResults.constraintViolations);
     }
 
-    if (staticCheckResults.securityIssues.length > 0) {
-      const penalty = Math.min(20, staticCheckResults.securityIssues.length * 5);
-      score = Math.max(0, score - penalty);
-      securityIssues.push(...staticCheckResults.securityIssues);
-    }
+    score = Math.round(weightedScore);
 
     let status = base.status || 'completed';
     let canProceed = true;
@@ -687,7 +810,7 @@ class QualityCheckerAgent extends BaseAgent {
     repaired = this._fixTrailingCommas(repaired);
 
     try {
-      return JSON.parse(repaired);
+      return safeJsonParse(repaired, null);
     } catch (e) {
       return null;
     }
@@ -786,7 +909,69 @@ class QualityCheckerAgent extends BaseAgent {
       securityIssues.push(...this._checkPythonSecurity(code));
     }
 
-    return { constraintViolations: violations, securityIssues, metrics };
+    // 运行安全审计知识库
+    const auditResult = this._runSecurityAudit(code, language);
+    securityIssues.push(...auditResult.securityIssues);
+    violations.push(...auditResult.violations);
+
+    return { constraintViolations: violations, securityIssues, metrics, securityAudit: auditResult };
+  }
+
+  /**
+   * 运行安全审计知识库
+   */
+  _runSecurityAudit (code, language) {
+    const securityIssues = [];
+    const violations = [];
+    const auditDetails = {
+      owaspFindings: [],
+      codeSmells: [],
+      summary: { critical: 0, high: 0, medium: 0, low: 0 }
+    };
+
+    // OWASP 安全扫描
+    for (const [category, config] of Object.entries(this.securityKnowledgeBase.owasp)) {
+      for (const rule of config.patterns) {
+        if (rule.lang !== 'all' && rule.lang !== language) continue;
+
+        try {
+          const matches = code.match(rule.regex);
+          if (matches) {
+            const finding = {
+              category,
+              severity: rule.severity,
+              description: rule.desc,
+              count: matches.length,
+              samples: matches.slice(0, 3)
+            };
+            auditDetails.owaspFindings.push(finding);
+            auditDetails.summary[rule.severity] = (auditDetails.summary[rule.severity] || 0) + 1;
+
+            if (rule.severity === 'critical' || rule.severity === 'high') {
+              securityIssues.push(`[${category}] ${rule.desc} (${matches.length}处)`);
+            } else {
+              violations.push(`[${category}] ${rule.desc}`);
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 代码坏味道检测
+    for (const [name, config] of Object.entries(this.securityKnowledgeBase.codeSmells)) {
+      try {
+        const result = config.check(code);
+        if (result) {
+          auditDetails.codeSmells.push({ name, ...result });
+          auditDetails.summary[result.severity] = (auditDetails.summary[result.severity] || 0) + 1;
+          if (result.severity === 'medium' || result.severity === 'high') {
+            violations.push(`[代码坏味道] ${result.desc}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    return { securityIssues, violations, auditDetails };
   }
 
   _detectLanguage (code, declaredLanguage) {

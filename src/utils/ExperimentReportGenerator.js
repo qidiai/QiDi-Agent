@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { safeJsonParse } = require('./SafeParser');
+const EmergenceAudit = require('../core/EmergenceAudit');
 
 class ExperimentReportGenerator {
   constructor (options = {}) {
@@ -9,6 +11,7 @@ class ExperimentReportGenerator {
     this._ensureDir(this.reportDir);
     this._indexFile = path.join(this.reportDir, 'index.json');
     this._loadIndex();
+    this.emergenceAudit = options.emergenceAudit || new EmergenceAudit();
   }
 
   _ensureDir (dir) {
@@ -20,7 +23,7 @@ class ExperimentReportGenerator {
   _loadIndex () {
     if (fs.existsSync(this._indexFile)) {
       try {
-        this._index = JSON.parse(fs.readFileSync(this._indexFile, 'utf-8'));
+        this._index = safeJsonParse(fs.readFileSync(this._indexFile, 'utf-8'), { reports: [], tags: {} });
       } catch (e) {
         this._index = { reports: [], tags: {} };
       }
@@ -181,6 +184,22 @@ class ExperimentReportGenerator {
     report += '\n【经验教训】\n';
     report += '──────────────────────────────────────────────────────────────\n';
     report += `${this._extractLessons(taskSummary)}\n`;
+
+    try {
+      const auditReport = this.emergenceAudit.generateReport();
+      const redFlags = this.emergenceAudit.getRedFlags();
+      report += '\n\n───\n\n';
+      report += '【涌现审计报告】\n';
+      report += '──────────────────────────────────────────────────────────────\n';
+      report += auditReport;
+      if (redFlags.length > 0) {
+        report += `\n\n【⚠️ 红旗警告 (${redFlags.length}条)】\n`;
+        report += '──────────────────────────────────────────────────────────────\n';
+        redFlags.slice(0, 10).forEach(r => {
+          report += `• ${r.taskId || '-'}: ${r.flag}\n`;
+        });
+      }
+    } catch (e) { /* 审计失败不阻断报告生成 */ }
 
     report += '\n╔══════════════════════════════════════════════════════════════╗\n';
     report += '║                        报告结束                              ║\n';
@@ -351,7 +370,7 @@ class ExperimentReportGenerator {
     let metadata = {};
 
     if (fs.existsSync(metaPath)) {
-      metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      metadata = safeJsonParse(fs.readFileSync(metaPath, 'utf-8'), {});
     }
 
     return {

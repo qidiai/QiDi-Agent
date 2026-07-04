@@ -294,8 +294,8 @@ async function runTests () {
       const adapters = require('../src/adapters');
       const allAdapters = adapters.createAll();
 
-      if (allAdapters.length !== 8) {
-        throw new Error(`适配器数量应为8，实际为${allAdapters.length}`);
+      if (allAdapters.length < 8) {
+        throw new Error(`适配器数量应至少为8，实际为${allAdapters.length}`);
       }
 
       const expectedNames = [
@@ -308,6 +308,8 @@ async function runTests () {
           throw new Error(`缺少适配器: ${name}`);
         }
       });
+
+      console.log(`   已创建 ${allAdapters.length} 个适配器: ${allAdapters.map(a => a.name).join(', ')}`);
     }),
 
     test('15. 工具适配器 - 单个适配器创建', async () => {

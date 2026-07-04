@@ -74,6 +74,7 @@ class TaskSplitterAgent extends BaseAgent {
       role: '项目总工程师',
       systemPrompt: TASK_SPLITTER_PROMPT,
       temperature: 0.3,
+      enableStructuredOutput: false,
       ...options
     });
     this.enableSelfCheck = options.enableSelfCheck !== false;
@@ -113,6 +114,9 @@ class TaskSplitterAgent extends BaseAgent {
       this._adjustStrategyBasedOnFeedback();
     }
 
+    // Sequential Thinking 推理链：将复杂任务拆分过程结构化为多步推理
+    const reasoningChain = this._buildReasoningChain(taskDescription, complexity, projectAnalysis, context);
+
     let prompt = `请拆分以下编程任务：\n\n${taskDescription}\n\n`;
     prompt += '【任务复杂度分析参考】\n';
     prompt += `- 文本长度: ${complexity.length} 字\n`;
@@ -127,7 +131,12 @@ class TaskSplitterAgent extends BaseAgent {
     prompt += `- 粒度模式: ${this.splitPatterns.granularity}\n`;
     prompt += `- 依赖权重: ${this.splitPatterns.dependencyWeight}\n`;
     prompt += `- 复杂度偏向: ${this.splitPatterns.complexityBias}\n\n`;
-    prompt += '请基于以上复杂度和策略，确定合理的子任务数量和粒度。';
+
+    // 注入 Sequential Thinking 推理链
+    prompt += '【结构化推理链（Sequential Thinking）】\n';
+    prompt += reasoningChain;
+
+    prompt += '请基于以上复杂度、策略和推理链，确定合理的子任务数量和粒度。';
 
     if (projectAnalysis) {
       prompt += '\n\n【项目契约分析】\n';
@@ -282,6 +291,230 @@ class TaskSplitterAgent extends BaseAgent {
       dependencyDepth,
       existingContractCount
     };
+  }
+
+  /**
+   * Sequential Thinking 推理链构建
+   *
+   * 将任务拆分过程结构化为5步推理：
+   * Step 1: 需求分解 - 识别核心功能模块
+   * Step 2: 依赖分析 - 确定模块间依赖关系
+   * Step 3: 风险评估 - 识别技术风险和歧义点
+   * Step 4: 并行策略 - 确定哪些子任务可以并行执行
+   * Step 5: 质量保证 - 确定验证和测试策略
+   */
+  _buildReasoningChain (taskDescription, complexity, projectAnalysis, context) {
+    const steps = [];
+
+    // Step 1: 需求分解
+    const coreModules = this._identifyCoreModules(taskDescription, complexity);
+    steps.push({
+      step: 1,
+      name: '需求分解',
+      analysis: `识别到 ${coreModules.length} 个核心功能模块: ${coreModules.join(', ')}`,
+      reasoning: `基于关键词分析（${complexity.keywordCount}个关键术语）和AST节点估算（${complexity.astNodeCount}个），将任务分解为 ${coreModules.length} 个独立模块。`,
+      output: coreModules
+    });
+
+    // Step 2: 依赖分析
+    const dependencies = this._analyzeModuleDependencies(coreModules, projectAnalysis);
+    steps.push({
+      step: 2,
+      name: '依赖分析',
+      analysis: `模块间存在 ${dependencies.length} 条依赖关系，最大依赖深度 ${complexity.dependencyDepth}`,
+      reasoning: dependencies.length > 0
+        ? `关键依赖链: ${dependencies.map(d => `${d.from}→${d.to}`).join(', ')}。需确保依赖任务先完成。`
+        : '模块间无强依赖，可以并行执行。',
+      output: dependencies
+    });
+
+    // Step 3: 风险评估
+    const risks = this._assessRisks(taskDescription, complexity, projectAnalysis);
+    steps.push({
+      step: 3,
+      name: '风险评估',
+      analysis: `识别到 ${risks.length} 个潜在风险`,
+      reasoning: risks.length > 0
+        ? risks.map(r => `- [${r.severity}] ${r.description}`).join('\n')
+        : '无明显技术风险。',
+      output: risks
+    });
+
+    // Step 4: 并行策略
+    const parallelGroups = this._determineParallelGroups(coreModules, dependencies);
+    steps.push({
+      step: 4,
+      name: '并行策略',
+      analysis: `可将 ${coreModules.length} 个模块分为 ${parallelGroups.length} 个执行批次`,
+      reasoning: parallelGroups.map((g, i) => `批次${i + 1}: ${g.join(' + ')}（可并行）`).join('\n'),
+      output: parallelGroups
+    });
+
+    // Step 5: 质量保证
+    const qaStrategy = this._determineQAStrategy(complexity, coreModules);
+    steps.push({
+      step: 5,
+      name: '质量保证',
+      analysis: `建议 ${qaStrategy.checkpoints.length} 个质量检查点`,
+      reasoning: qaStrategy.checkpoints.map(c => `- ${c.phase}: ${c.action}`).join('\n'),
+      output: qaStrategy
+    });
+
+    // 格式化为可读文本
+    let chain = '';
+    for (const step of steps) {
+      chain += `Step ${step.step}: ${step.name}\n`;
+      chain += `  分析: ${step.analysis}\n`;
+      chain += `  推理: ${step.reasoning}\n`;
+      chain += '\n';
+    }
+    chain += `总结: 任务复杂度=${complexity.level}，建议拆分为 ${coreModules.length} 个子任务，分 ${parallelGroups.length} 批并行执行，设置 ${qaStrategy.checkpoints.length} 个质量门控。\n\n`;
+
+    return chain;
+  }
+
+  _identifyCoreModules (taskDescription, complexity) {
+    const modules = [];
+    const moduleKeywords = {
+      '数据层': ['数据', '存储', '数据库', '模型', 'schema', '持久化'],
+      '业务逻辑': ['逻辑', '算法', '计算', '处理', '业务', '规则'],
+      '接口层': ['API', '接口', '路由', 'endpoint', 'handler', 'controller'],
+      'UI层': ['界面', 'UI', '前端', '页面', '组件', '视图', 'render'],
+      '安全模块': ['安全', '认证', '授权', '加密', 'auth', '权限'],
+      '测试模块': ['测试', 'test', '验证', '验收', '断言'],
+      '配置模块': ['配置', 'config', '环境', 'settings'],
+      '工具模块': ['工具', 'helper', 'utils', '辅助']
+    };
+
+    for (const [module, keywords] of Object.entries(moduleKeywords)) {
+      if (keywords.some(k => taskDescription.toLowerCase().includes(k.toLowerCase()))) {
+        modules.push(module);
+      }
+    }
+
+    if (modules.length === 0) {
+      modules.push('核心实现');
+    }
+
+    if (complexity.level === 'high' && modules.length < 3) {
+      modules.push('错误处理');
+      modules.push('日志/监控');
+    }
+
+    return modules;
+  }
+
+  _analyzeModuleDependencies (modules, projectAnalysis) {
+    const deps = [];
+
+    // 基于模块名推断依赖
+    const depRules = {
+      '接口层': ['业务逻辑', '数据层'],
+      'UI层': ['接口层', '业务逻辑'],
+      '业务逻辑': ['数据层'],
+      '安全模块': ['配置模块'],
+      '测试模块': ['业务逻辑', '接口层']
+    };
+
+    for (const [from, targets] of Object.entries(depRules)) {
+      if (modules.includes(from)) {
+        for (const to of targets) {
+          if (modules.includes(to)) {
+            deps.push({ from, to, type: 'hard' });
+          }
+        }
+      }
+    }
+
+    return deps;
+  }
+
+  _assessRisks (taskDescription, complexity, projectAnalysis) {
+    const risks = [];
+
+    if (complexity.ambiguity === 'high') {
+      risks.push({ severity: 'high', description: '需求歧义度高，需要额外确认细节' });
+    }
+    if (complexity.languages.length > 2) {
+      risks.push({ severity: 'medium', description: `涉及 ${complexity.languages.length} 种语言，需处理跨语言兼容性` });
+    }
+    if (complexity.level === 'high' && complexity.astNodeCount > 50) {
+      risks.push({ severity: 'medium', description: 'AST节点数较多，实现复杂度高' });
+    }
+    if (projectAnalysis && projectAnalysis.functions.length > 20) {
+      risks.push({ severity: 'medium', description: '已有大量函数，需注意接口兼容性' });
+    }
+    if (taskDescription.includes('并发') || taskDescription.includes('多线程') || taskDescription.includes('async')) {
+      risks.push({ severity: 'high', description: '涉及并发/多线程，需要特别关注线程安全' });
+    }
+    if (taskDescription.includes('安全') || taskDescription.includes('加密') || taskDescription.includes('认证')) {
+      risks.push({ severity: 'high', description: '涉及安全敏感操作，需要安全审计' });
+    }
+
+    return risks;
+  }
+
+  _determineParallelGroups (modules, dependencies) {
+    // 基于依赖关系拓扑排序
+    const inDegree = {};
+    const adjList = {};
+
+    for (const m of modules) {
+      inDegree[m] = 0;
+      adjList[m] = [];
+    }
+
+    for (const dep of dependencies) {
+      if (adjList[dep.to]) {
+        adjList[dep.to].push(dep.from);
+        inDegree[dep.from] = (inDegree[dep.from] || 0) + 1;
+      }
+    }
+
+    const groups = [];
+    const completed = new Set();
+
+    while (completed.size < modules.length) {
+      const currentGroup = [];
+      for (const m of modules) {
+        if (!completed.has(m) && inDegree[m] === 0) {
+          currentGroup.push(m);
+          completed.add(m);
+        }
+      }
+      if (currentGroup.length === 0) break;
+
+      // 更新入度
+      for (const m of currentGroup) {
+        for (const next of (adjList[m] || [])) {
+          inDegree[next]--;
+        }
+      }
+
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  }
+
+  _determineQAStrategy (complexity, modules) {
+    const checkpoints = [
+      { phase: '架构审查', action: '检查模块划分和接口设计' }
+    ];
+
+    if (complexity.level !== 'low') {
+      checkpoints.push({ phase: '编译检查', action: '确保所有模块可编译' });
+    }
+
+    if (complexity.level === 'high') {
+      checkpoints.push({ phase: '安全审计', action: '扫描安全漏洞和代码注入' });
+      checkpoints.push({ phase: '性能测试', action: '验证关键路径性能' });
+    }
+
+    checkpoints.push({ phase: '集成测试', action: '验证模块间接口兼容性' });
+    checkpoints.push({ phase: '最终验收', action: '确认所有需求覆盖' });
+
+    return { checkpoints, testCoverage: complexity.level === 'high' ? '90%' : '70%' };
   }
 
   _estimateASTNodes (text) {
@@ -828,6 +1061,55 @@ ${JSON.stringify(executionResults, null, 2)}
     } catch (e) {
       return previousResult;
     }
+  }
+
+  // ── 递归拆分：高复杂度子任务自动递归拆解 ──
+  async _recursiveSplit (taskDescription, context = {}, depth = 0) {
+    const MAX_DEPTH = 3;
+    const MAX_SUBTASKS_PER_LEVEL = 5;
+
+    // 首层拆分
+    const result = await this.splitTask(taskDescription, context);
+    if (!result || !result.subtasks) return result;
+
+    const allSubtasks = [];
+
+    for (const task of result.subtasks) {
+      // 复杂度检测：是否需要继续拆分
+      const isComplex =
+        task.estimatedComplexity === 'high' ||
+        (task.estimatedLines && task.estimatedLines > 200) ||
+        task.requiresSubTask === true;
+
+      if (isComplex && depth < MAX_DEPTH && allSubtasks.length < MAX_SUBTASKS_PER_LEVEL) {
+        // 递归拆分，维护嵌套ID
+        const childResult = await this._recursiveSplit(
+          task.description || task.title,
+          { ...context, parentId: task.id, childIndex: allSubtasks.length },
+          depth + 1
+        );
+
+        if (childResult && childResult.subtasks && childResult.subtasks.length > 0) {
+          // 子任务继承父级约束
+          const children = childResult.subtasks.map((child, idx) => ({
+            ...child,
+            id: `${task.id}.${idx + 1}`,
+            parentId: task.id,
+            acceptanceCriteria: child.acceptanceCriteria || task.acceptanceCriteria,
+            estimatedComplexity: child.estimatedComplexity || task.estimatedComplexity
+          }));
+          task.children = children;
+          allSubtasks.push(task);
+          this.executionHistory.push({ parentId: task.id, childCount: children.length, depth: depth + 1 });
+          continue;
+        }
+      }
+
+      // 不满足递归条件或已达最大深度，直接添加
+      allSubtasks.push(task);
+    }
+
+    return { ...result, subtasks: allSubtasks };
   }
 }
 

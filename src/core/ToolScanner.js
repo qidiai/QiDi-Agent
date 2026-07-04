@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const ConfirmPrompt = require('../utils/ConfirmPrompt');
+const { safeJsonParse } = require('../utils/SafeParser');
 const logger = require('../utils/Logger')('ToolScanner');
 
 class ToolScanner {
@@ -250,7 +251,7 @@ class ToolScanner {
       return null;
     }
 
-    const config = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const config = safeJsonParse(fs.readFileSync(filePath, 'utf-8'), { tools: [], registered: [] });
 
     for (const tool of config.tools) {
       const adapter = this.adapters.find(a => a.name === tool.name);

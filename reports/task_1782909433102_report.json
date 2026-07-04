@@ -1,0 +1,41 @@
+{
+  "id": "task_1782909433102",
+  "timestamp": "2026-07-01T12:43:56.301Z",
+  "duration": 403199,
+  "originalTask": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ??????;4)PUT /api/users/:id ????;5)DELETE /api/users/:id ???????????,?????????????????",
+  "success": false,
+  "constraints": {
+    "language": "python",
+    "techStack": "console",
+    "platform": "windows",
+    "framework": "None",
+    "style": "standard",
+    "fileExtension": "python"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "实现任务",
+      "status": "completed",
+      "provider": null,
+      "duration": 383648,
+      "generatedFiles": 2,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 1,
+    "passed": 0,
+    "averageScore": 20
+  }
+}

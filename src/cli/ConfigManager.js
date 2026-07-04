@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 class ConfigManager {
   constructor () {
@@ -24,7 +25,7 @@ class ConfigManager {
     try {
       if (fs.existsSync(this.configFile)) {
         const content = fs.readFileSync(this.configFile, 'utf-8');
-        const config = JSON.parse(content);
+        const config = safeJsonParse(content, {});
         return { ...this.defaultConfig, ...config };
       }
     } catch (e) {

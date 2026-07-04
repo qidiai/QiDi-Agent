@@ -221,8 +221,8 @@
               </div>
 
               <!-- 提交 -->
-              <button class="chat-send-btn" id="chat-send-btn" onclick="sendMessage()" title="发送消息（Enter）">📤 发送</button>
-              <button class="chat-exec-btn" id="chat-exec-btn" onclick="executeTaskWithFiles()" title="执行任务（Ctrl+Enter）">⚡ 执行任务</button>
+              <button class="chat-send-btn" id="chat-send-btn" onclick="smartSend()" title="发送（Enter）">🚀 发送</button>
+              <button class="chat-exec-btn" id="chat-exec-btn" onclick="executeTaskWithFiles()" title="强制编程模式（Ctrl+Enter）">⚡</button>
             </div>
             <div class="chat-input-foot">
               <span class="chat-hint" id="task-char-count">0 字</span>
@@ -233,6 +233,78 @@
                 <label class="chat-chip"><input type="checkbox" id="const-web" value="Web"> Web</label>
               </div>
               <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;" onclick="saveTaskToWorkspace()" title="把当前任务描述保存到工作目录 tasks/">💾 存为任务</button>
+            </div>
+            
+            <!-- 场景预设按钮 -->
+            <div class="scenario-presets" id="console-scenarios" style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:11px;color:#9ca3af;margin-right:4px;">场景:</span>
+              <button class="btn-scenario" data-scenario="sweep" style="font-size:12px;padding:4px 12px;border-radius:12px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;">🧹 扫尾(单工具)</button>
+              <button class="btn-scenario" data-scenario="chore" style="font-size:12px;padding:4px 12px;border-radius:12px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;">📦 杂活(单工具)</button>
+              <button class="btn-scenario" data-scenario="tough" style="font-size:12px;padding:4px 12px;border-radius:12px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;">🧠 攻坚(双工具并行)</button>
+              <span style="flex:1;"></span>
+              <!-- 自适应编排模式切换 -->
+              <span style="font-size:11px;color:#9ca3af;margin-left:8px;">编排:</span>
+              <div class="adaptive-mode-switch" style="display:inline-flex;border:1px solid #d1d5db;border-radius:12px;overflow:hidden;">
+                <button class="btn-adaptive-mode active" data-mode="hybrid" title="系统推荐+用户确认" style="font-size:11px;padding:3px 10px;border:none;background:#3b82f6;color:#fff;cursor:pointer;">🤝 混合</button>
+                <button class="btn-adaptive-mode" data-mode="auto" title="系统全自动决策" style="font-size:11px;padding:3px 10px;border:none;background:#f9fafb;color:#374151;cursor:pointer;border-left:1px solid #d1d5db;">🤖 自适应</button>
+                <button class="btn-adaptive-mode" data-mode="manual" title="完全手动搭配" style="font-size:11px;padding:3px 10px;border:none;background:#f9fafb;color:#374151;cursor:pointer;border-left:1px solid #d1d5db;">✋ 手动</button>
+              </div>
+              <button id="adaptive-prefs-btn" onclick="toggleAdaptivePrefs()" title="自适应偏好设置" style="font-size:11px;padding:3px 8px;border:1px solid #d1d5db;background:#f9fafb;border-radius:12px;cursor:pointer;">⚙️</button>
+            </div>
+
+            <!-- 自适应偏好面板（默认隐藏） -->
+            <div id="adaptive-prefs-panel" style="display:none;margin-top:8px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;font-size:12px;">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+                <div>
+                  <label style="display:block;margin-bottom:4px;color:#6b7280;">隐私敏感度</label>
+                  <select id="pref-privacy" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                    <option value="low">低（公开项目）</option>
+                    <option value="medium" selected>中（默认）</option>
+                    <option value="high">高（机密项目）</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;margin-bottom:4px;color:#6b7280;">质量优先级</label>
+                  <select id="pref-quality" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                    <option value="low">低（速度优先）</option>
+                    <option value="medium">中</option>
+                    <option value="high" selected>高（默认）</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;margin-bottom:4px;color:#6b7280;">效率优先级</label>
+                  <select id="pref-efficiency" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                    <option value="low">低</option>
+                    <option value="medium" selected>中（默认）</option>
+                    <option value="high">高（最快）</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;margin-bottom:4px;color:#6b7280;">最大并行工具数</label>
+                  <input type="number" id="pref-maxtools" min="1" max="6" value="3" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                </div>
+              </div>
+              <button class="btn btn-primary" style="margin-top:8px;font-size:11px;padding:3px 10px;" onclick="saveAdaptivePrefs()">💾 保存偏好</button>
+            </div>
+
+            <!-- 自适应推荐结果展示（任务输入时显示） -->
+            <div id="adaptive-recommendation" style="display:none;margin-top:8px;padding:10px;border:1px solid #3b82f6;border-radius:8px;background:#eff6ff;font-size:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <strong style="color:#1e40af;">🎯 系统推荐方案</strong>
+                <span id="adaptive-confidence" style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;">置信度 0%</span>
+              </div>
+              <div id="adaptive-reasoning" style="color:#374151;white-space:pre-wrap;margin-bottom:6px;font-size:11px;"></div>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-primary" style="font-size:11px;padding:3px 10px;" onclick="applyAdaptiveRecommendation()">✅ 接受推荐</button>
+                <button class="btn" style="font-size:11px;padding:3px 10px;" onclick="dismissAdaptiveRecommendation()">✋ 自己选</button>
+              </div>
+            </div>
+            
+            <!-- 工具选择区域 -->
+            <div class="tool-selection-area" id="console-tool-selection" style="padding-top:10px;border-top:1px solid #e5e7eb;">
+              <label class="tool-section-label" style="font-size:12px;font-weight:500;color:#6b7280;margin-right:8px;">🔧 调用工具(可选,不选则只用模型生成)</label>
+              <div class="tool-checkbox-group" id="console-tool-checkboxes" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+              </div>
             </div>
           </div>
 

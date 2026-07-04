@@ -130,17 +130,14 @@ class AtomCodeAdapter extends BaseToolAdapter {
     }
 
     const taskId = options.taskId || `task_${Date.now()}`;
-    const outputDir = options.outputDir || `./workspace/atom-code/${taskId}`;
+    const workspace = options.workspaceDir || options.workspace || process.cwd();
+    const outputDir = path.join(workspace, `atom-code/${taskId}`);
 
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    const taskFile = path.join(outputDir, 'task.md');
-    fs.writeFileSync(taskFile, task, 'utf-8');
-
-    const absTaskFile = path.resolve(taskFile);
-    const args = ['--prompt-file', absTaskFile];
+    const args = ['-p', task, '-C', workspace, '--max-turns', '3', '--no-telemetry', '-y'];
 
     const result = await this._runCommand(this.command, args, {
       timeout: options.timeout || 300000,

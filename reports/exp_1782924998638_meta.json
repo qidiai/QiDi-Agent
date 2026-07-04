@@ -1,0 +1,26 @@
+{
+  "originalTask": "用Python写一个完整的HTTP服务器，具备以下功能：\n1. 支持GET请求，返回JSON数据\n2. 支持POST请求，接收JSON并存储数据\n3. 实现简单的RESTful API（/users、/items）\n4. 包含错误处理和请求验证\n5. 使用标准库实现，不依赖第三方框架",
+  "successRate": 67,
+  "totalTasks": 3,
+  "completedTasks": 2,
+  "failedTasks": 1,
+  "constraints": {
+    "language": "javascript",
+    "techStack": "console",
+    "platform": "windows",
+    "framework": "None",
+    "style": "standard",
+    "fileExtension": "javascript"
+  },
+  "keywords": "Python, 库, 框架",
+  "tags": [
+    "javascript",
+    "部分成功",
+    "Python",
+    "库",
+    "框架"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 4308
+}

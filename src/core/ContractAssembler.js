@@ -19,6 +19,7 @@
 
 const ProviderFactory = require('../providers');
 const createLogger = require('../utils/Logger');
+const { safeJsonParse } = require('../utils/SafeParser');
 const logger = createLogger('ContractAssembler');
 
 class ContractAssembler {
@@ -156,17 +157,25 @@ ${code}
 只返回 JSON，不要其他内容。`;
 
     try {
-      const response = await this.localModel.chat({
-        messages: [{ role: 'user', content: prompt }],
-        maxTokens: 2000
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await Promise.race([
+        this.localModel.chat(
+          [{ role: 'user', content: prompt }],
+          { maxTokens: 2000 }
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('契约提取超时')), 30000))
+      ]);
+
+      clearTimeout(timeoutId);
 
       // 解析 AI 返回的 JSON
       const content = response.content || response.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*\}/);
 
       if (jsonMatch) {
-        const aiResult = JSON.parse(jsonMatch[0]);
+        const aiResult = safeJsonParse(jsonMatch[0], {});
         return {
           functions: aiResult.functions || [],
           classes: aiResult.classes || [],
@@ -719,6 +728,17 @@ ${code}
       });
     }
 
+    // 跨语言适配建议
+    const languages = [...new Set(defs.map(d => d.language).filter(Boolean))];
+    if (languages.length > 1) {
+      suggestions.push({
+        type: 'cross_language_adapter',
+        description: `跨语言适配：${languages.join(' → ')}`,
+        languages,
+        strategy: this._suggestCrossLanguageStrategy(languages, defs)
+      });
+    }
+
     return suggestions;
   }
 
@@ -741,6 +761,262 @@ ${code}
       d.returnType && !['any', 'unknown', 'void'].includes(d.returnType.toLowerCase())
     );
     return preferred?.returnType || defs[0]?.returnType || 'unknown';
+  }
+
+  /**
+   * 跨语言适配策略建议
+   */
+  _suggestCrossLanguageStrategy (languages, defs) {
+    const strategies = [];
+
+    // C ↔ Python: 使用 ctypes/cffi
+    if (languages.includes('c') && languages.includes('python')) {
+      strategies.push({
+        bridge: 'ctypes/cffi',
+        description: '使用 Python ctypes 或 cffi 调用 C 函数',
+        steps: [
+          '1. 将 C 代码编译为共享库 (.so/.dll)',
+          '2. 在 Python 中使用 ctypes.CDLL 加载',
+          '3. 定义参数类型映射',
+          '4. 调用 C 函数并转换返回值'
+        ]
+      });
+    }
+
+    // C ↔ JavaScript: 使用 node-ffi-napi
+    if (languages.includes('c') && (languages.includes('javascript') || languages.includes('typescript'))) {
+      strategies.push({
+        bridge: 'node-ffi-napi',
+        description: '使用 Node.js FFI 调用 C 函数',
+        steps: [
+          '1. 将 C 代码编译为共享库',
+          '2. 使用 ffi-napi 加载库',
+          '3. 定义函数签名',
+          '4. 调用并处理返回值'
+        ]
+      });
+    }
+
+    // Python ↔ JavaScript: 使用子进程或 REST API
+    if (languages.includes('python') && (languages.includes('javascript') || languages.includes('typescript'))) {
+      strategies.push({
+        bridge: 'subprocess/REST',
+        description: '通过子进程调用或 REST API 桥接',
+        steps: [
+          '1. 选择主语言作为宿主',
+          '2. 将另一语言封装为 CLI 或 HTTP 服务',
+          '3. 通过子进程或 HTTP 调用',
+          '4. 解析输出并转换类型'
+        ]
+      });
+    }
+
+    // Go ↔ C: 使用 cgo
+    if (languages.includes('go') && languages.includes('c')) {
+      strategies.push({
+        bridge: 'cgo',
+        description: '使用 Go cgo 调用 C 函数',
+        steps: [
+          '1. 在 Go 中使用 import "C"',
+          '2. 声明 C 函数签名',
+          '3. 调用 C 函数',
+          '4. 转换 Go/C 类型'
+        ]
+      });
+    }
+
+    // Rust ↔ C: 使用 FFI
+    if (languages.includes('rust') && languages.includes('c')) {
+      strategies.push({
+        bridge: 'Rust FFI',
+        description: '使用 Rust FFI 互调',
+        steps: [
+          '1. 在 Rust 中使用 extern "C"',
+          '2. 声明 C 函数签名',
+          '3. 使用 unsafe 块调用',
+          '4. 转换类型'
+        ]
+      });
+    }
+
+    // 通用策略：JSON RPC
+    if (strategies.length === 0) {
+      strategies.push({
+        bridge: 'JSON-RPC',
+        description: '通用 JSON-RPC 桥接',
+        steps: [
+          '1. 为每种语言实现 JSON-RPC 服务',
+          '2. 定义统一的数据交换格式',
+          '3. 通过 HTTP 或 stdio 通信',
+          '4. 序列化/反序列化参数和返回值'
+        ]
+      });
+    }
+
+    return strategies;
+  }
+
+  /**
+   * 生成跨语言适配层代码
+   */
+  generateCrossLanguageAdapter (sourceContract, targetLanguage, options = {}) {
+    const sourceLang = sourceContract.language;
+    const targetLang = targetLanguage.toLowerCase();
+
+    if (sourceLang === targetLang) {
+      return { needed: false, code: '', reason: '同语言无需适配' };
+    }
+
+    const adapterGenerators = {
+      'c→python': () => this._generateCPythonAdapter(sourceContract),
+      'python→c': () => this._generatePythonCAdapter(sourceContract),
+      'c→javascript': () => this._generateCJSAdapter(sourceContract),
+      'javascript→c': () => this._generateJSCAdapter(sourceContract),
+      'python→javascript': () => this._generatePyJSAdapter(sourceContract),
+      'javascript→python': () => this._generateJSPyAdapter(sourceContract)
+    };
+
+    const key = `${sourceLang}→${targetLang}`;
+    const generator = adapterGenerators[key];
+
+    if (!generator) {
+      return {
+        needed: true,
+        code: '',
+        reason: `暂不支持 ${key} 的自动适配，请手动创建桥接层`,
+        strategy: this._suggestCrossLanguageStrategy([sourceLang, targetLang], [sourceContract])
+      };
+    }
+
+    const result = generator();
+    this.adaptations.push({
+      source: sourceLang,
+      target: targetLang,
+      contract: sourceContract.source,
+      functions: sourceContract.functions?.length || 0
+    });
+
+    return { needed: true, code: result, language: targetLang };
+  }
+
+  _generateCPythonAdapter (contract) {
+    let code = `# C → Python 适配层 (ctypes)\n`;
+    code += `# 源文件: ${contract.source}\n\n`;
+    code += `import ctypes\nimport os\n\n`;
+    code += `# 加载 C 共享库\n`;
+    code += `_lib_path = os.path.join(os.path.dirname(__file__), 'lib${contract.source || 'module'}.so')\n`;
+    code += `_lib = ctypes.CDLL(_lib_path)\n\n`;
+
+    for (const func of contract.functions || []) {
+      code += `# ${func.signature || func.name}\n`;
+      code += `_lib.${func.name}.restype = ctypes.c_int\n`;
+      if (func.params && func.params.length > 0) {
+        code += `_lib.${func.name}.argtypes = [${func.params.map(() => 'ctypes.c_int').join(', ')}]\n`;
+      }
+      code += `def ${func.name}(${(func.params || []).map(p => p.name).join(', ')}):\n`;
+      code += `    return _lib.${func.name}(${(func.params || []).map(p => p.name).join(', ')})\n\n`;
+    }
+
+    return code;
+  }
+
+  _generatePythonCAdapter (contract) {
+    let code = `// Python → C 适配层 (子进程调用)\n`;
+    code += `// 源文件: ${contract.source}\n\n`;
+    code += `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n`;
+
+    for (const func of contract.functions || []) {
+      code += `// 调用 Python 函数: ${func.name}\n`;
+      code += `int ${func.name}_adapter(${(func.params || []).map(p => `int ${p.name}`).join(', ')}) {\n`;
+      code += `    char cmd[1024];\n`;
+      code += `    snprintf(cmd, sizeof(cmd), "python -c \\"import ${contract.source || 'module'}; print(%s(${(func.params || []).map(p => p.name).join(', ')}))\\"", "${func.name}");\n`;
+      code += `    FILE* fp = popen(cmd, "r");\n`;
+      code += `    if (!fp) return -1;\n`;
+      code += `    int result = 0;\n`;
+      code += `    fscanf(fp, "%d", &result);\n`;
+      code += `    pclose(fp);\n`;
+      code += `    return result;\n`;
+      code += `}\n\n`;
+    }
+
+    return code;
+  }
+
+  _generateCJSAdapter (contract) {
+    let code = `// C → JavaScript 适配层 (ffi-napi)\n`;
+    code += `// 源文件: ${contract.source}\n\n`;
+    code += `const ffi = require('ffi-napi');\nconst path = require('path');\n\n`;
+    code += `const libPath = path.join(__dirname, 'lib${contract.source || 'module'}.${process.platform === 'win32' ? 'dll' : 'so'}');\n\n`;
+    code += `const lib = ffi.Library(libPath, {\n`;
+
+    for (const func of contract.functions || []) {
+      const paramTypes = (func.params || []).map(() => "'int'").join(', ');
+      code += `  '${func.name}': [${func.returnType === 'void' ? "'void'" : "'int'"}, [${paramTypes}]],\n`;
+    }
+
+    code += `});\n\n`;
+    code += `module.exports = lib;\n`;
+
+    return code;
+  }
+
+  _generateJSCAdapter (contract) {
+    let code = `// JavaScript → C 适配层 (子进程调用)\n`;
+    code += `// 源文件: ${contract.source}\n\n`;
+    code += `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n`;
+
+    for (const func of contract.functions || []) {
+      code += `// 调用 JS 函数: ${func.name}\n`;
+      code += `int ${func.name}_adapter(${(func.params || []).map(p => `int ${p.name}`).join(', ')}) {\n`;
+      code += `    char cmd[1024];\n`;
+      code += `    snprintf(cmd, sizeof(cmd), "node -e \\"console.log(require('./${contract.source || 'module'}').${func.name}(${(func.params || []).map(p => p.name).join(', ')}))\\"");\n`;
+      code += `    FILE* fp = popen(cmd, "r");\n`;
+      code += `    if (!fp) return -1;\n`;
+      code += `    int result = 0;\n`;
+      code += `    fscanf(fp, "%d", &result);\n`;
+      code += `    pclose(fp);\n`;
+      code += `    return result;\n`;
+      code += `}\n\n`;
+    }
+
+    return code;
+  }
+
+  _generatePyJSAdapter (contract) {
+    let code = `# Python → JavaScript 适配层 (子进程调用)\n`;
+    code += `# 源文件: ${contract.source}\n\n`;
+    code += `import subprocess\nimport json\n\n`;
+
+    for (const func of contract.functions || []) {
+      code += `def ${func.name}(${(func.params || []).map(p => p.name).join(', ')}):\n`;
+      code += `    result = subprocess.run(\n`;
+      code += `        ['node', '-e', f'console.log(JSON.stringify(require("./${contract.source || 'module'}").${func.name}(${(func.params || []).map(p => p.name).join(', ')})))'],\n`;
+      code += `        capture_output=True, text=True\n`;
+      code += `    )\n`;
+      code += `    return json.loads(result.stdout.strip())\n\n`;
+    }
+
+    return code;
+  }
+
+  _generateJSPyAdapter (contract) {
+    let code = `// JavaScript → Python 适配层 (子进程调用)\n`;
+    code += `// 源文件: ${contract.source}\n\n`;
+    code += `const { execSync } = require('child_process');\n\n`;
+
+    for (const func of contract.functions || []) {
+      code += `function ${func.name}(${(func.params || []).map(p => p.name).join(', ')}) {\n`;
+      code += `  const result = execSync(\n`;
+      code += `    \`python -c "import json; print(json.dumps(${contract.source || 'module'}.${func.name}(${(func.params || []).map(p => p.name).join(', ')})))"\`,\n`;
+      code += `    { encoding: 'utf-8' }\n`;
+      code += `  );\n`;
+      code += `  return JSON.parse(result.trim());\n`;
+      code += `}\n\n`;
+    }
+
+    code += `module.exports = { ${(contract.functions || []).map(f => f.name).join(', ')} };\n`;
+
+    return code;
   }
 
   /**

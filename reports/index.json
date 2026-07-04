@@ -1,6 +1,386 @@
 {
   "reports": [
     {
+      "id": "exp_1783168470952",
+      "timestamp": 1783168470952,
+      "task": "C:\\Users\\ASUS\\Documents\\trae_projects\\ai-orchestrator 分析项目优缺点,有无bug,可优化方向",
+      "successRate": 0,
+      "tags": [
+        "失败",
+        "无"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782960870802",
+      "timestamp": 1782960870802,
+      "task": "C:\\Users\\ASUS\\CodeBuddy\\toubiao ??????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "无"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782960710937",
+      "timestamp": 1782960710937,
+      "task": "C:\\Users\\ASUS\\CodeBuddy\\toubiao ??",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "无"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782959962768",
+      "timestamp": 1782959962768,
+      "task": "C:\\Users\\ASUS\\Documents\\trae_projects\\ai-orchestrator ??????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "无"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782924998638",
+      "timestamp": 1782924998638,
+      "task": "用Python写一个完整的HTTP服务器，具备以下功能：\n1. 支持GET请求，返回JSON数据\n2. 支持POST请求，接收JSON并存储数据\n3. 实现简单的RESTful API（/users、",
+      "successRate": 67,
+      "tags": [
+        "javascript",
+        "部分成功",
+        "Python",
+        "库",
+        "框架"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 4308
+    },
+    {
+      "id": "exp_1782924715180",
+      "timestamp": 1782924715180,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 4138
+    },
+    {
+      "id": "exp_1782924451804",
+      "timestamp": 1782924451804,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 75,
+      "tags": [
+        "Python",
+        "部分成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 5021
+    },
+    {
+      "id": "exp_1782923531708",
+      "timestamp": 1782923531708,
+      "task": "用Python写一个简单的HTTP服务器，支持GET请求返回JSON数据",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 5369
+    },
+    {
+      "id": "exp_1782923445944",
+      "timestamp": 1782923445944,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 4452
+    },
+    {
+      "id": "exp_1782922718639",
+      "timestamp": 1782922718639,
+      "task": "用Python写一个简单的HTTP服务器，支持GET请求返回JSON数据",
+      "successRate": 60,
+      "tags": [
+        "Python",
+        "部分成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 6561
+    },
+    {
+      "id": "exp_1782922580740",
+      "timestamp": 1782922580740,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 50,
+      "tags": [
+        "Python",
+        "部分成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 3397
+    },
+    {
+      "id": "exp_1782922306029",
+      "timestamp": 1782922306029,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 4490
+    },
+    {
+      "id": "exp_1782922041712",
+      "timestamp": 1782922041712,
+      "task": "用Python写一个简单的HTTP服务器，支持GET请求返回JSON数据",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 3577
+    },
+    {
+      "id": "exp_1782921928713",
+      "timestamp": 1782921928713,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 2547
+    },
+    {
+      "id": "exp_1782921754394",
+      "timestamp": 1782921754394,
+      "task": "用Python写一个简单的HTTP服务器，支持GET请求返回JSON数据",
+      "successRate": 75,
+      "tags": [
+        "Python",
+        "部分成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 3956
+    },
+    {
+      "id": "exp_1782921660653",
+      "timestamp": 1782921660653,
+      "task": "用Python写一个函数，计算两个数的最大公约数",
+      "successRate": 100,
+      "tags": [
+        "Python",
+        "成功"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 2399
+    },
+    {
+      "id": "exp_1782912654755",
+      "timestamp": 1782912654755,
+      "task": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ???",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782912140469",
+      "timestamp": 1782912140469,
+      "task": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ???",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782910687295",
+      "timestamp": 1782910687295,
+      "task": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ???",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782909836303",
+      "timestamp": 1782909836303,
+      "task": "??????Python HTTP???,??????:1)GET /api/users ??????;2)POST /api/users ?????;3)GET /api/users/:id ???",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782907860683",
+      "timestamp": 1782907860683,
+      "task": "??????Python Hello World??",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782906838527",
+      "timestamp": 1782906838527,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782905231658",
+      "timestamp": 1782905231658,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782901812908",
+      "timestamp": 1782901812908,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782901594353",
+      "timestamp": 1782901594353,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 0,
+      "tags": [
+        "失败",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782898912334",
+      "timestamp": 1782898912334,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782898004890",
+      "timestamp": 1782898004890,
+      "task": "???Python HTTP???,??GET?POST??,??JSON????",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782895855269",
+      "timestamp": 1782895855269,
+      "task": "?????????,??????????,??Python??",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
+      "id": "exp_1782895638900",
+      "timestamp": 1782895638900,
+      "task": "??????Python Hello World??",
+      "successRate": 100,
+      "tags": [
+        "成功",
+        "Python"
+      ],
+      "qualityScore": 0,
+      "duration": 0,
+      "tokenUsage": 0
+    },
+    {
       "id": "exp_1782663367764",
       "timestamp": 1782663367764,
       "task": "用C语言写一个简单的加法函数 add(int a, int b)",
@@ -62,9 +442,16 @@
   ],
   "tags": {
     "c": 3,
-    "成功": 4,
+    "成功": 26,
     "C语言": 4,
     "算法": 3,
-    "C": 1
+    "C": 1,
+    "Python": 25,
+    "失败": 2,
+    "部分成功": 5,
+    "javascript": 1,
+    "库": 1,
+    "框架": 1,
+    "无": 4
   }
 }

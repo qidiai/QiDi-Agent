@@ -4,7 +4,7 @@
   "defaultAgent": "ollama",
   "agents": {
     "ollama": {
-      "enabled": true,
+      "enabled": false,
       "provider": "ollama",
       "name": "Ollama 本地模型",
       "name_display": "🦎 Ollama",

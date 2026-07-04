@@ -1,0 +1,72 @@
+{
+  "id": "task_1782898851377",
+  "timestamp": "2026-07-01T09:41:52.332Z",
+  "duration": 60955,
+  "originalTask": "???Python HTTP???,??GET?POST??,??JSON????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库（urllib或http.client），可选requests库（若允许第三方依赖）",
+    "platform": "跨平台",
+    "framework": "无特定框架",
+    "style": "PEP 8，类型提示，异常处理",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "架构设计与接口定义",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 10906,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T2",
+      "title": "实现GET请求功能",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 2831,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T3",
+      "title": "实现POST请求功能",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 6008,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T4",
+      "title": "编写单元测试",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 6957,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "trae",
+    "claude-code",
+    "openclaw",
+    "mimo-code",
+    "atom-code",
+    "hermes-agent",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 4,
+    "passed": 0,
+    "averageScore": 20
+  }
+}

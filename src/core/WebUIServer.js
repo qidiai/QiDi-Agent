@@ -11,6 +11,7 @@ const ExperimentReportGenerator = require('../utils/ExperimentReportGenerator');
 const AgentHub = require('./AgentHub');
 const TokenCounter = require('../utils/TokenCounter');
 const createLogger = require('../utils/Logger');
+const { safeJsonParse } = require('../utils/SafeParser');
 const logger = createLogger('WebUIServer');
 
 class WebUIServer {
@@ -49,9 +50,12 @@ class WebUIServer {
     this._agentStatus = new Map();
     this._tokenStats = new Map();
 
+    this.selfEvalLayer = new (require('./SelfEvalLayer'))();
+
     this._setupMiddleware();
     this._setupAuth();
     this._setupRoutes();
+    this._setupEnhancedRoutes();
     this._setupStaticFiles();
   }
 
@@ -329,6 +333,32 @@ class WebUIServer {
       }
     });
 
+    this.app.post('/api/smart-send', async (req, res) => {
+      try {
+        const { task, models, constraints, mode, forceMode } = req.body;
+        
+        const TaskClassifier = require('../utils/TaskClassifier');
+        const classifier = new TaskClassifier();
+        const classification = classifier.classify(task);
+        
+        logger.info(`[智能发送] task="${task}", type=${classification.type}, confidence=${classification.confidence}`);
+
+        if (forceMode === 'task' || classification.type === 'programming') {
+          const result = await this._executeTask({ task, models, constraints, mode });
+          res.json({ ...result, type: 'task' });
+        } else {
+          const result = await this._handleChat({
+            messages: [{ role: 'user', content: task }],
+            options: {},
+            modelNames: models
+          });
+          res.json({ ...result, type: 'chat' });
+        }
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
     this.app.get('/api/chat/sessions', async (req, res) => {
       try {
         const sessions = this._listChatSessions();
@@ -465,6 +495,127 @@ class WebUIServer {
       }
     });
 
+    // ═══ P5: 系统监控与可观测性聚合 API ═══
+    this.app.get('/api/monitor/dashboard', async (req, res) => {
+      try {
+        const dashboard = {
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          memory: {
+            rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + ' MB',
+            heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+            heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB'
+          },
+          adaptive: this.orchestrator?.adaptiveOrchestrator?.getLearningStats() || null,
+          selfEval: this.selfEvalLayer?.getStats?.() || null,
+          tools: { total: 0, online: 0 },
+          tasks: { active: this._activeTasks?.size || 0 }
+        };
+
+        // 工具状态
+        try {
+          const tools = await this._getAvailableTools();
+          dashboard.tools.total = tools.length;
+          dashboard.tools.online = tools.filter(t => t.status === 'online' || t.status === 'ready').length;
+          dashboard.tools.list = tools;
+        } catch (_) {}
+
+        // 健康检查器状态
+        if (this.toolHealthChecker) {
+          dashboard.health = this.toolHealthChecker.getStatus?.() || { status: 'unknown' };
+        }
+
+        res.json(dashboard);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // P5: 工具健康检查历史
+    this.app.get('/api/monitor/tools-health', async (req, res) => {
+      try {
+        if (!this.toolHealthChecker) {
+          return res.json({ error: '工具健康检查器未启用' });
+        }
+        const results = await this.toolHealthChecker.checkAll();
+        res.json({
+          timestamp: new Date().toISOString(),
+          total: results.length,
+          healthy: results.filter(r => r.status === 'healthy').length,
+          unhealthy: results.filter(r => r.status === 'unhealthy').length,
+          results
+        });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // P5: 学习趋势（最近 N 次推荐的成功率）
+    this.app.get('/api/monitor/trends', async (req, res) => {
+      try {
+        if (!this.orchestrator?.adaptiveOrchestrator) {
+          return res.json({ error: '自适应编排器未启用' });
+        }
+        const history = this.orchestrator.adaptiveOrchestrator.recommendationHistory || [];
+        const recent = history.slice(-20).map(r => ({
+          timestamp: r.timestamp,
+          taskType: r.features?.taskType,
+          language: r.features?.language,
+          confidence: r.confidence,
+          success: r.outcome?.success,
+          qualityScore: r.outcome?.qualityScore
+        }));
+        res.json({
+          total: history.length,
+          recent,
+          learningStats: this.orchestrator.adaptiveOrchestrator.getLearningStats()
+        });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ═══════════════ 自我评估 API（SelfEvalLayer）═══════════════
+    this.app.get('/api/self-eval/stats', async (req, res) => {
+      try {
+        const stats = this.selfEvalLayer?.getStats() || { error: 'SelfEvalLayer 未初始化' };
+        res.json(stats);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.get('/api/self-eval/params', async (req, res) => {
+      try {
+        const params = this.selfEvalLayer?.getAdaptiveParams() || { error: 'SelfEvalLayer 未初始化' };
+        res.json(params);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/self-eval/feedback', async (req, res) => {
+      try {
+        const { taskId, feedbackType } = req.body;
+        if (!taskId || !feedbackType) {
+          return res.status(400).json({ error: '缺少参数：taskId 和 feedbackType' });
+        }
+        const result = this.selfEvalLayer?.recordFeedback(taskId, feedbackType);
+        res.json({ success: true, ...result });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/self-eval/reset', async (req, res) => {
+      try {
+        this.selfEvalLayer?.reset();
+        res.json({ success: true, message: '自我评估数据已重置' });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
     // ═══════════════ 文件管理 API（统一规范化）═══════════════
     // 所有路径均相对于 workspaceDir，自动防穿越。
     this.app.get('/api/files', async (req, res) => {
@@ -570,6 +721,336 @@ class WebUIServer {
         res.status(400).json({ error: e.message });
       }
     });
+  }
+
+  // ═══════════════ G3: 增强模块 API ═══════════════
+
+  /**
+   * 注册增强模块（BudgetManager, ApprovalWorkflow, GitIntegration, TestRunner, SandboxExecutor, VectorMemoryStore）的实例
+   */
+  _enhancedModules = {
+    budgetManager: null,
+    approvalWorkflow: null,
+    gitIntegration: null,
+    testRunner: null,
+    sandboxExecutor: null,
+    vectorMemory: null,
+    contractValidator: null,
+    streamManager: null
+  };
+
+  /**
+   * 注入增强模块实例（由外部调用方在 start 前注入）
+   */
+  setEnhancedModules (modules) {
+    Object.assign(this._enhancedModules, modules);
+  }
+
+  // ── SSE 流式输出 ──
+  _setupEnhancedRoutes () {
+    // SSE: 流式获取任务输出
+    this.app.get('/api/stream/:taskId', (req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive'
+      });
+      res.write('retry: 3000\n\n');
+
+      const taskId = req.params.taskId;
+      const interval = setInterval(() => {
+        const task = this._activeTasks.get(taskId);
+        if (task) {
+          res.write(`data: ${JSON.stringify({ status: task.status, progress: task.progress, output: (task.output || []).slice(-5) })}\n\n`);
+          if (task.status === 'completed' || task.status === 'failed') {
+            res.write('event: done\n');
+            res.write(`data: ${JSON.stringify({ status: task.status })}\n\n`);
+            clearInterval(interval);
+            res.end();
+          }
+        } else {
+          res.write(`data: ${JSON.stringify({ error: 'task not found' })}\n\n`);
+          clearInterval(interval);
+          res.end();
+        }
+      }, 1000);
+
+      req.on('close', () => clearInterval(interval));
+    });
+
+    // ── 预算管理 ──
+    this.app.get('/api/budget', (req, res) => {
+      try {
+        const bm = this._enhancedModules.budgetManager;
+        if (!bm) return res.status(404).json({ error: 'BudgetManager 未启用' });
+        res.json(bm.generateReport());
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/budget/set', (req, res) => {
+      try {
+        const bm = this._enhancedModules.budgetManager;
+        if (!bm) return res.status(404).json({ error: 'BudgetManager 未启用' });
+        const { totalBudget } = req.body;
+        bm.setBudget(totalBudget);
+        res.json({ success: true, totalBudget: bm.totalBudget });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── 审批工作流 ──
+    this.app.get('/api/approvals', (req, res) => {
+      try {
+        const aw = this._enhancedModules.approvalWorkflow;
+        if (!aw) return res.status(404).json({ error: 'ApprovalWorkflow 未启用' });
+        res.json({ pending: aw.getPendingApprovals(), stats: aw.getStats() });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/approvals/:id/approve', (req, res) => {
+      try {
+        const aw = this._enhancedModules.approvalWorkflow;
+        if (!aw) return res.status(404).json({ error: 'ApprovalWorkflow 未启用' });
+        const result = aw.approve(req.params.id, req.body?.comment || '');
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/approvals/:id/reject', (req, res) => {
+      try {
+        const aw = this._enhancedModules.approvalWorkflow;
+        if (!aw) return res.status(404).json({ error: 'ApprovalWorkflow 未启用' });
+        const result = aw.reject(req.params.id, req.body?.comment || '');
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── Git 集成 ──
+    this.app.get('/api/git/status', (req, res) => {
+      try {
+        const git = this._enhancedModules.gitIntegration;
+        if (!git) return res.status(404).json({ error: 'GitIntegration 未启用' });
+        res.json({
+          enabled: git.isEnabled(),
+          branch: git.getCurrentBranch(),
+          savepoints: git.getSavepoints ? git.getSavepoints() : []
+        });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/git/rollback', (req, res) => {
+      try {
+        const git = this._enhancedModules.gitIntegration;
+        if (!git) return res.status(404).json({ error: 'GitIntegration 未启用' });
+        const { savepointId } = req.body || {};
+        git.rollback(savepointId);
+        res.json({ success: true, message: '已回滚' });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── 测试执行 ──
+    this.app.post('/api/test/run', async (req, res) => {
+      try {
+        const tr = this._enhancedModules.testRunner;
+        if (!tr) return res.status(404).json({ error: 'TestRunner 未启用' });
+        const result = await tr.runTests(req.body);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── 沙箱执行 ──
+    this.app.post('/api/sandbox/execute', async (req, res) => {
+      try {
+        const sb = this._enhancedModules.sandboxExecutor;
+        if (!sb) return res.status(404).json({ error: 'SandboxExecutor 未启用' });
+        const { code, language, timeout } = req.body;
+        const result = await sb.execute(code, language, { timeout });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── 向量记忆 ──
+    this.app.get('/api/vector-memory/search', async (req, res) => {
+      try {
+        const vm = this._enhancedModules.vectorMemory;
+        if (!vm) return res.status(404).json({ error: 'VectorMemoryStore 未启用' });
+        const { q, topK } = req.query;
+        const results = await vm.search(q, {}, parseInt(topK) || 5);
+        res.json({ results });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.post('/api/vector-memory/store', async (req, res) => {
+      try {
+        const vm = this._enhancedModules.vectorMemory;
+        if (!vm) return res.status(404).json({ error: 'VectorMemoryStore 未启用' });
+        const { text, metadata } = req.body;
+        const id = await vm.store(text, metadata || {});
+        res.json({ success: true, id });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    this.app.get('/api/vector-memory/stats', (req, res) => {
+      try {
+        const vm = this._enhancedModules.vectorMemory;
+        if (!vm) return res.status(404).json({ error: 'VectorMemoryStore 未启用' });
+        res.json(vm.getStats());
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ═══════════════════════════════════════════
+    // 自适应智能编排 API
+    // ═══════════════════════════════════════════
+
+    // 获取自适应推荐（不修改状态）
+    this.app.post('/api/adaptive/recommend', async (req, res) => {
+      try {
+        const { taskDescription, tools } = req.body;
+        if (!taskDescription) return res.status(400).json({ error: 'taskDescription 必填' });
+        const AdaptiveOrchestrator = require('./AdaptiveOrchestrator');
+        const adapter = new AdaptiveOrchestrator({ orchestrationMode: 'auto' });
+        const availableTools = tools || await this._getAvailableTools();
+        const recommendation = adapter.recommend(taskDescription, availableTools);
+        res.json(recommendation);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // 设置编排模式：auto / manual / hybrid（保存到配置）
+    this.app.post('/api/adaptive/mode', async (req, res) => {
+      try {
+        const { mode } = req.body;
+        if (!mode) return res.status(400).json({ error: 'mode 必填' });
+        if (!['auto', 'manual', 'hybrid'].includes(mode)) {
+          return res.status(400).json({ error: 'mode 必须是 auto/manual/hybrid' });
+        }
+        // 持久化到内存配置
+        if (!this._adaptiveConfig) this._adaptiveConfig = {};
+        this._adaptiveConfig.mode = mode;
+        res.json({ success: true, mode, message: `编排模式已设为: ${mode}` });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // 获取编排模式与状态
+    this.app.get('/api/adaptive/status', async (req, res) => {
+      try {
+        const mode = this._adaptiveConfig?.mode || 'hybrid';
+        const preferences = this._adaptiveConfig?.preferences || {
+          privacySensitivity: 'medium',
+          qualityPriority: 'high',
+          efficiencyPriority: 'medium',
+          maxParallelTools: 3
+        };
+        res.json({ orchestrationMode: mode, userPreferences: preferences });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // 更新用户偏好
+    this.app.post('/api/adaptive/preferences', async (req, res) => {
+      try {
+        if (!this._adaptiveConfig) this._adaptiveConfig = {};
+        this._adaptiveConfig.preferences = {
+          ...(this._adaptiveConfig.preferences || {}),
+          ...req.body
+        };
+        res.json({ success: true, preferences: this._adaptiveConfig.preferences });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // 获取可用工具列表（内部辅助方法）
+    this.app.get('/api/adaptive/tools', async (req, res) => {
+      try {
+        const tools = await this._getAvailableTools();
+        res.json({ tools, total: tools.length });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // P4: 自适应学习统计
+    this.app.get('/api/adaptive/learning', async (req, res) => {
+      try {
+        if (!this.orchestrator || !this.orchestrator.adaptiveOrchestrator) {
+          return res.json({ error: '自适应编排器未启用' });
+        }
+        const stats = this.orchestrator.adaptiveOrchestrator.getLearningStats();
+        res.json(stats);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // P4: 记录任务结果到学习闭环
+    this.app.post('/api/adaptive/feedback', async (req, res) => {
+      try {
+        const { recommendationId, success, qualityScore, metadata } = req.body;
+        if (!recommendationId) {
+          return res.status(400).json({ error: '缺少 recommendationId' });
+        }
+        if (!this.orchestrator || !this.orchestrator.adaptiveOrchestrator) {
+          return res.json({ error: '自适应编排器未启用' });
+        }
+        this.orchestrator.adaptiveOrchestrator.recordOutcome(
+          recommendationId,
+          success,
+          qualityScore || 0,
+          metadata || {}
+        );
+        res.json({ success: true, message: '反馈已记录' });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+  }
+
+  /**
+   * 获取可用工具列表（内部方法）
+   */
+  async _getAvailableTools () {
+    try {
+      const ToolScanner = require('./ToolScanner');
+      const scanner = new ToolScanner({ silentScan: true, autoConfirm: true });
+      scanner.registerAdapters(require('../adapters').createAll());
+      const result = await scanner.scan();
+      return result.enabled.map(t => ({
+        name: t.name,
+        displayName: t.displayName || t.name,
+        status: t.status || 'ready',
+        version: t.version || 'unknown'
+      }));
+    } catch (e) {
+      return [];
+    }
   }
 
   _setupStaticFiles () {
@@ -772,7 +1253,7 @@ class WebUIServer {
       let config = { agents: {} };
 
       if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
       }
 
       for (const [name, agentConfig] of Object.entries(config.agents)) {
@@ -815,7 +1296,7 @@ class WebUIServer {
         return { success: false, message: '配置文件不存在' };
       }
 
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
 
       if (!config.agents[name]) {
         return { success: false, message: `Agent ${name} 不存在` };
@@ -839,7 +1320,7 @@ class WebUIServer {
         return { success: false, message: '配置文件不存在' };
       }
 
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
 
       if (!config.agents[name]) {
         return { success: false, message: `Agent ${name} 不存在` };
@@ -861,7 +1342,7 @@ class WebUIServer {
     let config = { dispatch: {}, agents: {} };
 
     if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
     }
 
     const dispatch = config.dispatch || {};
@@ -909,7 +1390,7 @@ class WebUIServer {
         return { success: false, message: '配置文件不存在' };
       }
 
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
 
       config.dispatch = {
         ...config.dispatch,
@@ -931,7 +1412,7 @@ class WebUIServer {
   }
 
   async _handleChat (chatData) {
-    const { messages, options, sessionId } = chatData;
+    const { messages, options, sessionId, modelNames } = chatData;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return { success: false, message: '消息不能为空' };
@@ -942,7 +1423,10 @@ class WebUIServer {
       return { success: false, message: '没有已启用的模型，请先到「模型管理」页启用至少一个模型' };
     }
 
-    const agent = enabledAgents[0];
+    let agent = enabledAgents[0];
+    if (modelNames && modelNames.length > 0) {
+      agent = enabledAgents.find(a => modelNames.includes(a.name)) || enabledAgents[0];
+    }
     const provider = agent.provider;
 
     if (!provider || typeof provider.chat !== 'function') {
@@ -959,13 +1443,22 @@ class WebUIServer {
       '3. 代码生成：支持 C、Python、TypeScript、Go、Rust、Java 等多语言代码生成\n' +
       '4. 隐私模式：代码碎片化分发，敏感信息不出本地\n' +
       '5. 高质量模式：调用多个云端模型协同编排，输出代码质量对标国际前沿模型\n' +
-      '6. 任务编排：自动分解复杂任务，按序执行子任务\n\n' +
+      '6. 任务编排：自动分解复杂任务，按序执行子任务\n' +
+      '7. 文件操作：可以读取、分析、修改、创建本地文件和目录\n\n' +
+      '关键能力说明：\n' +
+      '- 当用户提供文件路径（如 C:\\Users\\xxx\\project 或 ./workspace）时，你可以直接分析该路径下的文件\n' +
+      '- 你可以读取项目的目录结构、源代码文件内容\n' +
+      '- 你可以理解项目的业务逻辑、架构设计和代码实现\n' +
+      '- 你可以生成、修改、优化代码文件\n' +
+      '- 你有完整的文件系统访问能力，不是只能通过文本对话\n\n' +
       '回答策略：\n' +
       '- 先理解用户意图，再回答。不要急于输出，先分析用户的核心需求\n' +
+      '- 当用户提供文件路径时，立即开始分析，不要询问"你无法访问本地文件"\n' +
       '- 复杂问题先拆解，再逐一解决。主动识别潜在问题并提醒用户\n' +
       '- 代码生成前，先确认需求细节；实现后主动提供测试建议\n' +
       '- 不确定时，诚实告知用户，而非猜测或编造\n' +
-      '- 定期总结进度和下一步计划\n\n' +
+      '- 定期总结进度和下一步计划\n' +
+      '- 保持对话上下文连贯，记住之前的对话内容\n\n' +
       '身份要求：\n' +
       '- 始终以 QIDI Agent 的身份回应，不要说"我是某某模型"，不论底层调用的是哪个模型\n' +
       '- 当被问及"你是谁"时，介绍你是 QIDI Agent 以及上述核心功能\n' +
@@ -1008,7 +1501,7 @@ class WebUIServer {
       try {
         const filePath = path.join(this.chatMemoryDir, `${sid}.json`);
         const existing = fs.existsSync(filePath)
-          ? JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+          ? safeJsonParse(fs.readFileSync(filePath, 'utf-8'), { id: sid, createdAt: now, messages: [], systemPrompt: systemPromptText })
           : { id: sid, createdAt: now, messages: [], systemPrompt: systemPromptText };
         existing.updatedAt = now;
         existing.messages = messages; // 保存原始消息（含此次新消息）
@@ -1020,6 +1513,7 @@ class WebUIServer {
 
       return {
         success: true,
+        message: result.content || '',
         content: result.content || '',
         model: result.model || agent.name,
         usage: {
@@ -1032,7 +1526,7 @@ class WebUIServer {
         sessionId: sid
       };
     } catch (e) {
-      return { success: false, message: `对话失败: ${e.message}` };
+      return { success: false, message: `对话失败: ${e.message}`, error: e.message };
     }
   }
 
@@ -1058,7 +1552,7 @@ class WebUIServer {
         .slice(0, 100);
       return files.map(f => {
         try {
-          const data = JSON.parse(fs.readFileSync(path.join(this.chatMemoryDir, f), 'utf-8'));
+          const data = safeJsonParse(fs.readFileSync(path.join(this.chatMemoryDir, f), 'utf-8'), {});
           return {
             id: data.id,
             createdAt: data.createdAt,
@@ -1081,7 +1575,7 @@ class WebUIServer {
     try {
       const filePath = path.join(this.chatMemoryDir, `${sessionId}.json`);
       if (fs.existsSync(filePath)) {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return safeJsonParse(fs.readFileSync(filePath, 'utf-8'), null);
       }
     } catch (_) {}
     return null;
@@ -1103,7 +1597,7 @@ class WebUIServer {
 
   async _executeTask (taskData) {
     const taskId = `task_${Date.now()}`;
-    const { task, models, constraints, mode } = taskData;
+    const { task, models, constraints, mode, selectedTools } = taskData;
 
     // 未指定模型时，使用所有已启用的模型（在「模型管理」页启用）
     let useModels = models;
@@ -1139,7 +1633,7 @@ class WebUIServer {
 
     // 立即返回 taskId 给前端，后台异步执行任务
     setImmediate(() => {
-      this._runTaskAsync(taskId, task, useModels, constraints || {}, mode || 'privacy')
+      this._runTaskAsync(taskId, task, useModels, constraints || {}, mode || 'privacy', selectedTools || [])
         .catch(e => {
           const task = this._activeTasks.get(taskId);
           if (task) {
@@ -1157,21 +1651,90 @@ class WebUIServer {
   /**
    * 异步执行任务内部方法（替代 setTimeout）。
    */
-  async _runTaskAsync (taskId, task, models, constraints, mode) {
+  async _runTaskAsync (taskId, task, models, constraints, mode, selectedTools = []) {
     try {
       const taskMode = this._activeTasks.get(taskId)?.mode || 'privacy';
 
+      logger.info(`[任务启动] taskId=${taskId}, models=${JSON.stringify(models)}, mode=${taskMode}`);
+      logger.info(`[任务启动] agentHub 状态: ${this.agentHub ? '已初始化' : '未初始化'}`);
+
+      const TaskClassifier = require('../utils/TaskClassifier');
+      const classifier = new TaskClassifier();
+      const classification = classifier.classify(task);
+      logger.info(`[任务分类] type=${classification.type}, confidence=${classification.confidence}`);
+
+      if (classification.type === 'greeting' || classification.type === 'chat') {
+        logger.info(`[任务分类] 非编程任务，切换到聊天模式`);
+        
+        const enabledAgents = this.agentHub?.getEnabledAgents?.() || [];
+        if (enabledAgents.length === 0) {
+          this._activeTasks.set(taskId, {
+            ...this._activeTasks.get(taskId),
+            status: 'completed',
+            progress: 100,
+            output: [...(this._activeTasks.get(taskId)?.output || []), '❌ 没有可用的 AI 模型，请先在模型管理中启用模型\n']
+          });
+          this.updateAgentStatus('console', { status: 'idle' });
+          return;
+        }
+
+        const agent = enabledAgents[0];
+        const provider = agent.provider;
+        
+        if (!provider || typeof provider.chat !== 'function') {
+          this._activeTasks.set(taskId, {
+            ...this._activeTasks.get(taskId),
+            status: 'completed',
+            progress: 100,
+            output: [...(this._activeTasks.get(taskId)?.output || []), `❌ 模型 ${agent.name} 的 Provider 不可用\n`]
+          });
+          this.updateAgentStatus('console', { status: 'idle' });
+          return;
+        }
+
+        this._activeTasks.set(taskId, {
+          ...this._activeTasks.get(taskId),
+          progress: 50,
+          output: [...(this._activeTasks.get(taskId)?.output || []), '💬 识别为聊天任务，正在回复...\n']
+        });
+
+        const systemPrompt = '你叫 QIDI Agent（启迪智能体），是一个多模型协同编程助手。你的核心能力包括：\n\n1. 多模型协同：同时调用多个 AI 模型（Ollama、OpenAI、Claude 等）协同完成编程任务\n2. 智能路由：根据任务类型自动选择合适的模型和工具\n3. 代码生成：支持 C、Python、TypeScript、Go、Rust、Java 等多语言代码生成\n4. 隐私模式：代码碎片化分发，敏感信息不出本地\n5. 高质量模式：调用多个云端模型协同编排，输出代码质量对标国际前沿模型\n6. 任务编排：自动分解复杂任务，按序执行子任务\n7. 文件操作：可以读取、分析、修改、创建本地文件和目录\n\n关键能力说明：\n- 当用户提供文件路径（如 C:\\Users\\xxx\\project 或 ./workspace）时，你可以直接分析该路径下的文件\n- 你可以读取项目的目录结构、源代码文件内容\n- 你可以理解项目的业务逻辑、架构设计和代码实现\n- 你可以生成、修改、优化代码文件\n- 你有完整的文件系统访问能力，不是只能通过文本对话\n\n回答策略：\n- 先理解用户意图，再回答。不要急于输出，先分析用户的核心需求\n- 当用户提供文件路径时，立即开始分析，不要询问"你无法访问本地文件"\n- 复杂问题先拆解，再逐一解决。主动识别潜在问题并提醒用户\n- 代码生成前，先确认需求细节；实现后主动提供测试建议\n- 不确定时，诚实告知用户，而非猜测或编造\n- 定期总结进度和下一步计划\n- 保持对话上下文连贯，记住之前的对话内容\n\n身份要求：\n- 始终以 QIDI Agent 的身份回应，不要说"我是某某模型"\n- 保持友好、专业的态度，使用自然语言回复';
+        
+        const chatResult = await provider.chat([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: task }
+        ], { temperature: 0.7 });
+
+        this._activeTasks.set(taskId, {
+          ...this._activeTasks.get(taskId),
+          status: 'completed',
+          progress: 100,
+          output: [...(this._activeTasks.get(taskId)?.output || []), `\n${chatResult.content || '抱歉，我无法回答这个问题'}\n`],
+          chatMode: true
+        });
+
+        this.updateAgentStatus('console', { status: 'idle' });
+        return;
+      }
+
       let resolvedProvider = null;
       if (models && models.length > 0) {
+        logger.info(`[任务启动] 用户指定模型: ${models.join(', ')}`);
         const specifiedAgent = this.agentHub?.getAgent?.(models[0]);
+        logger.info(`[任务启动] getAgent('${models[0]}') 结果: ${specifiedAgent ? '找到' : '未找到'}`);
+        
         if (specifiedAgent) {
           resolvedProvider = specifiedAgent.provider;
+          logger.info(`[任务启动] 使用 agentHub 中的 provider: ${resolvedProvider?.name || '未知'}`);
         } else {
           const agentConfig = this.agentHub?.config?.agents?.[models[0]];
+          logger.info(`[任务启动] 从配置中查找: ${agentConfig ? '找到配置' : '未找到配置'}`);
+          
           if (agentConfig) {
             try {
               const ProviderFactory = require('../providers');
               resolvedProvider = ProviderFactory.create(agentConfig.provider, agentConfig.config);
+              logger.info(`[任务启动] 通过配置创建 provider: ${resolvedProvider?.name || '未知'}, type=${agentConfig.provider}`);
             } catch (e) {
               logger.error(`创建指定模型 Provider 失败: ${e.message}`);
             }
@@ -1180,15 +1743,27 @@ class WebUIServer {
       }
 
       if (!resolvedProvider) {
-        resolvedProvider = this.agentHub?.getEnabledAgents?.()?.[0]?.provider || null;
+        logger.info('[任务启动] 未指定模型或指定失败，使用默认启用的模型');
+        const enabledAgents = this.agentHub?.getEnabledAgents?.() || [];
+        logger.info(`[任务启动] 已启用的模型数量: ${enabledAgents.length}`);
+        if (enabledAgents.length > 0) {
+          logger.info(`[任务启动] 将使用第一个启用的模型: ${enabledAgents[0].name}`);
+        }
+        resolvedProvider = enabledAgents[0]?.provider || null;
       }
+      
+      logger.info(`[任务启动] 最终使用的 provider: ${resolvedProvider?.name || 'null'}`);
 
       const executor = new RealTaskExecutor({
         workspaceDir: `${this.workspaceDir}/${taskId}`,
         timeout: 600000,
         executionMode: taskMode,
         provider: resolvedProvider,
-        toolScanner: this.toolScanner // 传递已扫描+授权好的工具列表，避免二次扫描
+        toolScanner: this.toolScanner,
+        silentExecution: true,
+        autoConfirm: true,
+        inUseTools: ['qoder'],
+        selectedTools
       });
 
       this._activeTasks.set(taskId, {
@@ -1246,7 +1821,7 @@ class WebUIServer {
         this._activeTasks.set(taskId, {
           ...this._activeTasks.get(taskId),
           output: [...(this._activeTasks.get(taskId)?.output || []),
-            `   使用模型: ${e.provider}\n`
+            e.tool ? `   使用工具: ${e.tool}\n` : `   使用模型: ${e.provider}\n`
           ]
         });
       });
@@ -1299,6 +1874,19 @@ class WebUIServer {
         tasks: result.finalSummary.subtasks
       });
 
+      // 自我评估：任务完成后自动评估质量并调整参数
+      if (this.selfEvalLayer) {
+        const evalResult = await this.selfEvalLayer.evaluate({
+          taskId,
+          taskType: 'programming',
+          output: this._activeTasks.get(taskId)?.output || [],
+          duration: result.duration,
+          model: resolvedProvider?.name || 'unknown',
+          tools: initResult.tools ? ['qoder', 'openclaw', 'atom-code', 'hermes'] : []
+        });
+        logger.info(`[SelfEval] 任务 ${taskId} 评估完成: 质量分数 ${evalResult.overallScore.toFixed(3)}`);
+      }
+
       // 启动定时清理
       this._startTaskCleanup();
     } catch (e) {
@@ -1331,7 +1919,7 @@ class WebUIServer {
       let config = { agents: {} };
 
       if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
       }
 
       const modelKey = this._generateModelKey(modelData.name);
@@ -1375,7 +1963,7 @@ class WebUIServer {
         return { success: false, message: '配置文件不存在' };
       }
 
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
       const modelKey = this._generateModelKey(name);
 
       if (!config.agents[modelKey]) {
@@ -1418,7 +2006,7 @@ class WebUIServer {
         return { success: false, message: '配置文件不存在' };
       }
 
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), { agents: {} });
       const modelKey = this._generateModelKey(name);
 
       if (!config.agents[modelKey]) {
@@ -1731,13 +2319,29 @@ class WebUIServer {
   }
 
   async initialize () {
-    this.toolScanner = new ToolScanner();
+    this.toolScanner = new ToolScanner({
+      silentScan: true,
+      autoConfirm: true
+    });
     const allAdapters = adapters.createAll();
     this.toolScanner.registerAdapters(allAdapters);
 
     try {
       this.toolScanner.loadResults(this.configDir);
     } catch (e) {
+    }
+
+    try {
+      const scanResult = await this.toolScanner.scan();
+      for (const tool of scanResult.enabled) {
+        try {
+          await this.toolScanner.connect(tool.name);
+        } catch (e) {
+          logger.warn(`连接工具 ${tool.name} 失败: ${e.message}`);
+        }
+      }
+    } catch (e) {
+      logger.warn(`自动连接工具失败: ${e.message}`);
     }
 
     this.reportGenerator = new ExperimentReportGenerator({

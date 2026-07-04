@@ -1,0 +1,63 @@
+{
+  "id": "task_1782897936223",
+  "timestamp": "2026-07-01T09:26:44.888Z",
+  "duration": 68665,
+  "originalTask": "???Python HTTP???,??GET?POST??,??JSON????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库（urllib或http.client），可选requests库",
+    "platform": "跨平台",
+    "framework": "无",
+    "style": "PEP 8",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "架构设计与接口定义",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 4041,
+      "generatedFiles": 0,
+      "qualityScore": 94
+    },
+    {
+      "id": "T2",
+      "title": "实现GET请求功能",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 3464,
+      "generatedFiles": 0,
+      "qualityScore": 84
+    },
+    {
+      "id": "T3",
+      "title": "实现POST请求功能",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 4865,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T4",
+      "title": "编写单元测试",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 9011,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [],
+  "qualityMetrics": {
+    "totalChecked": 4,
+    "passed": 1,
+    "averageScore": 55
+  }
+}

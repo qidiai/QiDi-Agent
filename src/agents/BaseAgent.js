@@ -1,5 +1,6 @@
 const Ajv = require('ajv');
 const ajv = new Ajv();
+const { safeExtractJson } = require('../utils/SafeParser');
 
 class BaseAgent {
   constructor (provider, options = {}) {
@@ -10,6 +11,7 @@ class BaseAgent {
     this.temperature = options.temperature !== undefined ? options.temperature : 0.7;
     this.maxTokens = options.maxTokens || 2048;
     this.history = [];
+    this.maxHistorySize = options.maxHistorySize || 100;
     this.maxRetries = options.maxRetries || 3;
     this.enableThinkingChain = options.enableThinkingChain !== false;
     this.enableStructuredOutput = options.enableStructuredOutput !== false;
@@ -101,6 +103,38 @@ ${JSON.stringify(this.schema, null, 2)}
     const messages = [...this.history, { role: 'user', content: message }];
     const systemPrompt = this._buildSystemPrompt();
 
+    // 流式输出支持
+    if (options.stream && this.provider.chatStream) {
+      let fullContent = '';
+      const result = await this.provider.chatStream({
+        messages,
+        systemPrompt,
+        temperature: options.temperature !== undefined ? options.temperature : this.temperature,
+        maxTokens: options.maxTokens || this.maxTokens,
+        useSmallModel: options.useSmallModel || false
+      }, (chunk) => {
+        const text = chunk.content || chunk.text || '';
+        if (text) {
+          fullContent += text;
+          if (options.stream.push) {
+            options.stream.push({ text, type: 'text', agent: this.name });
+          }
+        }
+      });
+
+      const finalResult = { content: fullContent || result?.content || '', model: result?.model || 'unknown' };
+
+      if (options.keepHistory !== false) {
+        this.history.push({ role: 'user', content: message });
+        this.history.push({ role: 'assistant', content: finalResult.content });
+        if (this.history.length > this.maxHistorySize * 2) {
+          this.history = this.history.slice(-this.maxHistorySize * 2);
+        }
+      }
+
+      return finalResult;
+    }
+
     const result = await this.provider.chat(messages, {
       systemPrompt,
       temperature: options.temperature !== undefined ? options.temperature : this.temperature,
@@ -111,6 +145,10 @@ ${JSON.stringify(this.schema, null, 2)}
     if (options.keepHistory !== false) {
       this.history.push({ role: 'user', content: message });
       this.history.push({ role: 'assistant', content: result.content });
+
+      if (this.history.length > this.maxHistorySize * 2) {
+        this.history = this.history.slice(-this.maxHistorySize * 2);
+      }
     }
 
     return result;
@@ -266,29 +304,7 @@ ${JSON.stringify(schema, null, 2)}
   _extractJson (text) {
     const thinkingMatch = text.match(/<thinking>[\s\S]*?<\/thinking>/);
     const cleanText = thinkingMatch ? text.replace(thinkingMatch[0], '') : text;
-
-    const jsonMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[1]);
-      } catch (e) {}
-    }
-
-    const braceMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (braceMatch) {
-      try {
-        return JSON.parse(braceMatch[0]);
-      } catch (e) {}
-    }
-
-    const bracketMatch = cleanText.match(/\[[\s\S]*\]/);
-    if (bracketMatch) {
-      try {
-        return JSON.parse(bracketMatch[0]);
-      } catch (e) {}
-    }
-
-    return null;
+    return safeExtractJson(cleanText, null);
   }
 
   _extractThinking (text) {

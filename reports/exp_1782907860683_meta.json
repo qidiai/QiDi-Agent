@@ -1,0 +1,16 @@
+{
+  "originalTask": "??????Python Hello World??",
+  "successRate": 100,
+  "totalTasks": 2,
+  "completedTasks": 2,
+  "failedTasks": 0,
+  "constraints": {},
+  "keywords": "Python",
+  "tags": [
+    "成功",
+    "Python"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 0
+}

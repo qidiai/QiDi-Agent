@@ -1,6 +1,10 @@
 const BaseAgent = require('./BaseAgent');
 const ContractAssembler = require('../core/ContractAssembler');
+const { ASTConflictDetector } = require('../utils/ASTConflictDetector');
 const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const logger = require('../utils/Logger').createLogger('MergeEngine');
 
 /**
  * 代码合并与审查专家：负责合并多个 Agent 的代码产出，解决冲突，选择最佳实现。
@@ -60,14 +64,19 @@ class MergeEngine extends BaseAgent {
       role: '代码合并与审查专家',
       systemPrompt: MERGE_PROMPT,
       temperature: 0.3,
+      enableStructuredOutput: false,
       ...options
     });
     this.conflictResolution = options.conflictResolution || 'auto';
     this.enableThreeWayMerge = options.enableThreeWayMerge !== false;
     this.enableSemanticConflictDetection = options.enableSemanticConflictDetection !== false;
+    this.enableASTConflictDetection = options.enableASTConflictDetection !== false;
     this.enablePostMergeVerification = options.enablePostMergeVerification !== false;
     this.contractAssembler = options.contractAssembler || new ContractAssembler();
+    this.astConflictDetector = options.astConflictDetector || new ASTConflictDetector({ strictMode: true });
     this.mergeHistory = [];
+    this._historyLock = Promise.resolve();
+    this.maxHistorySize = options.maxHistorySize || 100;
   }
 
   /**
@@ -91,6 +100,7 @@ class MergeEngine extends BaseAgent {
     const allConflicts = [];
     const allImprovements = [];
     const semanticConflicts = [];
+    const astConflicts = [];
 
     for (const [filePath, versions] of Object.entries(fileGroups)) {
       if (versions.length === 1) {
@@ -101,6 +111,18 @@ class MergeEngine extends BaseAgent {
       if (this.enableSemanticConflictDetection) {
         const semanticIssues = this._detectSemanticConflicts(versions, constraints);
         semanticConflicts.push(...semanticIssues);
+      }
+
+      // AST 结构化冲突检测
+      if (this.enableASTConflictDetection) {
+        const astVersions = versions.map(v => ({
+          agentName: v.agentName,
+          content: v.content,
+          language: v.language || constraints.language || 'javascript',
+          filePath
+        }));
+        const astResult = this.astConflictDetector.detect(astVersions);
+        astConflicts.push(...astResult.conflicts);
       }
 
       let mergeResult;
@@ -128,15 +150,16 @@ class MergeEngine extends BaseAgent {
       mergedCode: this._assembleFinalCode(mergedFiles),
       conflicts: allConflicts,
       semanticConflicts,
+      astConflicts,
       improvements: allImprovements,
       qualityAssessment,
       consistencyCheck,
       verificationResult,
       mergeStrategy: this.enableThreeWayMerge ? 'three_way' : 'combine',
-      notes: `合并了 ${entries.length} 个 Agent 的产出，处理了 ${allConflicts.length} 个冲突，检测到 ${semanticConflicts.length} 个语义冲突`
+      notes: `合并了 ${entries.length} 个 Agent 的产出，处理了 ${allConflicts.length} 个冲突，检测到 ${semanticConflicts.length} 个语义冲突，${astConflicts.length} 个 AST 结构化冲突`
     };
 
-    this.mergeHistory.push({
+    await this._appendHistory({
       timestamp: Date.now(),
       agentCount: entries.length,
       conflictCount: allConflicts.length,
@@ -202,7 +225,9 @@ class MergeEngine extends BaseAgent {
           improvements: parsed.improvements || []
         };
       }
-    } catch (e) {}
+    } catch (e) {
+      logger.warn('三路合并AI调用失败，回退到默认策略', { error: e.message, filePath });
+    }
 
     return this._fallbackMerge(versions);
   }
@@ -229,6 +254,7 @@ class MergeEngine extends BaseAgent {
       const contracts = await this.contractAssembler.extractContracts(codeBlocks);
       return contracts[0] || {};
     } catch (e) {
+      logger.warn('提取契约失败', { error: e.message, language: version.language });
       return {};
     }
   }
@@ -390,23 +416,49 @@ class MergeEngine extends BaseAgent {
     return conflicts;
   }
 
+  _stripCommentsAndStrings (code, language) {
+    let result = code;
+
+    if (language === 'python') {
+      result = result.replace(/#.*$/gm, '');
+      result = result.replace(/'''[\s\S]*?'''/g, '');
+      result = result.replace(/"""[\s\S]*?"""/g, '');
+      result = result.replace(/'[^']*'/g, '');
+      result = result.replace(/"[^"]*"/g, '');
+    } else if (language === 'javascript' || language === 'typescript') {
+      result = result.replace(/\/\/.*$/gm, '');
+      result = result.replace(/\/\*[\s\S]*?\*\//g, '');
+      result = result.replace(/`[\s\S]*?`/g, '');
+      result = result.replace(/'[^']*'/g, '');
+      result = result.replace(/"[^"]*"/g, '');
+    } else if (language === 'c' || language === 'cpp') {
+      result = result.replace(/\/\/.*$/gm, '');
+      result = result.replace(/\/\*[\s\S]*?\*\//g, '');
+      result = result.replace(/'[^']*'/g, '');
+      result = result.replace(/"[^"]*"/g, '');
+    }
+
+    return result;
+  }
+
   _detectCSemanticConflicts (versions) {
     const conflicts = [];
 
     for (const version of versions) {
       const content = version.content;
+      const cleanContent = this._stripCommentsAndStrings(content, 'cpp');
 
-      const funcCalls = content.match(/\b(\w+)\s*\(/g) || [];
+      const funcCalls = cleanContent.match(/\b(\w+)\s*\(/g) || [];
       const definedFuncs = new Set();
-      const funcDefPattern = /^\s*(?:static\s+|extern\s+)?(\w+)\s+(\w+)\s*\(/gm;
+      const funcDefPattern = /^\s*(?:static\s+|extern\s+|inline\s+|virtual\s+|override\s+)?(\w+)\s+(\w+)\s*\(/gm;
       let match;
-      while ((match = funcDefPattern.exec(content)) !== null) {
+      while ((match = funcDefPattern.exec(cleanContent)) !== null) {
         definedFuncs.add(match[2]);
       }
 
       for (const call of funcCalls) {
         const funcName = call.match(/\b(\w+)\s*\(/)[1];
-        if (!definedFuncs.has(funcName) && !['if', 'while', 'for', 'switch', 'return', 'sizeof', 'malloc', 'free', 'printf', 'scanf'].includes(funcName)) {
+        if (!definedFuncs.has(funcName) && !['if', 'while', 'for', 'switch', 'return', 'sizeof', 'malloc', 'free', 'printf', 'scanf', 'new', 'delete', 'throw', 'catch', 'try'].includes(funcName)) {
           conflicts.push({
             location: version.filePath || 'main',
             agentName: version.agentName,
@@ -417,22 +469,23 @@ class MergeEngine extends BaseAgent {
         }
       }
 
-      const structUsages = content.match(/struct\s+(\w+)/g) || [];
+      const structUsages = cleanContent.match(/struct\s+(\w+)/g) || [];
+      const classUsages = cleanContent.match(/class\s+(\w+)/g) || [];
       const definedStructs = new Set();
-      const structDefPattern = /struct\s+(\w+)\s*\{/gm;
-      while ((match = structDefPattern.exec(content)) !== null) {
+      const structDefPattern = /(?:struct|class)\s+(\w+)\s*\{/gm;
+      while ((match = structDefPattern.exec(cleanContent)) !== null) {
         definedStructs.add(match[1]);
       }
 
-      for (const usage of structUsages) {
-        const structName = usage.match(/struct\s+(\w+)/)[1];
-        if (!definedStructs.has(structName) && !['FILE', 'timeval'].includes(structName)) {
+      for (const usage of [...structUsages, ...classUsages]) {
+        const structName = usage.match(/(?:struct|class)\s+(\w+)/)[1];
+        if (!definedStructs.has(structName) && !['FILE', 'timeval', 'std'].includes(structName)) {
           conflicts.push({
             location: version.filePath || 'main',
             agentName: version.agentName,
             type: 'semantic',
             severity: 'high',
-            description: `使用未定义结构体 ${structName}`
+            description: `使用未定义类型 ${structName}`
           });
         }
       }
@@ -446,24 +499,86 @@ class MergeEngine extends BaseAgent {
 
     for (const version of versions) {
       const content = version.content;
+      const cleanContent = this._stripCommentsAndStrings(content, 'javascript');
 
-      const varUsages = content.match(/\b(\w+)\s*=\s*(?!function|class|const|let|var)/g) || [];
       const definedVars = new Set();
-      const varDefPattern = /(?:const|let|var)\s+(\w+)/g;
+      const definedFuncs = new Set();
+      const definedClasses = new Set();
+
+      const varDefPattern = /(?:const|let|var)\s+(\w+)\s*(?==|\[|\.)/g;
       let match;
-      while ((match = varDefPattern.exec(content)) !== null) {
+      while ((match = varDefPattern.exec(cleanContent)) !== null) {
         definedVars.add(match[1]);
       }
 
-      for (const usage of varUsages) {
-        const varName = usage.match(/\b(\w+)\s*=/)[1];
-        if (!definedVars.has(varName) && !['window', 'document', 'console', 'module', 'exports'].includes(varName)) {
+      const funcDefPattern = /(?:function\s+(\w+)|async\s+function\s+(\w+)|(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?:=>|\{))/g;
+      while ((match = funcDefPattern.exec(cleanContent)) !== null) {
+        const funcName = match[1] || match[2] || match[3];
+        if (funcName) {
+          definedFuncs.add(funcName);
+        }
+      }
+
+      const classDefPattern = /class\s+(\w+)/g;
+      while ((match = classDefPattern.exec(cleanContent)) !== null) {
+        definedClasses.add(match[1]);
+      }
+
+      const importPattern = /(?:import\s+(?:\{\s*([^}]+)\s*\}|\*\s+as\s+(\w+)|(\w+))\s+from|import\s+(\w+))/g;
+      while ((match = importPattern.exec(cleanContent)) !== null) {
+        if (match[1]) {
+          match[1].split(',').forEach(name => {
+            const trimmed = name.trim();
+            if (trimmed && !trimmed.includes(' ')) {
+              definedVars.add(trimmed);
+            }
+          });
+        } else if (match[2]) {
+          definedVars.add(match[2]);
+        } else if (match[3] || match[4]) {
+          definedVars.add(match[3] || match[4]);
+        }
+      }
+
+      const funcCalls = cleanContent.match(/\b(\w+)\s*\(/g) || [];
+      for (const call of funcCalls) {
+        const funcName = call.match(/\b(\w+)\s*\(/)[1];
+        if (!definedFuncs.has(funcName) && !definedVars.has(funcName) &&
+            !['if', 'while', 'for', 'switch', 'return', 'throw', 'catch', 'try', 'new', 'typeof', 'instanceof', 'delete', 'await', 'async'].includes(funcName)) {
           conflicts.push({
             location: version.filePath || 'main',
             agentName: version.agentName,
             type: 'semantic',
             severity: 'medium',
-            description: `使用未定义变量 ${varName}`
+            description: `调用未定义函数 ${funcName}`
+          });
+        }
+      }
+
+      const classUsages = cleanContent.match(/new\s+(\w+)\s*\(/g) || [];
+      for (const usage of classUsages) {
+        const className = usage.match(/new\s+(\w+)/)[1];
+        if (!definedClasses.has(className) && !definedVars.has(className)) {
+          conflicts.push({
+            location: version.filePath || 'main',
+            agentName: version.agentName,
+            type: 'semantic',
+            severity: 'high',
+            description: `实例化未定义类 ${className}`
+          });
+        }
+      }
+
+      const decoratorPattern = /@(\w+)/g;
+      while ((match = decoratorPattern.exec(cleanContent)) !== null) {
+        const decoratorName = match[1];
+        if (!definedVars.has(decoratorName) && !['override', 'deprecated', 'sealed', 'virtual'].includes(decoratorName)) {
+          conflicts.push({
+            location: version.filePath || 'main',
+            agentName: version.agentName,
+            type: 'semantic',
+            severity: 'medium',
+            description: `使用未定义装饰器 @${decoratorName}`
           });
         }
       }
@@ -477,18 +592,43 @@ class MergeEngine extends BaseAgent {
 
     for (const version of versions) {
       const content = version.content;
+      const cleanContent = this._stripCommentsAndStrings(content, 'python');
 
-      const funcCalls = content.match(/\b(\w+)\s*\(/g) || [];
       const definedFuncs = new Set();
-      const funcDefPattern = /^\s*def\s+(\w+)\s*\(/gm;
+      const definedVars = new Set();
+      const definedClasses = new Set();
+
+      const funcDefPattern = /^\s*(?:async\s+)?def\s+(\w+)\s*\(/gm;
       let match;
-      while ((match = funcDefPattern.exec(content)) !== null) {
+      while ((match = funcDefPattern.exec(cleanContent)) !== null) {
         definedFuncs.add(match[1]);
       }
 
+      const classDefPattern = /^\s*class\s+(\w+)/gm;
+      while ((match = classDefPattern.exec(cleanContent)) !== null) {
+        definedClasses.add(match[1]);
+      }
+
+      const varDefPattern = /^\s*(?:global\s+)?(\w+)\s*=\s*(?!def\s|class\s|async\s+def\s)/gm;
+      while ((match = varDefPattern.exec(cleanContent)) !== null) {
+        definedVars.add(match[1]);
+      }
+
+      const importPattern = /(?:from\s+\w+\s+)?import\s+(?:(\w+)(?:\s+as\s+\w+)?|(\*))/g;
+      while ((match = importPattern.exec(cleanContent)) !== null) {
+        if (match[1]) {
+          definedVars.add(match[1]);
+        }
+      }
+
+      const funcCalls = cleanContent.match(/\b(\w+)\s*\(/g) || [];
       for (const call of funcCalls) {
         const funcName = call.match(/\b(\w+)\s*\(/)[1];
-        if (!definedFuncs.has(funcName) && !['print', 'len', 'range', 'list', 'dict', 'str', 'int', 'float', 'if', 'while', 'for', 'return', 'import', 'from'].includes(funcName)) {
+        if (!definedFuncs.has(funcName) && !definedVars.has(funcName) && !definedClasses.has(funcName) &&
+            !['print', 'len', 'range', 'list', 'dict', 'str', 'int', 'float', 'bool', 'None', 'True', 'False',
+              'if', 'while', 'for', 'return', 'import', 'from', 'async', 'await', 'yield', 'lambda', 'with',
+              'try', 'except', 'finally', 'raise', 'assert', 'break', 'continue', 'pass', 'del', 'is', 'in',
+              'and', 'or', 'not', 'as', 'class', 'def', 'global', 'nonlocal', 'elif', 'else'].includes(funcName)) {
           conflicts.push({
             location: version.filePath || 'main',
             agentName: version.agentName,
@@ -569,40 +709,46 @@ class MergeEngine extends BaseAgent {
   }
 
   _runCompileCheck (code, language) {
+    let tempFile = null;
     try {
       let cmd, args;
       const extMap = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', typescript: '.ts', go: '.go', rust: '.rs' };
       const ext = extMap[language] || '.txt';
-      const tempFile = `tmp_verify_${Date.now()}${ext}`;
+      
+      tempFile = path.join(require('os').tmpdir(), `tmp_verify_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
 
-      require('fs').writeFileSync(tempFile, code);
+      fs.writeFileSync(tempFile, code, 'utf-8');
 
       switch (language) {
       case 'c':
-        cmd = 'gcc'; args = ['-fsyntax-only', tempFile];
+        cmd = process.platform === 'win32' ? 'gcc.exe' : 'gcc';
+        args = ['-fsyntax-only', tempFile];
         break;
       case 'cpp':
-        cmd = 'g++'; args = ['-fsyntax-only', tempFile];
+        cmd = process.platform === 'win32' ? 'g++.exe' : 'g++';
+        args = ['-fsyntax-only', tempFile];
         break;
       case 'python':
-        cmd = 'python'; args = ['-m', 'py_compile', tempFile];
+        cmd = process.platform === 'win32' ? 'python.exe' : 'python';
+        args = ['-m', 'py_compile', tempFile];
         break;
       case 'javascript':
-        cmd = 'node'; args = ['--check', tempFile];
+        cmd = process.platform === 'win32' ? 'node.exe' : 'node';
+        args = ['--check', tempFile];
         break;
       case 'typescript':
-        cmd = 'tsc'; args = ['--noEmit', tempFile];
+        cmd = 'tsc';
+        args = ['--noEmit', tempFile];
         break;
       case 'go':
-        cmd = 'go'; args = ['build', tempFile];
+        cmd = process.platform === 'win32' ? 'go.exe' : 'go';
+        args = ['build', tempFile];
         break;
       default:
-        require('fs').unlinkSync(tempFile);
         return { passed: true, message: '未执行编译检查' };
       }
 
       const result = spawnSync(cmd, args, { encoding: 'utf-8', timeout: 30000 });
-      require('fs').unlinkSync(tempFile);
 
       return {
         passed: result.status === 0,
@@ -610,7 +756,16 @@ class MergeEngine extends BaseAgent {
         tool: cmd
       };
     } catch (e) {
+      logger.warn(`编译检查失败: ${e.message}`, { language, error: e });
       return { passed: true, message: `工具不可用: ${e.message}` };
+    } finally {
+      if (tempFile) {
+        try {
+          fs.unlinkSync(tempFile);
+        } catch (unlinkErr) {
+          logger.warn(`清理临时文件失败: ${tempFile}`, { error: unlinkErr });
+        }
+      }
     }
   }
 
@@ -768,7 +923,7 @@ class MergeEngine extends BaseAgent {
         };
       }
     } catch (e) {
-      // 合并失败，回退到选择较长版本
+      logger.warn('两路合并AI调用失败，回退到选择较长版本', { error: e.message, filePath });
     }
 
     // 回退策略：选择更完整的版本
@@ -826,17 +981,40 @@ class MergeEngine extends BaseAgent {
       return { correctness: score, consistency: score, readability: score, security: score, overall: score };
     }
 
-    // 多个结果：综合评估
-    const scores = entries.map(([_, r]) => r.result?.quality?.qualityScore || 60);
-    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-    const maxScore = Math.max(...scores);
+    // 多个结果：基于实际合并代码的多维评估
+    const mergedCode = Object.values(mergedFiles).join('\n');
+
+    // 1. 统计未解决的冲突（merge markers）
+    const conflictMarkers = (mergedCode.match(/<<<<<<< |=======|>>>>>>> /g) || []);
+    const unresolvedConflictCount = conflictMarkers.length > 0 ? Math.ceil(conflictMarkers.length / 3) : 0;
+    const conflictScore = Math.max(0, 100 - unresolvedConflictCount * 20);
+
+    // 2. 代码完整性检查：检查关键接口/类/函数是否定义
+    const definedSymbols = (mergedCode.match(/^(?:function|class|const|let|var|def|async\s+function)\s+\w+/gm) || []).length;
+    const entrySymbols = entries.map(([_, r]) => {
+      const code = r.result?.output || r.result?.code || '';
+      return (code.match(/^(?:function|class|const|let|var|def|async\s+function)\s+\w+/gm) || []).length;
+    });
+    const expectedSymbols = Math.max(...entrySymbols, 1);
+    const completenessScore = Math.min(100, Math.round((definedSymbols / expectedSymbols) * 100));
+
+    // 3. 原始工具评分的参考权重（30%）
+    const baseScores = entries.map(([_, r]) => r.result?.quality?.qualityScore || r.qualityScore || 60);
+    const refScore = baseScores.length > 0 ? Math.max(...baseScores) * 0.3 : 0;
+
+    // 4. 综合评分（实际代码分析占70%）
+    const score = Math.round(
+      refScore +
+      (conflictScore * 0.35) +
+      (completenessScore * 0.35)
+    );
 
     return {
-      correctness: maxScore,
-      consistency: avgScore,
-      readability: avgScore,
-      security: avgScore,
-      overall: Math.round((maxScore + avgScore) / 2)
+      correctness: Math.min(100, completenessScore > 80 ? score + 10 : score - 10),
+      consistency: conflictScore,
+      readability: Math.min(100, completenessScore > 70 ? score : score - 10),
+      security: Math.min(100, score),
+      overall: Math.min(100, Math.round(score * 0.4 + conflictScore * 0.3 + completenessScore * 0.3))
     };
   }
 
@@ -873,6 +1051,18 @@ class MergeEngine extends BaseAgent {
     }
     report += `\n${mergeResult.notes || ''}\n`;
     return report;
+  }
+
+  async _appendHistory (entry) {
+    const lock = this._historyLock;
+    this._historyLock = (async () => {
+      await lock;
+      this.mergeHistory.push(entry);
+      if (this.mergeHistory.length > this.maxHistorySize) {
+        this.mergeHistory.shift();
+      }
+    })();
+    await this._historyLock;
   }
 }
 

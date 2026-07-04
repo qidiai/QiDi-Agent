@@ -3,6 +3,8 @@ const TaskOrchestrator = require('./TaskOrchestrator');
 const AgentFactory = require('../agents');
 const MergeEngine = require('../agents/MergeEngine');
 const TaskRouter = require('./TaskRouter');
+const SynchronyMeter = require('./SynchronyMeter');
+const EmergenceEvaluator = require('./EmergenceEvaluator');
 const createLogger = require('../utils/Logger');
 
 const logger = createLogger('MultiAgentDispatcher');
@@ -45,6 +47,8 @@ class MultiAgentDispatcher {
     };
     this.mergeEngine = null; // 延迟初始化，需要 provider
     this.taskRouter = null; // 延迟初始化
+    this.synchronyMeter = options.synchronyMeter || new SynchronyMeter();
+    this.emergenceEvaluator = options.emergenceEvaluator || new EmergenceEvaluator();
   }
 
   /**
@@ -296,6 +300,13 @@ class MultiAgentDispatcher {
       logger.info(`   ${i + 1}. ${r.agentName} - ${r.qualityScore}分`);
     });
 
+    try {
+      this.emergenceEvaluator.recordBaseline(best.qualityScore);
+      logger.info(`   📊 对照组基线已记录: quality=${best.qualityScore}`);
+    } catch (e) {
+      logger.warn(`   基线记录失败: ${e.message}`);
+    }
+
     return {
       best: { agent: best.agentName, result: best.result, qualityScore: best.qualityScore },
       ranking: results.map(r => ({ agent: r.agentName, qualityScore: r.qualityScore })),
@@ -377,10 +388,41 @@ class MultiAgentDispatcher {
       return { ...parallelResult, mergeResult: null, singleResult: successfulResults[onlyAgent] };
     }
 
-    // 2. 使用 MergeEngine 合并
-    logger.info(`\n🧩 开始合并 ${successfulCount} 个 Agent 的产出...`);
+    // 2. 每 Agent 结果单独质检（合并前过滤）
+    logger.info(`\n🔍 开始质检 ${successfulCount} 个 Agent 的产出...`);
+    const qualityChecker = this.hub.getAgent('qualityChecker');
+    const qualityFiltered = {};
+    for (const [name, result] of Object.entries(successfulResults)) {
+      if (!result || !result.success) continue;
+      try {
+        const provider = this.hub.getEnabledAgents().find(a => a.name === name)?.provider
+          || this.hub.getAgent('ollama')?.provider;
+        if (provider && qualityChecker) {
+          const qc = await qualityChecker.provider.sendWithRetry(
+            `请评估以下代码质量（0-100分），仅返回JSON：{"qualityScore":<number>,"status":"<completed|failed>","weaknesses":[...]}\n\n${(result.code || result.output || '').substring(0, 2000)}`
+          );
+          const parsed = (() => { try { return JSON.parse(qc.content); } catch { return null; } })();
+          const score = parsed?.qualityScore || 60;
+          if (parsed?.status !== 'failed') {
+            qualityFiltered[name] = { ...result, qualityScore: score };
+            logger.info(`   ✅ ${name}: ${score}分`);
+          } else {
+            logger.warn(`   ⚠️ ${name}: 质检未通过(${score}分)，降权保留`);
+            qualityFiltered[name] = { ...result, qualityScore: 0, qualityWarning: true };
+          }
+        } else {
+          qualityFiltered[name] = { ...result, qualityScore: 70 };
+        }
+      } catch (e) {
+        logger.warn(`   ⚠️ ${name} 质检失败: ${e.message}，保留原结果`);
+        qualityFiltered[name] = result;
+      }
+    }
+
+    // 3. 使用 MergeEngine 合并（仅合并通过质检的结果）
+    logger.info(`\n🧩 开始合并 ${Object.keys(qualityFiltered).length} 个 Agent 的产出...`);
     const mergeEngine = this._getMergeEngine(options);
-    const mergeResult = await mergeEngine.merge(successfulResults, options.constraints || {});
+    const mergeResult = await mergeEngine.merge(qualityFiltered, options.constraints || {});
 
     logger.info('\n✅ 合并完成！');
     logger.info(`   文件数: ${Object.keys(mergeResult.mergedFiles || {}).length}`);
@@ -403,13 +445,51 @@ class MultiAgentDispatcher {
       fs.writeFileSync(path.join(mergeDir, filePath.replace(/\//g, '_')), code, 'utf-8');
     }
 
+    let synchrony = null;
+    try {
+      const measureResults = new Map();
+      for (const [name, result] of Object.entries(successfulResults)) {
+        measureResults.set(name, {
+          code: result.code || result.output || '',
+          files: result.files || [],
+          model: result.model || 'unknown',
+          temperature: result.temperature || 0.7,
+          quality: result.quality?.qualityScore || 60
+        });
+      }
+      synchrony = await this.synchronyMeter.measure(measureResults);
+      logger.info(`   同步强度 S=${synchrony.S.toFixed(3)} (F=${synchrony.F.toFixed(2)} G=${synchrony.G.toFixed(2)} M=${synchrony.M.toFixed(2)})`);
+      if (synchrony.emerged) {
+        logger.info('   ✨ 涌现显著 (S>0.7)');
+      }
+    } catch (e) {
+      logger.warn(`   同步度量失败: ${e.message}`);
+    }
+
+    let emergence = null;
+    try {
+      const multiQuality = mergeResult.qualityAssessment?.overall || 70;
+      emergence = await this.emergenceEvaluator.evaluate({
+        multiToolQuality: multiQuality,
+        singleToolQuality: this.emergenceEvaluator.baselineQuality,
+        synchrony: synchrony?.S || 0,
+        mode: 'merge',
+        tools: Object.keys(successfulResults)
+      });
+      logger.info(`   涌现增益 E=${emergence.emergenceGain.toFixed(2)} → ${emergence.verdict}`);
+    } catch (e) {
+      logger.warn(`   涌现评估失败: ${e.message}`);
+    }
+
     return {
       ...parallelResult,
       mergeResult,
       mergedFiles: mergeResult.mergedFiles,
       mergedCode: mergeResult.mergedCode,
       mergeQuality: mergeResult.qualityAssessment,
-      mergeDir
+      mergeDir,
+      synchrony,
+      emergence
     };
   }
 

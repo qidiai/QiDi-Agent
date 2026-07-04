@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { safeJsonParse } = require('./SafeParser');
 
 class CacheStore {
   constructor (options = {}) {
@@ -33,7 +34,7 @@ class CacheStore {
     try {
       const filePath = path.join(this.persistDir, this.persistFile);
       if (fs.existsSync(filePath)) {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const data = safeJsonParse(fs.readFileSync(filePath, 'utf-8'), {});
         for (const [key, value] of Object.entries(data)) {
           if (Date.now() - value.timestamp < this.maxAge) {
             this.cache.set(key, value);

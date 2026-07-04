@@ -11,11 +11,13 @@ class HermesAgentAdapter extends BaseToolAdapter {
       command: 'hermes',
       ...options
     });
+    this.useWSL = false;
   }
 
   async detect () {
     this.detected = false;
     this.status = 'offline';
+    this.useWSL = false;
 
     try {
       const cmdPath = await this._findCommandInPath('hermes');
@@ -74,6 +76,23 @@ class HermesAgentAdapter extends BaseToolAdapter {
           }
         }
       }
+
+      try {
+        const wslResult = await this._runCommand('wsl', ['which', 'hermes'], { timeout: 10000 });
+        if (wslResult.success && wslResult.stdout.trim()) {
+          this.installPath = wslResult.stdout.trim();
+          this.command = '/home/xcm/.local/bin/hermes';
+          this.useWSL = true;
+          this.detected = true;
+
+          const versionResult = await this.checkVersion();
+          if (versionResult) {
+            this.version = versionResult;
+            this.status = 'online';
+          }
+          return true;
+        }
+      } catch (e) {}
     } catch (e) {
     }
 
@@ -82,9 +101,16 @@ class HermesAgentAdapter extends BaseToolAdapter {
 
   async checkVersion () {
     try {
-      const result = await this._runCommand(this.command, ['--version'], { timeout: 10000 });
-      if (result.success) {
-        return this._parseVersion(result.stdout) || 'unknown';
+      if (this.useWSL) {
+        const result = await this._runCommand('wsl', [this.command, '--version'], { timeout: 10000 });
+        if (result.success) {
+          return this._parseVersion(result.stdout) || 'unknown';
+        }
+      } else {
+        const result = await this._runCommand(this.command, ['--version'], { timeout: 10000 });
+        if (result.success) {
+          return this._parseVersion(result.stdout) || 'unknown';
+        }
       }
     } catch (e) {
     }
@@ -101,10 +127,18 @@ class HermesAgentAdapter extends BaseToolAdapter {
     }
 
     try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
-      if (result.success) {
-        this.status = 'online';
-        return { success: true, message: 'Hermes Agent 连接成功' };
+      if (this.useWSL) {
+        const result = await this._runCommand('wsl', [this.command, '--help'], { timeout: 10000 });
+        if (result.success) {
+          this.status = 'online';
+          return { success: true, message: 'Hermes Agent (WSL) 连接成功' };
+        }
+      } else {
+        const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
+        if (result.success) {
+          this.status = 'online';
+          return { success: true, message: 'Hermes Agent 连接成功' };
+        }
       }
       this.status = 'offline';
       return { success: false, message: 'Hermes Agent 不可用' };
@@ -130,7 +164,8 @@ class HermesAgentAdapter extends BaseToolAdapter {
     }
 
     const taskId = options.taskId || `task_${Date.now()}`;
-    const outputDir = options.outputDir || `./workspace/hermes-agent/${taskId}`;
+    const workspace = options.workspaceDir || options.workspace || process.cwd();
+    const outputDir = path.join(workspace, `hermes-agent/${taskId}`);
 
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
@@ -141,7 +176,8 @@ class HermesAgentAdapter extends BaseToolAdapter {
 
     const outputFile = path.join(outputDir, 'output.md');
 
-    const args = [
+    let cmd = this.command;
+    let args = [
       'chat',
       '--input', taskFile,
       '--output', outputFile
@@ -151,9 +187,25 @@ class HermesAgentAdapter extends BaseToolAdapter {
       args.push('--model', options.model);
     }
 
-    const result = await this._runCommand(this.command, args, {
+    if (this.useWSL) {
+      cmd = 'wsl';
+      const wslTaskFile = taskFile.replace(/^C:\\/i, '/mnt/c/').replace(/\\/g, '/');
+      const wslOutputFile = outputFile.replace(/^C:\\/i, '/mnt/c/').replace(/\\/g, '/');
+      args = [
+        this.command,
+        'chat',
+        '--input', wslTaskFile,
+        '--output', wslOutputFile
+      ];
+      if (options.model) {
+        args.push('--model', options.model);
+      }
+    }
+
+    const result = await this._runCommand(cmd, args, {
       timeout: options.timeout || 300000,
-      cwd: outputDir
+      cwd: outputDir,
+      windowsHide: true
     });
 
     let outputContent = '';

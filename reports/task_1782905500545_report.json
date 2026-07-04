@@ -1,0 +1,77 @@
+{
+  "id": "task_1782905500545",
+  "timestamp": "2026-07-01T11:53:58.525Z",
+  "duration": 1337980,
+  "originalTask": "???Python HTTP???,??GET?POST??,??JSON????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "标准库 (urllib/requests) 或轻量级库",
+    "platform": "跨平台",
+    "framework": "无特定框架",
+    "style": "PEP 8, 类型注解, 异常处理",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "HTTP客户端架构设计与接口定义",
+      "status": "completed",
+      "provider": null,
+      "duration": 86592,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T2",
+      "title": "GET请求实现与JSON响应解析",
+      "status": "completed",
+      "provider": null,
+      "duration": 82262,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T3",
+      "title": "POST请求实现与JSON数据发送",
+      "status": "completed",
+      "provider": null,
+      "duration": 282091,
+      "generatedFiles": 0,
+      "qualityScore": 20
+    },
+    {
+      "id": "T4",
+      "title": "错误处理与异常管理",
+      "status": "completed",
+      "provider": null,
+      "duration": 252334,
+      "generatedFiles": 0,
+      "qualityScore": 30
+    },
+    {
+      "id": "T5",
+      "title": "单元测试与集成测试",
+      "status": "completed",
+      "provider": null,
+      "duration": 612256,
+      "generatedFiles": 0,
+      "qualityScore": 30
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 5,
+    "passed": 0,
+    "averageScore": 24
+  }
+}

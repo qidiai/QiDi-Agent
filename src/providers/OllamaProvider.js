@@ -1,5 +1,7 @@
 const http = require('http');
 const BaseProvider = require('./BaseProvider');
+const { safeJsonParse } = require('../utils/SafeParser');
+const { NetworkError, TimeoutError, HttpError, JsonParseError } = require('../utils/AppError');
 
 class OllamaProvider extends BaseProvider {
   constructor (config = {}) {
@@ -13,6 +15,7 @@ class OllamaProvider extends BaseProvider {
   _request (path, data, timeout = 300000) {
     return new Promise((resolve, reject) => {
       const url = new URL(path, this.baseUrl);
+      const fullURL = url.href;
       const postData = JSON.stringify(data);
 
       const options = {
@@ -34,20 +37,57 @@ class OllamaProvider extends BaseProvider {
         });
         res.on('end', () => {
           try {
-            resolve(JSON.parse(body));
+            const parsed = safeJsonParse(body, { raw: body });
+
+            // ── HTTP 错误状态码处理 ──
+            if (res.statusCode >= 400) {
+              const errMsg = parsed.error || parsed.message || `HTTP ${res.statusCode}: ${body.substring(0, 200)}`;
+              reject(new HttpError(`Ollama API 错误: ${errMsg}`, {
+                url: fullURL,
+                method: 'POST',
+                status: res.statusCode,
+                statusText: res.statusMessage || '',
+                responseData: parsed,
+                responseHeaders: res.headers
+              }));
+              return;
+            }
+
+            resolve(parsed);
           } catch (e) {
-            resolve({ raw: body });
+            reject(new JsonParseError(`Ollama 响应 JSON 解析失败: ${e.message}`, {
+              url: fullURL,
+              rawText: body.substring(0, 500),
+              cause: e
+            }));
           }
         });
       });
 
       req.on('error', (e) => {
-        reject(new Error(`Ollama 连接失败: ${e.message}`));
+        if (e.code === 'ECONNRESET' || e.code === 'ERR_SOCKET_CONNECTION_TIMEOUT') {
+          reject(new TimeoutError(`Ollama 连接超时 (${timeout}ms)`, {
+            url: fullURL,
+            method: 'POST',
+            timeout,
+            cause: e
+          }));
+        } else {
+          reject(new NetworkError(`Ollama 连接失败: ${e.message}`, {
+            url: fullURL,
+            method: 'POST',
+            cause: e
+          }));
+        }
       });
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('Ollama 请求超时'));
+        reject(new TimeoutError(`Ollama 请求超时 (${timeout}ms)`, {
+          url: fullURL,
+          method: 'POST',
+          timeout
+        }));
       });
 
       req.write(postData);
@@ -115,6 +155,122 @@ class OllamaProvider extends BaseProvider {
     }
   }
 
+  /**
+   * G2: 流式聊天补全
+   * @param {Array} messages - 消息列表
+   * @param {Object} options - 选项（同 chat）
+   * @param {Function} onChunk - 接收每个文本块的回调 (delta, fullContent) => void
+   * @returns {Object} 最终结果 { content, model, role }
+   */
+  async chatStream (messages, options = {}, onChunk) {
+    if (typeof options === 'function') {
+      onChunk = options;
+      options = {};
+    }
+    const model = options.useSmallModel ? this.modelSmall : this.model;
+    const payload = {
+      model,
+      messages: options.systemPrompt
+        ? [{ role: 'system', content: options.systemPrompt }, ...messages]
+        : messages,
+      stream: true,
+      options: {
+        temperature: options.temperature !== undefined ? options.temperature : 0.7,
+        num_predict: options.maxTokens || 2048
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      const url = new URL('/api/chat', this.baseUrl);
+      const postData = JSON.stringify(payload);
+
+      const reqOptions = {
+        hostname: url.hostname,
+        port: url.port || 11434,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        },
+        timeout: options.timeout || 300000
+      };
+
+      let fullContent = '';
+      let settled = false;
+
+      const req = http.request(reqOptions, (res) => {
+        if (res.statusCode >= 400) {
+          let body = '';
+          res.on('data', (c) => { body += c; });
+          res.on('end', () => {
+            if (!settled) {
+              settled = true;
+              reject(new Error(`Ollama stream HTTP ${res.statusCode}: ${body.substring(0, 200)}`));
+            }
+          });
+          return;
+        }
+
+        let buffer = '';
+        res.on('data', (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const parsed = JSON.parse(trimmed);
+              const delta = parsed.message?.content || '';
+              if (delta) {
+                fullContent += delta;
+                if (onChunk) onChunk(delta, fullContent);
+              }
+              if (parsed.done) {
+                if (!settled) {
+                  settled = true;
+                  resolve({
+                    content: fullContent,
+                    model: parsed.model || model,
+                    role: 'assistant'
+                  });
+                }
+                return;
+              }
+            } catch (_) {}
+          }
+        });
+
+        res.on('end', () => {
+          if (!settled) {
+            settled = true;
+            resolve({ content: fullContent, model, role: 'assistant' });
+          }
+        });
+      });
+
+      req.on('error', (e) => {
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Ollama stream 失败: ${e.message}`));
+        }
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Ollama stream 超时 (${reqOptions.timeout}ms)`));
+        }
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  }
+
   async listModels () {
     return new Promise((resolve, reject) => {
       const url = new URL('/api/tags', this.baseUrl);
@@ -133,7 +289,7 @@ class OllamaProvider extends BaseProvider {
         });
         res.on('end', () => {
           try {
-            const data = JSON.parse(body);
+            const data = safeJsonParse(body, {});
             resolve(data.models || []);
           } catch (e) {
             resolve([]);

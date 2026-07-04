@@ -1,0 +1,96 @@
+{
+  "history": [
+    {
+      "taskId": "test123",
+      "taskType": "programming",
+      "scores": {
+        "outputQuality": 0.75,
+        "executionTime": 0.7,
+        "toolUsage": 0.7,
+        "userFeedback": 0.5
+      },
+      "overallScore": 0.6625,
+      "timestamp": 1782961120018,
+      "modelUsed": "deepseek",
+      "toolsUsed": [
+        "qoder",
+        "openclaw"
+      ]
+    },
+    {
+      "taskId": "test123",
+      "taskType": "programming",
+      "scores": {
+        "outputQuality": 0.75,
+        "executionTime": 0.7,
+        "toolUsage": 0.7,
+        "userFeedback": 0.5
+      },
+      "overallScore": 0.6625,
+      "timestamp": 1782961136281,
+      "modelUsed": "deepseek",
+      "toolsUsed": [
+        "qoder",
+        "openclaw"
+      ]
+    },
+    {
+      "taskId": "test_eval",
+      "taskType": "programming",
+      "scores": {
+        "outputQuality": 0.75,
+        "executionTime": 0.5,
+        "toolUsage": 0.3,
+        "userFeedback": 0.5,
+        "emergence": 1
+      },
+      "overallScore": 0.61,
+      "timestamp": 1782965668817,
+      "toolsUsed": []
+    },
+    {
+      "taskId": "e1",
+      "taskType": "p",
+      "scores": {
+        "outputQuality": 0.5,
+        "executionTime": 0.5,
+        "toolUsage": 0.3,
+        "userFeedback": 0.5,
+        "emergence": 1
+      },
+      "overallScore": 0.5599999999999999,
+      "timestamp": 1782965820406,
+      "toolsUsed": []
+    },
+    {
+      "taskId": "task_1783168403337",
+      "taskType": "programming",
+      "scores": {
+        "outputQuality": 0.6499999999999999,
+        "executionTime": 0.3,
+        "toolUsage": 0.9,
+        "userFeedback": 0.5,
+        "emergence": 0.5
+      },
+      "overallScore": 0.5700000000000001,
+      "timestamp": 1783168470974,
+      "modelUsed": "openai",
+      "toolsUsed": [
+        "qoder",
+        "openclaw",
+        "atom-code",
+        "hermes"
+      ]
+    }
+  ],
+  "feedbackCounts": {
+    "thumbsUp": 0,
+    "thumbsDown": 0,
+    "reexecutions": 0
+  },
+  "stats": {
+    "totalTasks": 5,
+    "avgQuality": 0.6130000000000001,
+    "improvementRate": 0
+  }
+}

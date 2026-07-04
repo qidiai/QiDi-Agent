@@ -1,6 +1,16 @@
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const Logger = require('../utils/Logger').Logger;
+const logger = new Logger({ name: 'BaseToolAdapter' });
+
+// NativeAPI 组件 — 所有适配器共享
+let _nativeAPI;
+try {
+  _nativeAPI = require('../utils/NativeAPIAdapter');
+} catch (_) {
+  _nativeAPI = null;
+}
 
 /**
  * 安全：路径转义函数
@@ -29,6 +39,27 @@ class BaseToolAdapter {
     this.status = 'unknown';
     this.workspaceDir = options.workspaceDir || process.cwd();
     this.executionHistory = [];
+    
+    this.circuitBreaker = {
+      consecutiveFailures: 0,
+      maxFailures: 5,
+      cooldownPeriod: 60000,
+      lastFailureTime: 0,
+      state: 'closed'
+    };
+    
+    this.retryPolicy = {
+      maxRetries: options.maxRetries || 2,
+      initialDelay: options.initialDelay || 1000,
+      backoffFactor: options.backoffFactor || 2
+    };
+
+    // NativeAPI 组件（所有适配器自动启用）
+    this.enableNativeAPI = options.enableNativeAPI !== false && _nativeAPI;
+    this._structuredParser = this.enableNativeAPI ? _nativeAPI.StructuredOutputParser : null;
+    this._contextInjector = this.enableNativeAPI ? new _nativeAPI.ContextInjector() : null;
+    this._incrementalCollector = this.enableNativeAPI ? new _nativeAPI.IncrementalCollector() : null;
+    this._capabilityProbe = this.enableNativeAPI ? _nativeAPI.CapabilityProbe : null;
   }
 
   async detect () {
@@ -65,25 +96,57 @@ class BaseToolAdapter {
       metadata: {
         version: this.version || 'unknown',
         command: this.command || '',
-        options: { ...options }
+        options: { ...options },
+        retries: 0
       },
-      logs: []
+      logs: [],
+      circuitBreakerState: this.circuitBreaker.state
     };
 
     try {
       this._log(result, `开始执行任务: ${task.substring(0, 50)}...`);
 
       if (!this.isAvailable()) {
+        if (this.circuitBreaker.state === 'open') {
+          throw new Error(`${this.displayName} 已触发熔断，请稍后重试`);
+        }
         throw new Error(`${this.displayName} 不可用，请先连接`);
       }
 
-      const cmdResult = await this._runToolCommand(task, options);
+      const cmdResult = await this._executeWithRetry(
+        () => this._runToolCommand(task, options),
+        { maxRetries: options.maxRetries }
+      );
+
+      this._recordSuccess();
 
       result.rawOutput = cmdResult.stdout || '';
       result.stderr = cmdResult.stderr || '';
       result.exitCode = cmdResult.code;
       result.success = cmdResult.success;
       result.content = cmdResult.content || cmdResult.stdout || '';
+
+      // 使用 NativeAPI StructuredOutputParser 解析输出
+      if (this.enableNativeAPI && this._structuredParser && result.content) {
+        const parsed = this._structuredParser.parse(result.content);
+        if (parsed.codeBlocks && parsed.codeBlocks.length > 0 && !cmdResult.codeBlocks) {
+          result.codeBlocks = parsed.codeBlocks.map(b => ({
+            filePath: b.filePath || `block_${Date.now()}`,
+            language: b.language || 'text',
+            code: b.code || ''
+          }));
+        }
+        if (parsed.fileChanges && parsed.fileChanges.length > 0 && !cmdResult.generatedFiles) {
+          result.generatedFiles = parsed.fileChanges.map(f => ({
+            path: f.path || f.file || 'unknown',
+            size: f.size || 0,
+            status: f.status || 'modified'
+          }));
+        }
+        if (parsed.errors && parsed.errors.length > 0) {
+          result.metadata.parsedErrors = parsed.errors;
+        }
+      }
 
       if (cmdResult.codeBlocks) {
         result.codeBlocks = cmdResult.codeBlocks;
@@ -98,6 +161,7 @@ class BaseToolAdapter {
       }
 
       if (!cmdResult.success) {
+        this._recordFailure();
         this._log(result, `命令执行失败 (exit code: ${cmdResult.code})`);
         if (cmdResult.stderr) {
           this._log(result, `错误信息: ${cmdResult.stderr.substring(0, 200)}`);
@@ -106,6 +170,7 @@ class BaseToolAdapter {
         this._log(result, '命令执行成功');
       }
     } catch (e) {
+      this._recordFailure();
       result.error = e.message;
       result.success = false;
       this._log(result, `执行异常: ${e.message}`);
@@ -115,8 +180,19 @@ class BaseToolAdapter {
     result.duration = result.endTime - startTime;
 
     if (result.generatedFiles.length === 0) {
-      const endFiles = this._scanWorkspace(workspaceDir);
-      result.generatedFiles = this._diffFiles(startFiles, endFiles);
+      // 使用 IncrementalCollector 增量采集
+      if (this.enableNativeAPI && this._incrementalCollector) {
+        try {
+          const changes = this._incrementalCollector.collectChanges(workspaceDir);
+          result.generatedFiles = this._incrementalCollector.readChanges(workspaceDir, changes);
+        } catch (e) {
+          const endFiles = this._scanWorkspace(workspaceDir);
+          result.generatedFiles = this._diffFiles(startFiles, endFiles);
+        }
+      } else {
+        const endFiles = this._scanWorkspace(workspaceDir);
+        result.generatedFiles = this._diffFiles(startFiles, endFiles);
+      }
     }
 
     this._log(result, `生成文件数: ${result.generatedFiles.length}`);
@@ -196,7 +272,62 @@ class BaseToolAdapter {
   }
 
   isAvailable () {
-    return this.detected && this.status === 'online';
+    if (!this.detected || this.status !== 'online') {
+      return false;
+    }
+    
+    if (this.circuitBreaker.state === 'open') {
+      const elapsed = Date.now() - this.circuitBreaker.lastFailureTime;
+      if (elapsed >= this.circuitBreaker.cooldownPeriod) {
+        this.circuitBreaker.state = 'half-open';
+        this.circuitBreaker.consecutiveFailures = 0;
+      } else {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  _recordSuccess () {
+    this.circuitBreaker.consecutiveFailures = 0;
+    this.circuitBreaker.state = 'closed';
+  }
+
+  _recordFailure () {
+    this.circuitBreaker.consecutiveFailures++;
+    this.circuitBreaker.lastFailureTime = Date.now();
+    
+    if (this.circuitBreaker.consecutiveFailures >= this.circuitBreaker.maxFailures) {
+      this.circuitBreaker.state = 'open';
+      logger.warn(`${this.displayName} 触发熔断，冷却时间 ${this.circuitBreaker.cooldownPeriod}ms`);
+    }
+  }
+
+  async _executeWithRetry (fn, options = {}) {
+    const { maxRetries, initialDelay, backoffFactor } = {
+      ...this.retryPolicy,
+      ...options
+    };
+    
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        
+        if (attempt >= maxRetries) {
+          break;
+        }
+        
+        const delay = initialDelay * Math.pow(backoffFactor, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError;
   }
 
   getInfo () {
@@ -222,7 +353,10 @@ class BaseToolAdapter {
     });
 
     const timeout = options.timeout || 600000;
-    const spawnOptions = { ...options, shell: false };
+    const spawnOptions = { ...options };
+    if (spawnOptions.shell !== true) {
+      spawnOptions.shell = false;
+    }
     delete spawnOptions.timeout;
 
     return new Promise((resolve) => {
@@ -323,13 +457,21 @@ class BaseToolAdapter {
     for (const p of paths) {
       const cmdPath = path.join(p, command);
       const cmdPathExe = `${cmdPath}.exe`;
+      const cmdPathCmd = `${cmdPath}.cmd`;
+      const cmdPathPs1 = `${cmdPath}.ps1`;
 
       try {
-        if (fs.existsSync(cmdPath)) {
-          return cmdPath;
-        }
         if (fs.existsSync(cmdPathExe)) {
           return cmdPathExe;
+        }
+        if (fs.existsSync(cmdPathCmd)) {
+          return cmdPathCmd;
+        }
+        if (fs.existsSync(cmdPathPs1)) {
+          return cmdPathPs1;
+        }
+        if (fs.existsSync(cmdPath)) {
+          return cmdPath;
         }
       } catch (e) {
       }

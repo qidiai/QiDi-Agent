@@ -11,6 +11,7 @@ class ZCodeAdapter extends BaseToolAdapter {
       command: 'zcode',
       ...options
     });
+    this.headlessSupported = false;
   }
 
   async detect () {
@@ -64,17 +65,17 @@ class ZCodeAdapter extends BaseToolAdapter {
 
   async checkVersion () {
     try {
-      const result = await this._runCommand(this.command, ['--version'], { timeout: 10000 });
-      if (result.success) {
-        return this._parseVersion(result.stdout) || 'unknown';
+      if (process.platform === 'win32' && this.installPath) {
+        const result = this._getFileVersion(this.installPath);
+        if (result) return result;
       }
     } catch (e) {
     }
 
     try {
-      if (process.platform === 'win32') {
-        const result = this._getFileVersion(this.installPath);
-        if (result) return result;
+      const result = await this._runCommand(this.command, ['--version'], { timeout: 10000, windowsHide: true });
+      if (result.success) {
+        return this._parseVersion(result.stdout) || 'unknown';
       }
     } catch (e) {
     }
@@ -107,18 +108,8 @@ class ZCodeAdapter extends BaseToolAdapter {
       throw new Error('ZCode 未安装或未找到');
     }
 
-    try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
-      if (result.success) {
-        this.status = 'online';
-        return { success: true, message: 'ZCode 连接成功' };
-      }
-      this.status = 'offline';
-      return { success: false, message: 'ZCode 不可用' };
-    } catch (e) {
-      this.status = 'error';
-      return { success: false, message: e.message };
-    }
+    this.status = 'online';
+    return { success: true, message: 'ZCode 已就绪' };
   }
 
   async execute (task, options = {}) {

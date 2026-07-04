@@ -1,0 +1,23 @@
+{
+  "originalTask": "用Python写一个简单的HTTP服务器，支持GET请求返回JSON数据",
+  "successRate": 100,
+  "totalTasks": 4,
+  "completedTasks": 4,
+  "failedTasks": 0,
+  "constraints": {
+    "language": "Python",
+    "techStack": "Python标准库（http.server模块）",
+    "platform": "跨平台（Windows/Linux/macOS）",
+    "framework": "无第三方框架，使用内置http.server",
+    "style": "PEP 8编码规范，简洁清晰",
+    "fileExtension": ".py"
+  },
+  "keywords": "Python",
+  "tags": [
+    "Python",
+    "成功"
+  ],
+  "duration": 0,
+  "qualityScore": 0,
+  "tokenUsage": 5369
+}

@@ -1,6 +1,7 @@
 const BaseToolAdapter = require('./BaseToolAdapter');
 const path = require('path');
 const fs = require('fs');
+const { StructuredOutputParser, ContextInjector, IncrementalCollector, CapabilityProbe } = require('../utils/NativeAPIAdapter');
 
 class OpenClawAdapter extends BaseToolAdapter {
   constructor (options = {}) {
@@ -21,6 +22,7 @@ class OpenClawAdapter extends BaseToolAdapter {
       const cmdPath = await this._findCommandInPath('openclaw');
       if (cmdPath) {
         this.installPath = cmdPath;
+        this.command = cmdPath;
         this.detected = true;
 
         const versionResult = await this.checkVersion();
@@ -85,7 +87,14 @@ class OpenClawAdapter extends BaseToolAdapter {
     }
 
     try {
-      const result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
+      let result;
+      if (this.command.endsWith('.ps1')) {
+        result = await this._runCommand('powershell', ['-ExecutionPolicy', 'Bypass', '-File', this.command, '--help'], { timeout: 10000 });
+      } else if (process.platform === 'win32' && this.command.endsWith('.cmd')) {
+        result = await this._runCommand('cmd', ['/c', this.command, '--help'], { timeout: 10000 });
+      } else {
+        result = await this._runCommand(this.command, ['--help'], { timeout: 10000 });
+      }
       if (result.success) {
         this.status = 'online';
         return { success: true, message: 'OpenClaw 连接成功' };
@@ -114,23 +123,43 @@ class OpenClawAdapter extends BaseToolAdapter {
     }
 
     const taskId = options.taskId || `task_${Date.now()}`;
-    const outputDir = options.outputDir || `./workspace/openclaw/${taskId}`;
+    const workspace = options.workspaceDir || options.workspace || process.cwd();
+    const outputDir = options.outputDir || path.join(workspace, `openclaw/${taskId}`);
 
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const taskFile = path.join(outputDir, 'task.md');
-    fs.writeFileSync(taskFile, task, 'utf-8');
+    fs.writeFileSync(taskFile, ContextInjector.buildEnhancedPrompt(task, options.context || {}), 'utf-8');
 
-    const result = await this._runCommand(this.command, ['agent', '-m', task], {
-      timeout: options.timeout || 300000,
-      cwd: outputDir,
-      windowsHide: true
-    });
+    const collector = new IncrementalCollector();
+    collector.snapshot(outputDir);
+
+    let result;
+    if (this.command.endsWith('.ps1')) {
+      result = await this._runCommand('powershell', ['-ExecutionPolicy', 'Bypass', '-File', this.command, 'agent', '-m', task], {
+        timeout: options.timeout || 300000,
+        cwd: outputDir,
+        windowsHide: true
+      });
+    } else if (process.platform === 'win32' && this.command.endsWith('.cmd')) {
+      result = await this._runCommand('cmd', ['/c', this.command, 'agent', '-m', task], {
+        timeout: options.timeout || 300000,
+        cwd: outputDir,
+        windowsHide: true
+      });
+    } else {
+      result = await this._runCommand(this.command, ['agent', '-m', task], {
+        timeout: options.timeout || 300000,
+        cwd: outputDir,
+        windowsHide: true
+      });
+    }
 
     let outputContent = result.stdout || '';
-    let codeBlocks = this._extractCodeBlocks(outputContent);
+    const parsed = StructuredOutputParser.parse(outputContent);
+    let codeBlocks = parsed.codeBlocks;
 
     const outputFile = path.join(outputDir, 'output.md');
     if (fs.existsSync(outputFile)) {
@@ -138,19 +167,26 @@ class OpenClawAdapter extends BaseToolAdapter {
       codeBlocks = this._extractCodeBlocks(outputContent);
     }
 
-    const generatedFiles = [];
+    // 使用增量采集器收集变更
+    let generatedFiles = [];
     try {
-      const files = fs.readdirSync(outputDir);
-      for (const f of files) {
-        const filePath = path.join(outputDir, f);
-        const stat = fs.statSync(filePath);
-        if (stat.isFile()) {
-          generatedFiles.push({
-            path: f,
-            content: fs.readFileSync(filePath, 'utf-8'),
-            size: stat.size,
-            mtime: stat.mtime.getTime()
-          });
+      const changes = collector.collectChanges(outputDir);
+      generatedFiles = collector.readChanges(outputDir, changes).map(c => ({
+        path: c.path, content: c.content, size: c.size, mtime: c.mtime, action: c.action
+      }));
+      if (generatedFiles.length === 0) {
+        const files = fs.readdirSync(outputDir);
+        for (const f of files) {
+          const filePath = path.join(outputDir, f);
+          const stat = fs.statSync(filePath);
+          if (stat.isFile()) {
+            generatedFiles.push({
+              path: f,
+              content: fs.readFileSync(filePath, 'utf-8'),
+              size: stat.size,
+              mtime: stat.mtime.getTime()
+            });
+          }
         }
       }
     } catch (e) {}

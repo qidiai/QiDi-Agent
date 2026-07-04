@@ -7,6 +7,10 @@
 </p>
 
 <p align="center">
+  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Professional%20AI%20code%20orchestration%20platform%20dashboard%20dark%20theme%20showing%20multiple%20AI%20models%20parallel%20execution%20with%20real-time%20progress%20bars%2C%20code%20quality%20scores%2C%20and%20task%20splitting%20visualization%2C%20modern%20UI%20design&image_size=landscape_16_9" width="700" alt="Qidi Multi-Provider Demo">
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D16-brightgreen" alt="Node.js">
   <img src="https://img.shields.io/badge/test-53%2F53%20%28100%25%29-brightgreen" alt="Tests">
@@ -220,7 +224,7 @@ npm test      # 31 个冒烟测试，100% 通过
 - [x] 版本管理与日志系统
 - [ ] 递归拆分（大任务层层分解）
 - [ ] 流式输出 + WebSocket
-- [ ] MCP 协议支持
+- [x] MCP 协议支持
 - [ ] 插件系统
 - [ ] 团队协作版
 

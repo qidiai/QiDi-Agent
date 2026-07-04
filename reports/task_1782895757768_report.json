@@ -1,0 +1,72 @@
+{
+  "id": "task_1782895757768",
+  "timestamp": "2026-07-01T08:50:55.267Z",
+  "duration": 97499,
+  "originalTask": "?????????,??????????,??Python??",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "无",
+    "platform": "跨平台",
+    "framework": "无",
+    "style": "PEP 8",
+    "fileExtension": ".py"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "需求分析与架构设计",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 5243,
+      "generatedFiles": 0,
+      "qualityScore": 98
+    },
+    {
+      "id": "T2",
+      "title": "核心��能实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 4306,
+      "generatedFiles": 0,
+      "qualityScore": 92
+    },
+    {
+      "id": "T3",
+      "title": "输入输出处理",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 1466,
+      "generatedFiles": 0,
+      "qualityScore": 95
+    },
+    {
+      "id": "T4",
+      "title": "代码审查与优化",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 6134,
+      "generatedFiles": 0,
+      "qualityScore": 80
+    },
+    {
+      "id": "T5",
+      "title": "测试与验证",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 11645,
+      "generatedFiles": 0,
+      "qualityScore": 70
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [],
+  "qualityMetrics": {
+    "totalChecked": 5,
+    "passed": 3,
+    "averageScore": 87
+  }
+}

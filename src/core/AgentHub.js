@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const createLogger = require('../utils/Logger');
+const { safeJsonParse } = require('../utils/SafeParser');
 
 const logger = createLogger('AgentHub');
 
@@ -23,7 +24,7 @@ class AgentHub {
       await this._createDefaultConfig(configPath);
     }
 
-    this.config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    this.config = safeJsonParse(fs.readFileSync(configPath, 'utf-8'), {});
 
     for (const [name, agentConfig] of Object.entries(this.config.agents)) {
       if (agentConfig.enabled !== false) {

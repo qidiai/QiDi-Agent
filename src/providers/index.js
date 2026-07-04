@@ -12,11 +12,17 @@ class ProviderFactory {
     case 'openai':
     case 'openai_compatible':
       return new OpenAIProvider(config);
+    case 'deepseek':
+      return new OpenAIProvider({
+        apiKey: config.apiKey || process.env.DEEPSEEK_API_KEY,
+        baseUrl: config.baseUrl || process.env.DEEPSEEK_BASE_URL,
+        model: config.model || process.env.DEEPSEEK_MODEL
+      });
     case 'anthropic':
     case 'claude':
       return new AnthropicProvider(config);
     default:
-      throw new Error(`未知的模型提供商: ${providerType}。支持: ollama, openai, anthropic`);
+      throw new Error(`未知的模型提供商: ${providerType}。支持: ollama, openai, deepseek, anthropic`);
     }
   }
 
@@ -40,6 +46,11 @@ class ProviderFactory {
     // 检测 OpenAI
     if (process.env.OPENAI_API_KEY) {
       available.push({ type: 'openai', name: 'OpenAI API' });
+    }
+
+    // 检测 DeepSeek
+    if (process.env.DEEPSEEK_API_KEY) {
+      available.push({ type: 'deepseek', name: 'DeepSeek API' });
     }
 
     // 检测 Anthropic
@@ -76,6 +87,13 @@ class ProviderFactory {
         description: 'GPT-4、GPT-3.5 等模型',
         requiresApiKey: true,
         models: 'gpt-4, gpt-4-turbo, gpt-3.5-turbo'
+      },
+      {
+        type: 'deepseek',
+        name: 'DeepSeek API',
+        description: 'DeepSeek 云端模型',
+        requiresApiKey: true,
+        models: 'deepseek-chat, deepseek-r1'
       },
       {
         type: 'anthropic',

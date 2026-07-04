@@ -1,0 +1,77 @@
+{
+  "id": "task_1782960536644",
+  "timestamp": "2026-07-02T02:54:30.801Z",
+  "duration": 334157,
+  "originalTask": "C:\\Users\\ASUS\\CodeBuddy\\toubiao ??????",
+  "success": false,
+  "constraints": {
+    "language": "Python",
+    "techStack": "Flask, SQLite, HTML/CSS/JavaScript",
+    "platform": "Web",
+    "framework": "Flask",
+    "style": "PEP 8",
+    "fileExtension": ".py, .html, .css, .js"
+  },
+  "subtasks": [
+    {
+      "id": "T1",
+      "title": "架构设计与数据库模型定义",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 49352,
+      "generatedFiles": 3,
+      "qualityScore": 87
+    },
+    {
+      "id": "T2",
+      "title": "用户管理模块实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 62032,
+      "generatedFiles": 2,
+      "qualityScore": 20
+    },
+    {
+      "id": "T3",
+      "title": "项目管理模块实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 63621,
+      "generatedFiles": 6,
+      "qualityScore": 20
+    },
+    {
+      "id": "T4",
+      "title": "投标管理模块实现",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 63451,
+      "generatedFiles": 8,
+      "qualityScore": 20
+    },
+    {
+      "id": "T5",
+      "title": "前端界面与集成测试",
+      "status": "completed",
+      "provider": "openai",
+      "duration": 55496,
+      "generatedFiles": 1,
+      "qualityScore": 20
+    }
+  ],
+  "providers": [
+    "openai",
+    "openai"
+  ],
+  "tools": [
+    "qoder",
+    "openclaw",
+    "atom-code",
+    "zcode"
+  ],
+  "qualityMetrics": {
+    "totalChecked": 5,
+    "passed": 1,
+    "averageScore": 33
+  }
+}

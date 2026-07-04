@@ -8,6 +8,13 @@
 
 const https = require('https');
 const http = require('http');
+const { safeJsonParse } = require('../utils/SafeParser');
+const {
+  NetworkError,
+  TimeoutError,
+  HttpError,
+  JsonParseError
+} = require('../utils/AppError');
 
 class AnthropicProvider {
   constructor (config = {}) {
@@ -65,6 +72,7 @@ class AnthropicProvider {
   _request (options, body) {
     return new Promise((resolve, reject) => {
       const protocol = options.port === 443 ? https : http;
+      const fullURL = `${options.hostname || options.host}${options.path || ''}`;
 
       const req = protocol.request(options, (res) => {
         let data = '';
@@ -75,22 +83,48 @@ class AnthropicProvider {
 
         res.on('end', () => {
           try {
-            const parsed = JSON.parse(data);
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              resolve({ data: parsed, status: res.statusCode });
-            } else {
-              reject(new Error(parsed.error?.message || `HTTP ${res.statusCode}: ${data}`));
+            const parsed = safeJsonParse(data, {});
+
+            // ── HTTP 错误状态码处理 ──
+            if (res.statusCode >= 400) {
+              const errMsg = parsed.error?.message || `HTTP ${res.statusCode}: ${data.substring(0, 200)}`;
+              reject(new HttpError(`Anthropic API 错误: ${errMsg}`, {
+                url: fullURL,
+                method: options.method || 'POST',
+                status: res.statusCode,
+                statusText: res.statusMessage || '',
+                responseData: parsed.error || parsed,
+                responseHeaders: res.headers
+              }));
+              return;
             }
+
+            resolve({ data: parsed, status: res.statusCode });
           } catch (e) {
-            reject(new Error(`解析响应失败: ${data}`));
+            reject(new JsonParseError(`Anthropic 响应 JSON 解析失败: ${e.message}`, {
+              url: fullURL,
+              rawText: data.substring(0, 500),
+              cause: e
+            }));
           }
         });
       });
 
-      req.on('error', reject);
+      req.on('error', (e) => {
+        reject(new NetworkError(`Anthropic 连接失败: ${e.message}`, {
+          url: fullURL,
+          method: options.method || 'POST',
+          cause: e
+        }));
+      });
+
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('请求超时'));
+        reject(new TimeoutError(`Anthropic 请求超时`, {
+          url: fullURL,
+          method: options.method || 'POST',
+          timeout: options.timeout || 300000
+        }));
       });
 
       if (body) {
@@ -363,7 +397,7 @@ class AnthropicProvider {
                 continue;
               }
               try {
-                const parsed = JSON.parse(data);
+                const parsed = safeJsonParse(data, {});
                 const formatted = this._formatStreamChunk(parsed);
                 if (formatted && onChunk) {
                   onChunk(formatted);

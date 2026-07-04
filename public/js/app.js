@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreChatFromStorage();
   initNavigation();
   loadAllData();
+  loadConsoleTools();
   setInterval(loadDashboard, 30000);
 });
 
@@ -72,6 +73,66 @@ function switchPage (page) {
 async function loadAllData () {
   await loadDashboard();
   initModelSelector();
+}
+
+async function loadConsoleTools () {
+  try {
+    const res = await fetch('/api/tools');
+    const data = await res.json();
+    const container = document.getElementById('console-tool-checkboxes');
+    if (!container) return;
+
+    const tools = data.tools || [];
+    container.innerHTML = tools
+      .filter(t => t.detected)
+      .map(t => `
+        <label class="chat-chip tool-checkbox-item">
+          <input type="checkbox" class="tool-checkbox" value="${t.name}" ${t.status === 'online' ? '' : 'disabled'}>
+          <span>${t.displayName || t.name}</span>
+          <small class="tool-status" style="font-size:10px;margin-left:4px;color:${t.status === 'online' ? '#10b981' : '#ef4444'}">${t.status}</small>
+        </label>
+      `).join('');
+  } catch (e) {
+    console.error('加载工具列表失败:', e);
+  }
+}
+
+document.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-scenario')) return;
+  
+  const scenario = e.target.dataset.scenario;
+  const checkboxes = document.querySelectorAll('.tool-checkbox');
+  
+  checkboxes.forEach(cb => cb.checked = false);
+  
+  const onlineTools = Array.from(checkboxes).filter(cb => !cb.disabled);
+  
+  switch (scenario) {
+    case 'sweep':
+      if (onlineTools[0]) onlineTools[0].checked = true;
+      setMode('quality');
+      appendChatMessage('system', '🧹 扫尾模式:单工具执行收尾任务');
+      break;
+    case 'chore':
+      if (onlineTools[1]) onlineTools[1].checked = true;
+      else if (onlineTools[0]) onlineTools[0].checked = true;
+      setMode('quality');
+      appendChatMessage('system', '📦 杂活模式:单工具执行辅助任务');
+      break;
+    case 'tough':
+      onlineTools.slice(0, 2).forEach(cb => cb.checked = true);
+      setMode('quality');
+      appendChatMessage('system', '🧠 攻坚模式:双工具并行,对比选优');
+      break;
+  }
+});
+
+function setMode(mode) {
+  currentMode = mode;
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  modeBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
 }
 
 async function loadDashboard () {
@@ -1015,7 +1076,13 @@ async function executeTask () {
   appendChatMessage('user', escapeHtml(task));
   appendChatMessage('task', '🚀 正在启动任务...', msgId);
 
-  try {
+  // 获取选中的工具
+    const selectedTools = [];
+    document.querySelectorAll('.tool-checkbox:checked').forEach(cb => {
+      selectedTools.push(cb.value);
+    });
+
+    try {
     const res = await fetch('/api/tasks/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1023,7 +1090,8 @@ async function executeTask () {
         task,
         models,
         constraints,
-        mode: currentMode
+        mode: currentMode,
+        selectedTools
       })
     });
 
@@ -1583,6 +1651,75 @@ function copyOutput () {
     () => alert('已复制到剪贴板'),
     () => alert('复制失败，请手动选择文本')
   );
+}
+
+async function smartSend () {
+  const ta = document.getElementById('console-task');
+  const text = ta.value.trim();
+  if (!text) return;
+
+  const selector = document.getElementById('model-selector');
+  if (selector && selector.dataset.empty === '1') {
+    appendChatMessage('system', '⚠️ 当前无启用模型，请到「模型管理」页启用至少一个模型');
+    return;
+  }
+
+  const selectedModel = selector ? selector.value : null;
+  const models = selectedModel === '__all__' || !selectedModel ? [] : [selectedModel];
+
+  const constraints = {};
+  if (document.getElementById('const-c').checked) constraints.language = 'C语言';
+  if (document.getElementById('const-python').checked) constraints.language = 'Python';
+  if (document.getElementById('const-console').checked) constraints.platform = '控制台';
+  if (document.getElementById('const-web').checked) constraints.platform = 'Web';
+
+  const mode = document.getElementById('mode-privacy')?.checked ? 'privacy' : 
+               document.getElementById('mode-quality')?.checked ? 'quality' : 'efficiency';
+
+  ta.value = '';
+  updateTaskEditor();
+
+  appendChatMessage('user', escapeHtml(text));
+
+  const btn = document.getElementById('chat-send-btn');
+  const originalText = btn.textContent;
+  btn.textContent = '⏳';
+  btn.disabled = true;
+
+  try {
+    const response = await fetch('/api/smart-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task: text, models, constraints, mode })
+    });
+
+    const result = await response.json();
+
+    if (result.type === 'chat') {
+      if (result.success && result.message) {
+        conversationHistory.push({ role: 'user', content: text });
+        conversationHistory.push({ role: 'assistant', content: result.message });
+        if (result.sessionId) chatSessionId = result.sessionId;
+        saveChatToStorage();
+        const displayText = result.message + (result.model ? `<div style="font-size:10px;color:#9ca3af;margin-top:6px;">—— ${escapeHtml(result.model)}</div>` : '');
+        appendChatMessage('ai', displayText);
+      } else {
+        appendChatMessage('system', `❌ 聊天失败: ${result.error || '未知错误'}`);
+      }
+    } else if (result.type === 'task') {
+      if (result.success && result.taskId) {
+        appendChatMessage('system', `🚀 识别为编程任务，已启动执行...`);
+        startPolling(result.taskId);
+      } else {
+        appendChatMessage('system', `❌ 任务启动失败: ${result.error || '未知错误'}`);
+      }
+    }
+  } catch (e) {
+    appendChatMessage('system', `❌ 请求失败: ${e.message}`);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
 }
 
 // 聊天：发送消息给 AI
@@ -2174,13 +2311,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ta) {
     ta.addEventListener('input', updateTaskEditor);
     ta.addEventListener('keydown', e => {
-      // Enter 发送聊天，Shift+Enter 换行；多行模式下 Enter 换行
+      // Enter 智能发送，Shift+Enter 换行；多行模式下 Enter 换行
       if (e.key === 'Enter' && !e.shiftKey && !multilineMode) {
         e.preventDefault();
-        sendMessage();
+        smartSend();
         return;
       }
-      // Ctrl+Enter 直接执行任务
+      // Ctrl+Enter 强制编程模式执行任务
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         executeTaskWithFiles();
@@ -2228,3 +2365,197 @@ document.addEventListener('DOMContentLoaded', () => {
     execBtn.setAttribute('onclick', 'executeTaskWithFiles()');
   }
 });
+
+// ═══════════════════════════════════════════
+// 自适应智能编排 P0
+// ═══════════════════════════════════════════
+
+let currentAdaptiveMode = 'hybrid';
+let currentAdaptiveRecommendation = null;
+let adaptiveDebounceTimer = null;
+
+// 编排模式切换
+document.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-adaptive-mode')) return;
+  const mode = e.target.dataset.mode;
+
+  // 更新按钮样式
+  document.querySelectorAll('.btn-adaptive-mode').forEach(btn => {
+    btn.style.background = '#f9fafb';
+    btn.style.color = '#374151';
+    btn.classList.remove('active');
+  });
+  e.target.style.background = '#3b82f6';
+  e.target.style.color = '#fff';
+  e.target.classList.add('active');
+
+  currentAdaptiveMode = mode;
+
+  // 持久化到后端
+  try {
+    await fetch('/api/adaptive/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    const modeNames = { auto: '自适应', manual: '手动', hybrid: '混合' };
+    appendChatMessage('system', `🎛️ 编排模式已切换为: ${modeNames[mode] || mode}`);
+  } catch (e) {
+    console.error('切换编排模式失败:', e);
+  }
+});
+
+// 偏好面板展开/收起
+function toggleAdaptivePrefs() {
+  const panel = document.getElementById('adaptive-prefs-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+// 保存用户偏好
+async function saveAdaptivePrefs() {
+  const prefs = {
+    privacySensitivity: document.getElementById('pref-privacy').value,
+    qualityPriority: document.getElementById('pref-quality').value,
+    efficiencyPriority: document.getElementById('pref-efficiency').value,
+    maxParallelTools: parseInt(document.getElementById('pref-maxtools').value, 10)
+  };
+  try {
+    await fetch('/api/adaptive/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs)
+    });
+    appendChatMessage('system', `⚙️ 偏好已保存: 隐私=${prefs.privacySensitivity} 质量=${prefs.qualityPriority} 工具数=${prefs.maxParallelTools}`);
+  } catch (e) {
+    appendChatMessage('system', '❌ 保存偏好失败: ' + e.message);
+  }
+}
+
+// 任务输入时自动获取推荐（防抖 800ms）
+function setupAdaptiveRecommendationTrigger() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    // manual 模式不触发推荐
+    if (currentAdaptiveMode === 'manual') {
+      hideAdaptiveRecommendation();
+      return;
+    }
+    // 仅当任务描述足够长时才推荐
+    const text = input.value.trim();
+    if (text.length < 8) {
+      hideAdaptiveRecommendation();
+      return;
+    }
+    clearTimeout(adaptiveDebounceTimer);
+    adaptiveDebounceTimer = setTimeout(() => fetchAdaptiveRecommendation(text), 800);
+  });
+}
+
+// 获取自适应推荐
+async function fetchAdaptiveRecommendation(taskDescription) {
+  try {
+    const resp = await fetch('/api/adaptive/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskDescription })
+    });
+    if (!resp.ok) return;
+    const rec = await resp.json();
+    currentAdaptiveRecommendation = rec;
+    showAdaptiveRecommendation(rec);
+
+    // auto 模式：自动应用
+    if (currentAdaptiveMode === 'auto') {
+      await applyAdaptiveRecommendation(true);
+    }
+  } catch (e) {
+    console.error('获取推荐失败:', e);
+  }
+}
+
+// 显示推荐方案
+function showAdaptiveRecommendation(rec) {
+  const panel = document.getElementById('adaptive-recommendation');
+  const conf = document.getElementById('adaptive-confidence');
+  const reason = document.getElementById('adaptive-reasoning');
+
+  if (!panel) return;
+
+  const tools = rec.tools.map(t => `${t.displayName}`).join(' + ');
+  const confPct = Math.round((rec.confidence || 0) * 100);
+  conf.textContent = `置信度 ${confPct}%`;
+  conf.style.background = confPct >= 70 ? '#10b981' : (confPct >= 50 ? '#f59e0b' : '#ef4444');
+
+  reason.textContent = `任务特征: ${rec.features.language}/${rec.features.taskType}/${rec.features.complexity}\n推荐工具: ${tools}\n策略: ${rec.strategy} | 模式: ${rec.mode} | 工具数: ${rec.toolCount}`;
+
+  panel.style.display = 'block';
+}
+
+// 隐藏推荐方案
+function hideAdaptiveRecommendation() {
+  const panel = document.getElementById('adaptive-recommendation');
+  if (panel) panel.style.display = 'none';
+  currentAdaptiveRecommendation = null;
+}
+
+// 应用推荐方案
+async function applyAdaptiveRecommendation(silent = false) {
+  if (!currentAdaptiveRecommendation) {
+    if (!silent) appendChatMessage('system', '⚠️ 暂无推荐方案');
+    return;
+  }
+  const rec = currentAdaptiveRecommendation;
+
+  // 应用推荐的工具选择
+  const checkboxes = document.querySelectorAll('.tool-checkbox');
+  checkboxes.forEach(cb => cb.checked = false);
+  for (const tool of rec.tools) {
+    const cb = document.querySelector(`.tool-checkbox[value="${tool.name}"]`);
+    if (cb) cb.checked = true;
+  }
+
+  // 应用执行模式
+  if (rec.mode) setMode(rec.mode);
+
+  // 隐藏推荐面板
+  hideAdaptiveRecommendation();
+
+  if (!silent) {
+    const toolNames = rec.tools.map(t => t.displayName).join(', ');
+    appendChatMessage('system', `✅ 已应用推荐: ${toolNames} | 策略: ${rec.strategy} | 模式: ${rec.mode}`);
+  }
+}
+
+// 关闭推荐（用户选择自己搭配）
+function dismissAdaptiveRecommendation() {
+  hideAdaptiveRecommendation();
+  appendChatMessage('system', '✋ 已切换到手动模式，请自行选择工具');
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+  setupAdaptiveRecommendationTrigger();
+  // 初始化编排模式状态
+  fetch('/api/adaptive/status')
+    .then(r => r.json())
+    .then(s => {
+      if (s.orchestrationMode) {
+        currentAdaptiveMode = s.orchestrationMode;
+        document.querySelectorAll('.btn-adaptive-mode').forEach(btn => {
+          if (btn.dataset.mode === currentAdaptiveMode) {
+            btn.click();
+          }
+        });
+      }
+      if (s.userPreferences) {
+        const p = s.userPreferences;
+        if (p.privacySensitivity) document.getElementById('pref-privacy').value = p.privacySensitivity;
+        if (p.qualityPriority) document.getElementById('pref-quality').value = p.qualityPriority;
+        if (p.efficiencyPriority) document.getElementById('pref-efficiency').value = p.efficiencyPriority;
+        if (p.maxParallelTools) document.getElementById('pref-maxtools').value = p.maxParallelTools;
+      }
+    })
+    .catch(() => {});
+});
+

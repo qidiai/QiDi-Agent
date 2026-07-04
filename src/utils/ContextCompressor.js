@@ -1,12 +1,14 @@
 const TokenCounter = require('./TokenCounter');
+const logger = require('./Logger').createLogger('ContextCompressor');
 
 class ContextCompressor {
   constructor (options = {}) {
     this.tokenCounter = new TokenCounter();
-    this.maxContextTokens = options.maxContextTokens || 1500;
+    this.maxContextTokens = options.maxContextTokens || 3000;
     this.keepSignatures = options.keepSignatures !== false;
     this.keepComments = options.keepComments || false;
     this.keepImports = options.keepImports !== false;
+    this.preserveKeyLines = options.preserveKeyLines !== false;
   }
 
   compressCode (code, options = {}) {
@@ -20,49 +22,60 @@ class ContextCompressor {
     }
 
     let compressed = '';
+    const parts = [];
 
     const importLines = this._extractImports(code);
     if (this.keepImports && importLines.length > 0) {
-      compressed += importLines.join('\n') + '\n\n';
+      parts.push(importLines.join('\n'));
+    }
+
+    const keyVariables = this._extractKeyVariables(code);
+    if (keyVariables.length > 0) {
+      parts.push('// 关键变量定义:');
+      keyVariables.forEach(varInfo => {
+        parts.push(`//   ${varInfo.name}: ${varInfo.type || 'unknown'}${varInfo.value ? ` = ${varInfo.value}` : ''}`);
+      });
     }
 
     const signatures = this._extractSignatures(code);
     if (this.keepSignatures && signatures.length > 0) {
-      compressed += '// 函数签名:\n';
+      parts.push('// 函数/方法签名:');
       signatures.forEach(sig => {
-        compressed += `// ${sig}\n`;
+        parts.push(`//   ${sig}`);
       });
-      compressed += '\n';
     }
 
     const keyStructures = this._extractKeyStructures(code);
     if (keyStructures.length > 0) {
-      compressed += '// 关键结构:\n';
+      parts.push('// 关键数据结构:');
       keyStructures.forEach(str => {
-        compressed += `${str}\n`;
+        parts.push(str);
       });
-      compressed += '\n';
     }
 
     const importantComments = this._extractImportantComments(code);
     if (this.keepComments && importantComments.length > 0) {
-      compressed += '// 关键注释:\n';
+      parts.push('// 关键注释:');
       importantComments.slice(0, 5).forEach(cmt => {
-        compressed += `// ${cmt}\n`;
+        parts.push(`//   ${cmt}`);
       });
-      compressed += '\n';
     }
 
     const summary = this._generateSummary(code);
-    compressed += `// 代码摘要: ${summary}\n`;
+    parts.push(`// 代码摘要: ${summary}`);
+
+    compressed = parts.join('\n\n') + '\n';
 
     const currentTokens = this.tokenCounter.estimateTokens(compressed);
     if (currentTokens < maxTokens - 200) {
       const keyLines = this._extractKeyLines(code, maxTokens - currentTokens - 100);
-      compressed += '\n// 关键代码片段:\n';
-      compressed += keyLines.map(l => `// ${l}`).join('\n');
+      if (keyLines.length > 0) {
+        compressed += '\n// 关键代码片段:\n';
+        compressed += keyLines.map(l => l).join('\n');
+      }
     }
 
+    logger.debug('代码压缩完成', { originalTokens: tokens, compressedTokens: this.tokenCounter.estimateTokens(compressed) });
     return compressed;
   }
 
@@ -71,6 +84,32 @@ class ContextCompressor {
     return lines.filter(line => {
       return line.match(/^#include|^import|^from\s|^require\(|^using\s/);
     });
+  }
+
+  _extractKeyVariables (code) {
+    const variables = [];
+    const patterns = [
+      /(?:const|let|var)\s+(\w+)\s*:\s*(\w+)\s*=\s*([^;]+);?/g,
+      /(?:const|let|var)\s+(\w+)\s*=\s*(["'`][^"'`]*["'`]|\d+\.?\d*|true|false|null|undefined)/g,
+      /(?:public|private|protected)\s+(static\s+)?(\w+)\s+(\w+)\s*=\s*([^;]+);?/g,
+      /(\w+)\s+(\w+)\s*=\s*(["'`][^"'`]*["'`]|\d+\.?\d*|true|false|null)/g
+    ];
+
+    patterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(code)) !== null) {
+        if (match[1] && !match[1].match(/^(function|class|struct|return|if|else|for|while|try|catch|throw|async|await)$/)) {
+          const name = match[1];
+          const type = match[2] && !match[2].match(/^\d+|^["'`]/) ? match[2] : null;
+          const value = match[3] || match[4] || null;
+          if (!variables.some(v => v.name === name)) {
+            variables.push({ name, type, value: value ? value.trim().substring(0, 50) : null });
+          }
+        }
+      }
+    });
+
+    return variables.slice(0, 20);
   }
 
   _extractSignatures (code) {
@@ -180,27 +219,51 @@ class ContextCompressor {
     if (!history || history.length === 0) return '';
 
     const maxTokens = options.maxTokens || this.maxContextTokens;
-    let compressed = '';
+    const parts = [];
+    let currentTokens = 0;
 
-    compressed += '// === 已完成任务摘要 ===\n\n';
+    parts.push('// === 已完成任务摘要 ===');
 
-    for (const task of history) {
-      const taskSummary = `// ${task.taskId}: ${task.title || '未知'} (质量: ${task.qualityScore || 0}分)\n`;
-      compressed += taskSummary;
+    const sortedHistory = [...history].sort((a, b) => {
+      const scoreA = a.qualityScore || 0;
+      const scoreB = b.qualityScore || 0;
+      return scoreB - scoreA;
+    });
+
+    for (const task of sortedHistory) {
+      const taskHeader = `// ${task.taskId}: ${task.title || '未知'} (质量: ${task.qualityScore || 0}分)`;
+      const headerTokens = this.tokenCounter.estimateTokens(taskHeader);
+
+      if (currentTokens + headerTokens > maxTokens) {
+        break;
+      }
+
+      parts.push(taskHeader);
+      currentTokens += headerTokens;
 
       if (task.codeBlocks && task.codeBlocks.length > 0) {
         for (const block of task.codeBlocks.slice(0, 2)) {
-          const blockCompressed = this.compressCode(block.code, { maxTokens: 300 });
-          compressed += `// ${block.language || 'code'}:\n${blockCompressed}\n`;
+          const remainingTokens = maxTokens - currentTokens - 100;
+          if (remainingTokens <= 0) break;
+
+          const blockCompressed = this.compressCode(block.code, { maxTokens: Math.min(remainingTokens, 300) });
+          if (blockCompressed) {
+            const blockTokens = this.tokenCounter.estimateTokens(blockCompressed);
+            if (currentTokens + blockTokens <= maxTokens) {
+              parts.push(`// ${block.language || 'code'}:`);
+              parts.push(blockCompressed);
+              currentTokens += blockTokens + this.tokenCounter.estimateTokens(`// ${block.language || 'code'}:`);
+            }
+          }
         }
       }
+
+      parts.push('');
+      currentTokens += 2;
     }
 
-    const tokens = this.tokenCounter.estimateTokens(compressed);
-    if (tokens > maxTokens) {
-      compressed = compressed.substring(0, maxTokens * 2);
-    }
-
+    const compressed = parts.join('\n');
+    logger.debug('任务历史压缩完成', { originalTasks: history.length, compressedTasks: sortedHistory.length, tokens: this.tokenCounter.estimateTokens(compressed) });
     return compressed;
   }
 
