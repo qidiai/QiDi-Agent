@@ -16,7 +16,7 @@ const path = require('path');
  */
 
 class EmergenceEvaluator {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.threshold = options.threshold || 0.2;
     this.baselineQuality = options.baselineQuality || null;
     this.history = options.history || [];
@@ -25,10 +25,10 @@ class EmergenceEvaluator {
     // 基线数据库
     this._baselineDBPath = path.join(__dirname, '..', '..', 'data', 'baseline_db.json');
     this._baselineDB = {
-      byTool: {},        // toolName -> { avgQuality, count, lastUpdate, samples: [] }
-      byTaskType: {},    // taskType -> { avgQuality, count, samples: [] }
-      byToolTaskType: {},// "tool:taskType" -> { avgQuality, count, samples: [] }
-      globalBaseline: null  // 全局基线均值
+      byTool: {}, // toolName -> { avgQuality, count, lastUpdate, samples: [] }
+      byTaskType: {}, // taskType -> { avgQuality, count, samples: [] }
+      byToolTaskType: {}, // "tool:taskType" -> { avgQuality, count, samples: [] }
+      globalBaseline: null // 全局基线均值
     };
 
     this._loadHistory();
@@ -40,7 +40,7 @@ class EmergenceEvaluator {
    * @param {Object} params - { multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }
    * @param {Object} options - { allowEstimated: 是否允许估算基线（默认 true） }
    */
-  async evaluate({ multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }, options = {}) {
+  async evaluate ({ multiToolQuality, singleToolQuality, synchrony, mode, tools, taskType, taskDescription }, options = {}) {
     try {
       const allowEstimated = options.allowEstimated !== false;
 
@@ -142,7 +142,7 @@ class EmergenceEvaluator {
    * 估算基线（当无显式基线且数据库无记录时）
    * 策略：全局历史均值的 90%（保守估计，避免假涌现）
    */
-  _estimateBaseline(tools, taskType) {
+  _estimateBaseline (tools, taskType) {
     // 收集所有历史质量数据
     const validRecords = this.history.filter(r =>
       r.verdict !== 'NO_CONTROL_GROUP' &&
@@ -172,7 +172,7 @@ class EmergenceEvaluator {
    * @param {string} toolName - 单工具名
    * @param {string} taskType - 任务类型
    */
-  async ensureBaseline(singleToolRunner, toolName, taskType) {
+  async ensureBaseline (singleToolRunner, toolName, taskType) {
     // 检查数据库中是否已有该 tool+taskType 的基线
     if (toolName && taskType) {
       const key = `${toolName}:${taskType}`;
@@ -207,7 +207,7 @@ class EmergenceEvaluator {
    * @param {Array} tools - [{ name, taskType }]
    * @param {Function} singleToolRunner - async (tool) => quality
    */
-  async preWarmBaseline(tools, singleToolRunner) {
+  async preWarmBaseline (tools, singleToolRunner) {
     if (!Array.isArray(tools) || tools.length === 0) return;
 
     // 只为缺基线的组合预热
@@ -218,7 +218,7 @@ class EmergenceEvaluator {
     });
 
     if (needWarm.length === 0) {
-      logger.info(`[EmergenceEvaluator] 基线数据库已完整，无需预热`);
+      logger.info('[EmergenceEvaluator] 基线数据库已完整，无需预热');
       return;
     }
 
@@ -230,7 +230,7 @@ class EmergenceEvaluator {
         // 静默失败，继续下一个
       }
     }
-    logger.info(`[EmergenceEvaluator] 基线预热完成`);
+    logger.info('[EmergenceEvaluator] 基线预热完成');
   }
 
   /**
@@ -239,7 +239,7 @@ class EmergenceEvaluator {
    * @param {string} toolName - 工具名
    * @param {string} taskType - 任务类型
    */
-  recordBaseline(quality, toolName = null, taskType = null) {
+  recordBaseline (quality, toolName = null, taskType = null) {
     this.baselineQuality = quality;
 
     if (toolName) {
@@ -253,7 +253,7 @@ class EmergenceEvaluator {
    * 从基线数据库获取基线
    * 策略：优先使用 "tool+taskType" 组合，其次 taskType，再次 tool，最后全局
    */
-  _getBaselineFromDB(tools, taskType) {
+  _getBaselineFromDB (tools, taskType) {
     if (!tools || tools.length === 0) {
       // 仅按任务类型查找
       if (taskType && this._baselineDB.byTaskType[taskType]) {
@@ -299,7 +299,7 @@ class EmergenceEvaluator {
   /**
    * 记录到基线数据库
    */
-  _recordToBaselineDB(tools, taskType, quality, mode) {
+  _recordToBaselineDB (tools, taskType, quality, mode) {
     const sample = { quality, mode, timestamp: Date.now() };
     const MAX_SAMPLES = 50;
 
@@ -356,7 +356,7 @@ class EmergenceEvaluator {
     this._saveBaselineDB();
   }
 
-  getStats() {
+  getStats () {
     const stats = {
       totalEvaluations: this.history.length,
       emergentCount: 0,
@@ -377,10 +377,10 @@ class EmergenceEvaluator {
 
     for (const record of this.history) {
       switch (record.verdict) {
-        case 'EMERGENT': stats.emergentCount++; break;
-        case 'MARGINAL': stats.marginalCount++; break;
-        case 'NEGATIVE': stats.negativeCount++; break;
-        case 'NO_CONTROL_GROUP': stats.noControlGroupCount++; break;
+      case 'EMERGENT': stats.emergentCount++; break;
+      case 'MARGINAL': stats.marginalCount++; break;
+      case 'NEGATIVE': stats.negativeCount++; break;
+      case 'NO_CONTROL_GROUP': stats.noControlGroupCount++; break;
       }
 
       if (record.emergenceGain !== undefined && record.verdict !== 'NO_CONTROL_GROUP') {
@@ -393,14 +393,14 @@ class EmergenceEvaluator {
     return stats;
   }
 
-  getRecentEmerged(n = 5) {
+  getRecentEmerged (n = 5) {
     return this.history.filter(r => r.emerged).slice(-n);
   }
 
   /**
    * 获取基线数据库详情
    */
-  getBaselineDBReport() {
+  getBaselineDBReport () {
     const report = {
       globalBaseline: this._baselineDB.globalBaseline,
       toolBaselines: {},
@@ -427,7 +427,7 @@ class EmergenceEvaluator {
     return report;
   }
 
-  reset() {
+  reset () {
     this.history = [];
     this.baselineQuality = null;
     this._baselineDB = {
@@ -440,7 +440,7 @@ class EmergenceEvaluator {
     this._saveBaselineDB();
   }
 
-  _loadHistory() {
+  _loadHistory () {
     try {
       if (fs.existsSync(this._historyPath)) {
         const data = fs.readFileSync(this._historyPath, 'utf8');
@@ -452,7 +452,7 @@ class EmergenceEvaluator {
     }
   }
 
-  async _saveHistory() {
+  async _saveHistory () {
     try {
       const dir = path.dirname(this._historyPath);
       if (!fs.existsSync(dir)) {
@@ -468,7 +468,7 @@ class EmergenceEvaluator {
     }
   }
 
-  _loadBaselineDB() {
+  _loadBaselineDB () {
     try {
       if (fs.existsSync(this._baselineDBPath)) {
         const data = fs.readFileSync(this._baselineDBPath, 'utf8');
@@ -479,7 +479,7 @@ class EmergenceEvaluator {
     }
   }
 
-  _saveBaselineDB() {
+  _saveBaselineDB () {
     try {
       const dir = path.dirname(this._baselineDBPath);
       if (!fs.existsSync(dir)) {

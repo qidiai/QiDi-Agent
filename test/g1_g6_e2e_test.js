@@ -116,7 +116,9 @@ const testBudgetManager = test('BudgetManager: record + canProceed + report', as
   assert.ok(report.remaining !== undefined, 'remaining 应存在');
 
   // 清理临时文件
-  try { fs.unlinkSync(tmpPath); } catch (_) {}
+  try {
+    fs.unlinkSync(tmpPath);
+  } catch (_) {}
 });
 
 // ── 6. RetryManager ──

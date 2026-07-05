@@ -10,21 +10,21 @@ const ROOT = path.resolve(__dirname, '..');
 let pass = 0;
 let fail = 0;
 
-function ok(name, detail = '') {
+function ok (name, detail = '') {
   pass++;
   console.log('  ✅ ' + name + (detail ? ' (' + detail + ')' : ''));
 }
-function err(name, detail = '') {
+function err (name, detail = '') {
   fail++;
   console.log('  ❌ ' + name + (detail ? ': ' + detail : ''));
 }
-function section(title) {
+function section (title) {
   console.log('\n══════════════════════════════════════');
   console.log('  ' + title);
   console.log('══════════════════════════════════════');
 }
 
-function resolveModule(relPath) {
+function resolveModule (relPath) {
   return require(path.resolve(ROOT, relPath));
 }
 
@@ -75,9 +75,9 @@ try {
   // 推荐结果结构完整性
   const r4 = ao.recommend('用 Rust 写一个高性能服务器', tools);
   const requiredFields = ['tools', 'strategy', 'mode', 'confidence', 'features', 'toolCount', 'reasoning'];
-  const allFields = requiredFields.every(f => r4.hasOwnProperty(f));
+  const allFields = requiredFields.every(f => Object.prototype.hasOwnProperty.call(r4, f));
   if (allFields && Array.isArray(r4.tools) && typeof r4.confidence === 'number') ok('推荐结构完整');
-  else err('推荐结构完整', '缺失字段: ' + requiredFields.filter(f => !r4.hasOwnProperty(f)).join(','));
+  else err('推荐结构完整', '缺失字段: ' + requiredFields.filter(f => !Object.prototype.hasOwnProperty.call(r4, f)).join(','));
 } catch (e) {
   err('AdaptiveOrchestrator', e.message);
 }
@@ -96,7 +96,9 @@ section('2. StreamManager 端到端');
     let chunkCount = 0;
     let doneFired = false;
     sm.on('chunk', () => chunkCount++);
-    sm.on('done', () => { doneFired = true; });
+    sm.on('done', () => {
+      doneFired = true;
+    });
 
     sm.start();
     sm.push({ text: 'hello', type: 'text' });
@@ -124,7 +126,9 @@ section('2. StreamManager 端到端');
 
     const sm2 = new StreamManager();
     let streamedText = '';
-    sm2.on('chunk', (data) => { streamedText += data.text; });
+    sm2.on('chunk', (data) => {
+      streamedText += data.text;
+    });
 
     await sm2.streamFromProvider(fakeProvider, []);
     if (streamedText === 'Hello from stream!') ok('streamFromProvider 桥接正确');

@@ -811,7 +811,7 @@ class MergeEngine extends BaseAgent {
       let cmd, args;
       const extMap = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', typescript: '.ts', go: '.go', rust: '.rs' };
       const ext = extMap[language] || '.txt';
-      
+
       tempFile = path.join(require('os').tmpdir(), `tmp_verify_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
 
       fs.writeFileSync(tempFile, code, 'utf-8');

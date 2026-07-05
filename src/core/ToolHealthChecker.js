@@ -42,7 +42,7 @@ class ToolHealthChecker extends EventEmitter {
       if (adapter.headlessSupported !== false) {
         const checkResult = await Promise.race([
           this._performCheck(adapter),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), this.timeout))
+          new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), this.timeout))
         ]);
 
         result.status = checkResult.success ? 'healthy' : 'unhealthy';

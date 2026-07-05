@@ -186,7 +186,7 @@ class RealTaskExecutor extends EventEmitter {
           filteredTools = registered.filter(t => this.selectedTools.includes(t.name));
           logger.info(`[任务启动] 用户选中工具: ${this.selectedTools.join(', ')}, 可用: ${filteredTools.length} 个`);
         }
-        
+
         this.connectedTools = filteredTools.map(t => ({ name: t.name, ...t }));
         for (const tool of this.connectedTools) {
           const adapter = this.options.toolScanner.getTool(tool.name);
@@ -671,7 +671,7 @@ class RealTaskExecutor extends EventEmitter {
 
       const output = result.output;
       let contentToCheck = '';
-      
+
       if (output.codeBlocks && output.codeBlocks.length > 0) {
         contentToCheck = output.codeBlocks.map(cb => `\`\`\`${cb.language}\n${cb.code}\n\`\`\``).join('\n');
       } else if (output.content) {

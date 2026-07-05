@@ -3,26 +3,26 @@ const fs = require('fs');
 const path = require('path');
 
 const CAPABILITY_LEVELS = {
-  L1:  { name: '基础执行',        dependsOn: [] },
-  L2:  { name: '代码生成',        dependsOn: ['L1'] },
-  L3:  { name: '任务理解',        dependsOn: ['L1','L2'] },
-  L4:  { name: '跨文件组织',      dependsOn: ['L1'] },
-  L5:  { name: '自规划',          dependsOn: ['L1','L2','L3','L4'] },
-  L6:  { name: '自我评估',        dependsOn: ['L1','L2','L3','L4','L5'] },
-  L7:  { name: '多工具协作',      dependsOn: ['L6'] },
-  L8:  { name: '知识传承',        dependsOn: ['L7'] },
-  L9:  { name: '环境自适应',      dependsOn: ['L8'] },
-  L10: { name: '跨层级整合',      dependsOn: ['L1','L2','L3','L4','L5','L6','L7','L8','L9'] }
+  L1: { name: '基础执行', dependsOn: [] },
+  L2: { name: '代码生成', dependsOn: ['L1'] },
+  L3: { name: '任务理解', dependsOn: ['L1', 'L2'] },
+  L4: { name: '跨文件组织', dependsOn: ['L1'] },
+  L5: { name: '自规划', dependsOn: ['L1', 'L2', 'L3', 'L4'] },
+  L6: { name: '自我评估', dependsOn: ['L1', 'L2', 'L3', 'L4', 'L5'] },
+  L7: { name: '多工具协作', dependsOn: ['L6'] },
+  L8: { name: '知识传承', dependsOn: ['L7'] },
+  L9: { name: '环境自适应', dependsOn: ['L8'] },
+  L10: { name: '跨层级整合', dependsOn: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'L9'] }
 };
 
 class AgentCapabilityTree {
-  constructor() {
+  constructor () {
     this.profiles = {};
     this._dataPath = path.join(__dirname, '..', '..', 'data', 'capability_tree.json');
     this._load();
   }
 
-  assessLevel(toolName, executionHistory) {
+  assessLevel (toolName, executionHistory) {
     try {
       const history = executionHistory || {};
       const evidence = [];
@@ -119,15 +119,15 @@ class AgentCapabilityTree {
     }
   }
 
-  getLevel(toolName) {
+  getLevel (toolName) {
     return this.profiles[toolName] || { level: 'L1', score: 0, evidence: [] };
   }
 
-  getAllLevels() {
+  getAllLevels () {
     return this.profiles;
   }
 
-  canAttempt(toolName, requiredLevel) {
+  canAttempt (toolName, requiredLevel) {
     try {
       const profile = this.profiles[toolName];
       if (!profile) return false;
@@ -149,7 +149,7 @@ class AgentCapabilityTree {
     }
   }
 
-  recommendModeForLevel(level) {
+  recommendModeForLevel (level) {
     try {
       const levelNum = parseInt(level.slice(1));
       if (levelNum <= 3) return 'privacy';
@@ -161,12 +161,12 @@ class AgentCapabilityTree {
     }
   }
 
-  reset() {
+  reset () {
     this.profiles = {};
     this._save();
   }
 
-  _load() {
+  _load () {
     try {
       if (fs.existsSync(this._dataPath)) {
         const data = fs.readFileSync(this._dataPath, 'utf8');
@@ -178,7 +178,7 @@ class AgentCapabilityTree {
     }
   }
 
-  _save() {
+  _save () {
     try {
       const dir = path.dirname(this._dataPath);
       if (!fs.existsSync(dir)) {

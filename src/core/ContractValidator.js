@@ -104,10 +104,10 @@ class ContractValidator {
           // 允许一些等价语言
           const equivalents = {
             'c++': ['cpp', 'c'],
-            'cpp': ['c++', 'c'],
-            'javascript': ['js', 'node'],
-            'typescript': ['ts'],
-            'python': ['py']
+            cpp: ['c++', 'c'],
+            javascript: ['js', 'node'],
+            typescript: ['ts'],
+            python: ['py']
           };
           const allowed = equivalents[expectedLang] || [expectedLang];
           if (!allowed.includes(block.language.toLowerCase())) {

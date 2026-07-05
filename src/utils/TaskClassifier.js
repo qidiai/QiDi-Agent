@@ -171,7 +171,7 @@ class TaskClassifier {
 
   getRecommendedAction (task) {
     const classification = this.classify(task);
-    
+
     switch (classification.type) {
     case 'greeting':
       return { action: 'chat', message: '识别为问候语，建议直接回复', confidence: classification.confidence };

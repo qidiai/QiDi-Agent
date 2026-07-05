@@ -11,24 +11,24 @@ let pass = 0;
 let fail = 0;
 const results = [];
 
-function ok(name, detail = '') {
+function ok (name, detail = '') {
   pass++;
   results.push({ name, status: 'PASS', detail });
   console.log('  ✅ ' + name + (detail ? ' (' + detail + ')' : ''));
 }
-function err(name, detail = '') {
+function err (name, detail = '') {
   fail++;
   results.push({ name, status: 'FAIL', detail });
   console.log('  ❌ ' + name + (detail ? ': ' + detail : ''));
 }
 
-function section(title) {
+function section (title) {
   console.log('\n══════════════════════════════════════');
   console.log('  ' + title);
   console.log('══════════════════════════════════════');
 }
 
-function resolveModule(relPath) {
+function resolveModule (relPath) {
   return require(path.resolve(ROOT, relPath));
 }
 
@@ -301,7 +301,7 @@ try {
 
   let cmdOk = 0;
   for (const cmd of commands) {
-    const pattern = new RegExp("command\\(['\"]" + cmd + "['\"]");
+    const pattern = new RegExp('command\\([\'"]' + cmd + '[\'"]');
     if (pattern.test(cliSource)) cmdOk++;
   }
 
@@ -389,7 +389,9 @@ if (fail > 0) {
 // 保存报告
 const report = {
   timestamp: new Date().toISOString(),
-  pass, fail, total: pass + fail,
+  pass,
+  fail,
+  total: pass + fail,
   passRate: parseFloat(rate),
   grade,
   results

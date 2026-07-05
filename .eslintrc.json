@@ -16,7 +16,7 @@
     "semi": ["error", "always"],
     "quotes": ["error", "single"],
     "indent": ["error", 2],
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-unused-vars": ["warn", { "args": "none", "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_" }],
     "prefer-const": "warn",
     "no-var": "error",
     "eqeqeq": ["warn", "always"],

@@ -39,7 +39,7 @@ class BaseToolAdapter {
     this.status = 'unknown';
     this.workspaceDir = options.workspaceDir || process.cwd();
     this.executionHistory = [];
-    
+
     this.circuitBreaker = {
       consecutiveFailures: 0,
       maxFailures: 5,
@@ -47,7 +47,7 @@ class BaseToolAdapter {
       lastFailureTime: 0,
       state: 'closed'
     };
-    
+
     this.retryPolicy = {
       maxRetries: options.maxRetries || 2,
       initialDelay: options.initialDelay || 1000,
@@ -275,7 +275,7 @@ class BaseToolAdapter {
     if (!this.detected || this.status !== 'online') {
       return false;
     }
-    
+
     if (this.circuitBreaker.state === 'open') {
       const elapsed = Date.now() - this.circuitBreaker.lastFailureTime;
       if (elapsed >= this.circuitBreaker.cooldownPeriod) {
@@ -285,7 +285,7 @@ class BaseToolAdapter {
         return false;
       }
     }
-    
+
     return true;
   }
 
@@ -297,7 +297,7 @@ class BaseToolAdapter {
   _recordFailure () {
     this.circuitBreaker.consecutiveFailures++;
     this.circuitBreaker.lastFailureTime = Date.now();
-    
+
     if (this.circuitBreaker.consecutiveFailures >= this.circuitBreaker.maxFailures) {
       this.circuitBreaker.state = 'open';
       logger.warn(`${this.displayName} 触发熔断，冷却时间 ${this.circuitBreaker.cooldownPeriod}ms`);
@@ -309,24 +309,24 @@ class BaseToolAdapter {
       ...this.retryPolicy,
       ...options
     };
-    
+
     let lastError = null;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await fn();
       } catch (error) {
         lastError = error;
-        
+
         if (attempt >= maxRetries) {
           break;
         }
-        
+
         const delay = initialDelay * Math.pow(backoffFactor, attempt - 1);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
-    
+
     throw lastError;
   }
 

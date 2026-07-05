@@ -76,7 +76,9 @@ class DistributedExecutor extends EventEmitter {
     res.setHeader('Content-Type', 'application/json');
 
     let body = '';
-    req.on('data', (c) => body += c);
+    req.on('data', (c) => {
+      body += c;
+    });
     req.on('end', () => {
       const data = safeJsonParse(body, {});
       const url = new URL(req.url, `http://${req.headers.host}`);
@@ -231,7 +233,9 @@ class DistributedExecutor extends EventEmitter {
       });
 
       let output = '';
-      child.stdout.on('data', (data) => output += data.toString());
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
       child.stderr.on('data', (data) => {
         logger.warn(`[DistributedExecutor] Worker ${workerIdx} stderr: ${data.toString().trim()}`);
       });
@@ -376,21 +380,28 @@ class DistributedExecutor extends EventEmitter {
         timeout: 10000
       }, (res) => {
         let body = '';
-        res.on('data', (c) => body += c);
+        res.on('data', (c) => {
+          body += c;
+        });
         res.on('end', () => {
-          try { resolve(safeJsonParse(body, {})); }
-          catch (_) { resolve({}); }
+          try {
+            resolve(safeJsonParse(body, {}));
+          } catch (_) {
+            resolve({});
+          }
         });
       });
       req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+      req.on('timeout', () => {
+        req.destroy(); reject(new Error('Request timeout'));
+      });
       req.write(postData);
       req.end();
     });
   }
 
   _sleep (ms) {
-    return new Promise(r => setTimeout(r, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

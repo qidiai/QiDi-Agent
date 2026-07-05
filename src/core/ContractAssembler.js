@@ -165,7 +165,7 @@ ${code}
           [{ role: 'user', content: prompt }],
           { maxTokens: 2000 }
         ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('契约提取超时')), 30000))
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('契约提取超时')), 30000))
       ]);
 
       clearTimeout(timeoutId);
@@ -900,12 +900,12 @@ ${code}
   }
 
   _generateCPythonAdapter (contract) {
-    let code = `# C → Python 适配层 (ctypes)\n`;
+    let code = '# C → Python 适配层 (ctypes)\n';
     code += `# 源文件: ${contract.source}\n\n`;
-    code += `import ctypes\nimport os\n\n`;
-    code += `# 加载 C 共享库\n`;
+    code += 'import ctypes\nimport os\n\n';
+    code += '# 加载 C 共享库\n';
     code += `_lib_path = os.path.join(os.path.dirname(__file__), 'lib${contract.source || 'module'}.so')\n`;
-    code += `_lib = ctypes.CDLL(_lib_path)\n\n`;
+    code += '_lib = ctypes.CDLL(_lib_path)\n\n';
 
     for (const func of contract.functions || []) {
       code += `# ${func.signature || func.name}\n`;
@@ -921,97 +921,97 @@ ${code}
   }
 
   _generatePythonCAdapter (contract) {
-    let code = `// Python → C 适配层 (子进程调用)\n`;
+    let code = '// Python → C 适配层 (子进程调用)\n';
     code += `// 源文件: ${contract.source}\n\n`;
-    code += `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n`;
+    code += '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n';
 
     for (const func of contract.functions || []) {
       code += `// 调用 Python 函数: ${func.name}\n`;
       code += `int ${func.name}_adapter(${(func.params || []).map(p => `int ${p.name}`).join(', ')}) {\n`;
-      code += `    char cmd[1024];\n`;
+      code += '    char cmd[1024];\n';
       code += `    snprintf(cmd, sizeof(cmd), "python -c \\"import ${contract.source || 'module'}; print(%s(${(func.params || []).map(p => p.name).join(', ')}))\\"", "${func.name}");\n`;
-      code += `    FILE* fp = popen(cmd, "r");\n`;
-      code += `    if (!fp) return -1;\n`;
-      code += `    int result = 0;\n`;
-      code += `    fscanf(fp, "%d", &result);\n`;
-      code += `    pclose(fp);\n`;
-      code += `    return result;\n`;
-      code += `}\n\n`;
+      code += '    FILE* fp = popen(cmd, "r");\n';
+      code += '    if (!fp) return -1;\n';
+      code += '    int result = 0;\n';
+      code += '    fscanf(fp, "%d", &result);\n';
+      code += '    pclose(fp);\n';
+      code += '    return result;\n';
+      code += '}\n\n';
     }
 
     return code;
   }
 
   _generateCJSAdapter (contract) {
-    let code = `// C → JavaScript 适配层 (ffi-napi)\n`;
+    let code = '// C → JavaScript 适配层 (ffi-napi)\n';
     code += `// 源文件: ${contract.source}\n\n`;
-    code += `const ffi = require('ffi-napi');\nconst path = require('path');\n\n`;
+    code += 'const ffi = require(\'ffi-napi\');\nconst path = require(\'path\');\n\n';
     code += `const libPath = path.join(__dirname, 'lib${contract.source || 'module'}.${process.platform === 'win32' ? 'dll' : 'so'}');\n\n`;
-    code += `const lib = ffi.Library(libPath, {\n`;
+    code += 'const lib = ffi.Library(libPath, {\n';
 
     for (const func of contract.functions || []) {
-      const paramTypes = (func.params || []).map(() => "'int'").join(', ');
-      code += `  '${func.name}': [${func.returnType === 'void' ? "'void'" : "'int'"}, [${paramTypes}]],\n`;
+      const paramTypes = (func.params || []).map(() => '\'int\'').join(', ');
+      code += `  '${func.name}': [${func.returnType === 'void' ? '\'void\'' : '\'int\''}, [${paramTypes}]],\n`;
     }
 
-    code += `});\n\n`;
-    code += `module.exports = lib;\n`;
+    code += '});\n\n';
+    code += 'module.exports = lib;\n';
 
     return code;
   }
 
   _generateJSCAdapter (contract) {
-    let code = `// JavaScript → C 适配层 (子进程调用)\n`;
+    let code = '// JavaScript → C 适配层 (子进程调用)\n';
     code += `// 源文件: ${contract.source}\n\n`;
-    code += `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n`;
+    code += '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n';
 
     for (const func of contract.functions || []) {
       code += `// 调用 JS 函数: ${func.name}\n`;
       code += `int ${func.name}_adapter(${(func.params || []).map(p => `int ${p.name}`).join(', ')}) {\n`;
-      code += `    char cmd[1024];\n`;
+      code += '    char cmd[1024];\n';
       code += `    snprintf(cmd, sizeof(cmd), "node -e \\"console.log(require('./${contract.source || 'module'}').${func.name}(${(func.params || []).map(p => p.name).join(', ')}))\\"");\n`;
-      code += `    FILE* fp = popen(cmd, "r");\n`;
-      code += `    if (!fp) return -1;\n`;
-      code += `    int result = 0;\n`;
-      code += `    fscanf(fp, "%d", &result);\n`;
-      code += `    pclose(fp);\n`;
-      code += `    return result;\n`;
-      code += `}\n\n`;
+      code += '    FILE* fp = popen(cmd, "r");\n';
+      code += '    if (!fp) return -1;\n';
+      code += '    int result = 0;\n';
+      code += '    fscanf(fp, "%d", &result);\n';
+      code += '    pclose(fp);\n';
+      code += '    return result;\n';
+      code += '}\n\n';
     }
 
     return code;
   }
 
   _generatePyJSAdapter (contract) {
-    let code = `# Python → JavaScript 适配层 (子进程调用)\n`;
+    let code = '# Python → JavaScript 适配层 (子进程调用)\n';
     code += `# 源文件: ${contract.source}\n\n`;
-    code += `import subprocess\nimport json\n\n`;
+    code += 'import subprocess\nimport json\n\n';
 
     for (const func of contract.functions || []) {
       code += `def ${func.name}(${(func.params || []).map(p => p.name).join(', ')}):\n`;
-      code += `    result = subprocess.run(\n`;
+      code += '    result = subprocess.run(\n';
       code += `        ['node', '-e', f'console.log(JSON.stringify(require("./${contract.source || 'module'}").${func.name}(${(func.params || []).map(p => p.name).join(', ')})))'],\n`;
-      code += `        capture_output=True, text=True\n`;
-      code += `    )\n`;
-      code += `    return json.loads(result.stdout.strip())\n\n`;
+      code += '        capture_output=True, text=True\n';
+      code += '    )\n';
+      code += '    return json.loads(result.stdout.strip())\n\n';
     }
 
     return code;
   }
 
   _generateJSPyAdapter (contract) {
-    let code = `// JavaScript → Python 适配层 (子进程调用)\n`;
+    let code = '// JavaScript → Python 适配层 (子进程调用)\n';
     code += `// 源文件: ${contract.source}\n\n`;
-    code += `const { execSync } = require('child_process');\n\n`;
+    code += 'const { execSync } = require(\'child_process\');\n\n';
 
     for (const func of contract.functions || []) {
       code += `function ${func.name}(${(func.params || []).map(p => p.name).join(', ')}) {\n`;
-      code += `  const result = execSync(\n`;
+      code += '  const result = execSync(\n';
       code += `    \`python -c "import json; print(json.dumps(${contract.source || 'module'}.${func.name}(${(func.params || []).map(p => p.name).join(', ')})))"\`,\n`;
-      code += `    { encoding: 'utf-8' }\n`;
-      code += `  );\n`;
-      code += `  return JSON.parse(result.trim());\n`;
-      code += `}\n\n`;
+      code += '    { encoding: \'utf-8\' }\n';
+      code += '  );\n';
+      code += '  return JSON.parse(result.trim());\n';
+      code += '}\n\n';
     }
 
     code += `module.exports = { ${(contract.functions || []).map(f => f.name).join(', ')} };\n`;

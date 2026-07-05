@@ -371,9 +371,21 @@ class QualityCheckerAgent extends BaseAgent {
       },
       // 代码质量坏味道
       codeSmells: {
-        longFunction: { check: (code) => { const lines = code.split('\n').length; return lines > 100 ? { severity: 'medium', desc: `函数过长: ${lines}行` } : null; } },
-        deepNesting: { check: (code) => { const maxDepth = (code.match(/\{/g) || []).length; return maxDepth > 6 ? { severity: 'low', desc: `嵌套过深: ${maxDepth}层` } : null; } },
-        duplicateCode: { check: (code) => { const lines = code.split('\n').filter(l => l.trim().length > 10); const unique = new Set(lines); return (lines.length - unique.size) > lines.length * 0.3 ? { severity: 'medium', desc: '代码重复率过高' } : null; } }
+        longFunction: {
+          check: (code) => {
+            const lines = code.split('\n').length; return lines > 100 ? { severity: 'medium', desc: `函数过长: ${lines}行` } : null;
+          }
+        },
+        deepNesting: {
+          check: (code) => {
+            const maxDepth = (code.match(/\{/g) || []).length; return maxDepth > 6 ? { severity: 'low', desc: `嵌套过深: ${maxDepth}层` } : null;
+          }
+        },
+        duplicateCode: {
+          check: (code) => {
+            const lines = code.split('\n').filter(l => l.trim().length > 10); const unique = new Set(lines); return (lines.length - unique.size) > lines.length * 0.3 ? { severity: 'medium', desc: '代码重复率过高' } : null;
+          }
+        }
       }
     };
   }

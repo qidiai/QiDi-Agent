@@ -106,7 +106,7 @@ class VectorMemoryStore {
 
     // 全部不可用，降级到 hash
     if (!this._degradedModeLogged) {
-      logger.warn(`[VectorMemory] 所有 embedding provider 不可用，降级到 hash 模式（语义召回率降低）`);
+      logger.warn('[VectorMemory] 所有 embedding provider 不可用，降级到 hash 模式（语义召回率降低）');
       this._degradedModeLogged = true;
     }
     this.activeProvider = 'hash';
@@ -118,7 +118,7 @@ class VectorMemoryStore {
     if (provider === 'ollama') {
       const result = await Promise.race([
         this._callOllamaEmbed('test'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
       ]);
       return Array.isArray(result) && result.length > 0;
     }
@@ -126,7 +126,7 @@ class VectorMemoryStore {
       if (!this.openaiApiKey) return false;
       const result = await Promise.race([
         this._callOpenAIEmbed('test'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
       ]);
       return Array.isArray(result) && result.length > 0;
     }
@@ -219,17 +219,23 @@ class VectorMemoryStore {
 
       const req = http.request(options, (res) => {
         let body = '';
-        res.on('data', (c) => body += c);
+        res.on('data', (c) => {
+          body += c;
+        });
         res.on('end', () => {
           try {
             const data = safeJsonParse(body, {});
             if (data.embedding) resolve(data.embedding);
             else reject(new Error('Ollama 无 embedding 返回'));
-          } catch (e) { reject(e); }
+          } catch (e) {
+            reject(e);
+          }
         });
       });
       req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('Ollama embedding 超时')); });
+      req.on('timeout', () => {
+        req.destroy(); reject(new Error('Ollama embedding 超时'));
+      });
       req.write(postData);
       req.end();
     });
@@ -247,7 +253,7 @@ class VectorMemoryStore {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
-          'Authorization': `Bearer ${this.openaiApiKey}`
+          Authorization: `Bearer ${this.openaiApiKey}`
         },
         timeout: 30000
       };
@@ -255,7 +261,9 @@ class VectorMemoryStore {
       const lib = url.protocol === 'https:' ? https : http;
       const req = lib.request(options, (res) => {
         let body = '';
-        res.on('data', (c) => body += c);
+        res.on('data', (c) => {
+          body += c;
+        });
         res.on('end', () => {
           try {
             const data = safeJsonParse(body, {});
@@ -264,11 +272,15 @@ class VectorMemoryStore {
             } else {
               reject(new Error('OpenAI 无 embedding 返回: ' + (data.error && data.error.message)));
             }
-          } catch (e) { reject(e); }
+          } catch (e) {
+            reject(e);
+          }
         });
       });
       req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('OpenAI embedding 超时')); });
+      req.on('timeout', () => {
+        req.destroy(); reject(new Error('OpenAI embedding 超时'));
+      });
       req.write(postData);
       req.end();
     });
@@ -416,7 +428,7 @@ class VectorMemoryStore {
 
   _cosineSimilarity (a, b) {
     if (!a || !b || a.length !== b.length) return 0;
-    let dot = 0, normA = 0, normB = 0;
+    let dot = 0; let normA = 0; let normB = 0;
     for (let i = 0; i < a.length; i++) {
       dot += a[i] * b[i];
       normA += a[i] * a[i];

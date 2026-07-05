@@ -76,7 +76,7 @@ class TokenCounter {
       } else if (code >= 0x3040 && code <= 0x30ff) {
         cjkChars++;
         currentWord = '';
-      } else if (code >= 0x61 && code <= 0x7a || code >= 0x41 && code <= 0x5a) {
+      } else if ((code >= 0x61 && code <= 0x7a) || (code >= 0x41 && code <= 0x5a)) {
         wordChars++;
         currentWord += char.toLowerCase();
       } else if (code >= 0x30 && code <= 0x39) {

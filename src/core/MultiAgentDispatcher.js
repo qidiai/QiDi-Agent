@@ -395,13 +395,19 @@ class MultiAgentDispatcher {
     for (const [name, result] of Object.entries(successfulResults)) {
       if (!result || !result.success) continue;
       try {
-        const provider = this.hub.getEnabledAgents().find(a => a.name === name)?.provider
-          || this.hub.getAgent('ollama')?.provider;
+        const provider = this.hub.getEnabledAgents().find(a => a.name === name)?.provider ||
+          this.hub.getAgent('ollama')?.provider;
         if (provider && qualityChecker) {
           const qc = await qualityChecker.provider.sendWithRetry(
             `请评估以下代码质量（0-100分），仅返回JSON：{"qualityScore":<number>,"status":"<completed|failed>","weaknesses":[...]}\n\n${(result.code || result.output || '').substring(0, 2000)}`
           );
-          const parsed = (() => { try { return JSON.parse(qc.content); } catch { return null; } })();
+          const parsed = (() => {
+            try {
+              return JSON.parse(qc.content);
+            } catch {
+              return null;
+            }
+          })();
           const score = parsed?.qualityScore || 60;
           if (parsed?.status !== 'failed') {
             qualityFiltered[name] = { ...result, qualityScore: score };

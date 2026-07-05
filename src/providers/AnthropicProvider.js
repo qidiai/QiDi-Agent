@@ -120,7 +120,7 @@ class AnthropicProvider {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new TimeoutError(`Anthropic 请求超时`, {
+        reject(new TimeoutError('Anthropic 请求超时', {
           url: fullURL,
           method: options.method || 'POST',
           timeout: options.timeout || 300000

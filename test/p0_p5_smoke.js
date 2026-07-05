@@ -9,21 +9,23 @@ const ROOT = path.resolve(__dirname, '..');
 let pass = 0;
 let fail = 0;
 
-function ok(name, detail = '') {
+function ok (name, detail = '') {
   pass++;
   console.log('  ✅ ' + name + (detail ? ' (' + detail + ')' : ''));
 }
-function err(name, detail = '') {
+function err (name, detail = '') {
   fail++;
   console.log('  ❌ ' + name + (detail ? ': ' + detail : ''));
 }
-function section(t) {
+function section (t) {
   console.log('\n══════════════════════════════════════');
   console.log('  ' + t);
   console.log('══════════════════════════════════════');
 }
 
-function R(p) { return require(path.resolve(ROOT, p)); }
+function R (p) {
+  return require(path.resolve(ROOT, p));
+}
 
 // ═══════════════════════════════════════════
 section('P0: WebUI 前端集成自适应编排');
@@ -66,19 +68,19 @@ section('P1: CLI adaptive 命令族');
 // ═══════════════════════════════════════════
 try {
   const cli = fs.readFileSync(path.resolve(ROOT, 'src/cli/index.js'), 'utf-8');
-  if (cli.includes("command('adaptive')")) ok('adaptive 命令注册');
+  if (cli.includes('command(\'adaptive\')')) ok('adaptive 命令注册');
   else err('adaptive 命令', '未注册');
 
-  if (cli.includes("--recommend <task>")) ok('--recommend 选项');
+  if (cli.includes('--recommend <task>')) ok('--recommend 选项');
   else err('--recommend 选项');
 
-  if (cli.includes("--mode <mode>")) ok('--mode 选项');
+  if (cli.includes('--mode <mode>')) ok('--mode 选项');
   else err('--mode 选项');
 
-  if (cli.includes("--status")) ok('--status 选项');
+  if (cli.includes('--status')) ok('--status 选项');
   else err('--status 选项');
 
-  if (cli.includes("--prefs <json>")) ok('--prefs 选项');
+  if (cli.includes('--prefs <json>')) ok('--prefs 选项');
   else err('--prefs 选项');
 
   if (cli.includes('getAdaptiveRecommendation')) ok('调用 getAdaptiveRecommendation');
@@ -126,7 +128,9 @@ section('P2: Provider 流式接口 + StreamManager 桥接');
     };
     const sm2 = new StreamManager();
     let text = '';
-    sm2.on('chunk', (d) => { text += d.text; });
+    sm2.on('chunk', (d) => {
+      text += d.text;
+    });
     await sm2.streamFromProvider(fakeProvider, []);
     if (text === 'chunk1 chunk2 chunk3') ok('streamFromProvider 桥接验证', '输出: ' + text);
     else err('streamFromProvider 桥接', '实际: ' + text);
@@ -158,6 +162,7 @@ section('P2: Provider 流式接口 + StreamManager 桥接');
         if (m === 'StreamManager') R('src/utils/StreamManager.js');
         else if (m === 'RetryManager') {
           const { RetryManager } = R('src/utils/RetryManager.js');
+          // eslint-disable-next-line no-new
           new RetryManager({});
         } else if (m === 'MCPClient') R('src/mcp/MCPClient.js');
         else R('src/core/' + m + '.js');

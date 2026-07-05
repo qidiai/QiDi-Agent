@@ -74,15 +74,17 @@ function createMockProvider () {
     name: 'mock-benchmark',
     chat: async (messages) => {
       const task = messages[0]?.content || '';
-      const lang = (task.match(/Python|python/) ? 'python' :
-        task.match(/TypeScript|typescript/) ? 'typescript' :
-          task.match(/C 语言|用 C/) ? 'c' : 'javascript');
+      const lang = (task.match(/Python|python/)
+        ? 'python'
+        : task.match(/TypeScript|typescript/)
+          ? 'typescript'
+          : task.match(/C 语言|用 C/) ? 'c' : 'javascript');
 
       const templates = {
-        python: `def binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1`,
-        javascript: `const express = require('express');\nconst app = express();\napp.get('/health', (req, res) => res.json({status: 'ok'}));\napp.get('/api/users', (req, res) => res.json([{id: 1, name: 'A'}]));\napp.listen(3000);`,
-        typescript: `interface User { id: number; name: string; }\nclass UserService {\n  private users: User[] = [];\n  add(u: User): void { this.users.push(u); }\n  get(id: number): User | undefined { return this.users.find(u => u.id === id); }\n}`,
-        c: `#include <stdlib.h>\ntypedef struct { int* data; int size; int cap; } Array;\nvoid array_push(Array* a, int v) { if (a->size >= a->cap) { a->cap = a->cap ? a->cap * 2 : 8; a->data = realloc(a->data, a->cap * sizeof(int)); } a->data[a->size++] = v; }\nint array_get(Array* a, int i) { return a->data[i]; }\nvoid array_set(Array* a, int i, int v) { a->data[i] = v; }`
+        python: 'def binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1',
+        javascript: 'const express = require(\'express\');\nconst app = express();\napp.get(\'/health\', (req, res) => res.json({status: \'ok\'}));\napp.get(\'/api/users\', (req, res) => res.json([{id: 1, name: \'A\'}]));\napp.listen(3000);',
+        typescript: 'interface User { id: number; name: string; }\nclass UserService {\n  private users: User[] = [];\n  add(u: User): void { this.users.push(u); }\n  get(id: number): User | undefined { return this.users.find(u => u.id === id); }\n}',
+        c: '#include <stdlib.h>\ntypedef struct { int* data; int size; int cap; } Array;\nvoid array_push(Array* a, int v) { if (a->size >= a->cap) { a->cap = a->cap ? a->cap * 2 : 8; a->data = realloc(a->data, a->cap * sizeof(int)); } a->data[a->size++] = v; }\nint array_get(Array* a, int i) { return a->data[i]; }\nvoid array_set(Array* a, int i, int v) { a->data[i] = v; }'
       };
 
       return {

@@ -64,7 +64,10 @@ class SandboxExecutor {
     // 审计记录
     const auditEntry = {
       timestamp: Date.now(),
-      command, args, cwd, timeout,
+      command,
+      args,
+      cwd,
+      timeout,
       level: this.level,
       result: null
     };
@@ -81,6 +84,7 @@ class SandboxExecutor {
       }
       // Docker 不可用，降级到进程级
       logger.warn('[SandboxExecutor] Docker 不可用，降级到进程级隔离');
+      // falls through
     case 'process':
     default:
       result = await this._executeInProcess(command, args, { cwd, env, timeout });
@@ -124,12 +128,18 @@ class SandboxExecutor {
       let stdout = '';
       let stderr = '';
 
-      child.stdout.on('data', (data) => stdout += data.toString());
-      child.stderr.on('data', (data) => stderr += data.toString());
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
 
       const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill('SIGKILL'); } catch (_) {}
+        try {
+          child.kill('SIGKILL');
+        } catch (_) {}
       }, options.timeout);
 
       child.on('close', (code) => {
@@ -217,7 +227,7 @@ class SandboxExecutor {
     // 检查危险参数
     const dangerousPatterns = [
       /rm\s+-rf\s+\//,
-      /:\(\)\{.*\}/,  // fork bomb
+      /:\(\)\{.*\}/, // fork bomb
       /mkfs/,
       /\/dev\/sd[a-z]/,
       /dd\s+if=/
@@ -236,8 +246,14 @@ class SandboxExecutor {
    */
   async executeCode (code, language, options = {}) {
     const extMap = {
-      python: '.py', javascript: '.js', typescript: '.ts',
-      c: '.c', cpp: '.cpp', go: '.go', rust: '.rs', java: '.java'
+      python: '.py',
+      javascript: '.js',
+      typescript: '.ts',
+      c: '.c',
+      cpp: '.cpp',
+      go: '.go',
+      rust: '.rs',
+      java: '.java'
     };
     const ext = extMap[language?.toLowerCase()] || '.txt';
     const fileName = `sandbox_${Date.now()}${ext}`;
@@ -260,13 +276,14 @@ class SandboxExecutor {
       command = 'node';
       args = [filePath];
       break;
-    case 'c':
+    case 'c': {
       const outputExe = filePath.replace('.c', '.exe');
       const compile = await this.execute('gcc', ['-o', outputExe, filePath], options);
       if (!compile.success) return compile;
       command = outputExe;
       args = [];
       break;
+    }
     case 'go':
       command = 'go';
       args = ['run', filePath];
@@ -279,7 +296,9 @@ class SandboxExecutor {
     const result = await this.execute(command, args, options);
 
     // 清理
-    try { fs.unlinkSync(filePath); } catch (_) {}
+    try {
+      fs.unlinkSync(filePath);
+    } catch (_) {}
 
     return result;
   }

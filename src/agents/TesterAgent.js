@@ -82,7 +82,7 @@ class TesterAgent extends BaseAgent {
       prompt += `测试框架：${context.framework}\n`;
     }
 
-    prompt += `\n请生成完整的、可直接执行的测试文件代码（testSuite.fullTestFile字段）。`;
+    prompt += '\n请生成完整的、可直接执行的测试文件代码（testSuite.fullTestFile字段）。';
 
     const result = await this.sendOnce(prompt);
     const parsed = this._extractJson(result.content);

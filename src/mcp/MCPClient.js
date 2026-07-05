@@ -134,12 +134,29 @@ class StdioTransport {
     }
   }
 
-  async callTool (name, args) { return this._send('tools/call', { name, arguments: args }); }
-  async listTools () { return this._send('tools/list', {}); }
-  async listResources () { return this._send('resources/list', {}); }
-  async readResource (uri) { return this._send('resources/read', { uri }); }
-  async listPrompts () { return this._send('prompts/list', {}); }
-  async getPrompt (name, args) { return this._send('prompts/get', { name, arguments: args }); }
+  async callTool (name, args) {
+    return this._send('tools/call', { name, arguments: args });
+  }
+
+  async listTools () {
+    return this._send('tools/list', {});
+  }
+
+  async listResources () {
+    return this._send('resources/list', {});
+  }
+
+  async readResource (uri) {
+    return this._send('resources/read', { uri });
+  }
+
+  async listPrompts () {
+    return this._send('prompts/list', {});
+  }
+
+  async getPrompt (name, args) {
+    return this._send('prompts/get', { name, arguments: args });
+  }
 
   _rejectAll (error) {
     for (const { reject } of this._pendingRequests.values()) reject(error);
@@ -148,7 +165,9 @@ class StdioTransport {
 
   async disconnect () {
     if (this.process) {
-      try { this.process.kill('SIGTERM'); } catch (_) {}
+      try {
+        this.process.kill('SIGTERM');
+      } catch (_) {}
     }
   }
 }
@@ -185,13 +204,17 @@ class SSETransport {
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
       }, (res) => {
         let body = '';
-        res.on('data', (c) => body += c);
+        res.on('data', (c) => {
+          body += c;
+        });
         res.on('end', () => {
           try {
             const msg = JSON.parse(body);
             if (msg.error) reject(new Error(msg.error.message));
             else resolve(msg.result);
-          } catch (e) { reject(e); }
+          } catch (e) {
+            reject(e);
+          }
         });
       });
       req.on('error', reject);
@@ -201,10 +224,22 @@ class SSETransport {
     });
   }
 
-  async callTool (name, args) { return this._post('tools/call', { name, arguments: args }); }
-  async listTools () { return this._post('tools/list', {}); }
-  async listResources () { return this._post('resources/list', {}); }
-  async readResource (uri) { return this._post('resources/read', { uri }); }
+  async callTool (name, args) {
+    return this._post('tools/call', { name, arguments: args });
+  }
+
+  async listTools () {
+    return this._post('tools/list', {});
+  }
+
+  async listResources () {
+    return this._post('resources/list', {});
+  }
+
+  async readResource (uri) {
+    return this._post('resources/read', { uri });
+  }
+
   async disconnect () {}
 }
 
@@ -262,8 +297,12 @@ class MCPClient {
     // 发现工具和资源
     let tools = [];
     let resources = [];
-    try { tools = (await transport.listTools())?.tools || []; } catch (_) {}
-    try { resources = (await transport.listResources())?.resources || []; } catch (_) {}
+    try {
+      tools = (await transport.listTools())?.tools || [];
+    } catch (_) {}
+    try {
+      resources = (await transport.listResources())?.resources || [];
+    } catch (_) {}
 
     this.servers.set(name, {
       transport,
@@ -379,8 +418,12 @@ class MCPClient {
       command: 'mcp',
       isAvailable: () => true,
       isInstalled: () => true,
-      async detect () { return true; },
-      async connect () { return true; },
+      async detect () {
+        return true;
+      },
+      async connect () {
+        return true;
+      },
       async execute (task, options = {}) {
         try {
           const args = this._parseToolArgs(task, tool);

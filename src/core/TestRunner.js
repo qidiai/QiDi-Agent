@@ -618,8 +618,14 @@ class TestRunner {
 
     // 文件扩展名映射
     const extMap = {
-      python: '.py', javascript: '.js', typescript: '.ts',
-      go: '.go', java: '.java', rust: '.rs', c: '.c', cpp: '.cpp'
+      python: '.py',
+      javascript: '.js',
+      typescript: '.ts',
+      go: '.go',
+      java: '.java',
+      rust: '.rs',
+      c: '.c',
+      cpp: '.cpp'
     };
 
     // 测试文件名规则
@@ -678,7 +684,7 @@ class TestRunner {
       break;
     case 'go_test':
       if (!fs.existsSync(path.join(workDir, 'go.mod'))) {
-        fs.writeFileSync(path.join(workDir, 'go.mod'), `module qidi_test\n\ngo 1.21\n`);
+        fs.writeFileSync(path.join(workDir, 'go.mod'), 'module qidi_test\n\ngo 1.21\n');
       }
       break;
     }
@@ -760,15 +766,15 @@ class TestRunner {
       code += `    """${tc.description || tc.name || `Test case ${i + 1}`}"""\n`;
       code += `    # 类型: ${tc.type || 'unit'}\n`;
       code += `    # 预期结果: ${tc.expectedResult || 'N/A'}\n`;
-      code += `    # TODO: 实现测试逻辑\n`;
-      code += `    assert True  # 占位断言\n\n`;
+      code += '    # TODO: 实现测试逻辑\n';
+      code += '    assert True  # 占位断言\n\n';
     });
 
     return code;
   }
 
   _generateJestCode (testCases) {
-    let code = `'use strict';\n\n`;
+    let code = '\'use strict\';\n\n';
 
     testCases.forEach((tc, i) => {
       const testName = tc.name || tc.id || `Test case ${i + 1}`;
@@ -776,9 +782,9 @@ class TestRunner {
       code += `  // ${tc.description || ''}\n`;
       code += `  // 类型: ${tc.type || 'unit'}\n`;
       code += `  // 预期结果: ${tc.expectedResult || 'N/A'}\n`;
-      code += `  // TODO: 实现测试逻辑\n`;
-      code += `  expect(true).toBe(true); // 占位断言\n`;
-      code += `});\n\n`;
+      code += '  // TODO: 实现测试逻辑\n';
+      code += '  expect(true).toBe(true); // 占位断言\n';
+      code += '});\n\n';
     });
 
     return code;
@@ -792,8 +798,8 @@ class TestRunner {
       code += `func ${funcName}(t *testing.T) {\n`;
       code += `\t// ${tc.description || ''}\n`;
       code += `\t// 预期: ${tc.expectedResult || 'N/A'}\n`;
-      code += `\t// TODO: 实现测试逻辑\n`;
-      code += `}\n\n`;
+      code += '\t// TODO: 实现测试逻辑\n';
+      code += '}\n\n';
     });
 
     return code;
@@ -806,10 +812,10 @@ class TestRunner {
       code += `// Test ${i + 1}: ${tc.name || ''} - ${tc.description || ''}\n`;
       code += `void test_case_${i + 1}() {\n`;
       code += `    // 预期: ${tc.expectedResult || 'N/A'}\n`;
-      code += `    // TODO: 实现测试逻辑\n`;
-      code += `    assert(1); // 占位断言\n`;
+      code += '    // TODO: 实现测试逻辑\n';
+      code += '    assert(1); // 占位断言\n';
       code += `    printf("Test ${i + 1} passed\\n");\n`;
-      code += `}\n\n`;
+      code += '}\n\n';
     });
 
     code += 'int main() {\n';
@@ -830,10 +836,10 @@ class TestRunner {
     }
 
     if (lang === 'python') {
-      return `# 自动生成的集成测试\nimport pytest\n\ndef test_merged_code_not_empty():\n    """验证合并后代码非空"""\n    assert True\n\ndef test_merged_code_syntax():\n    """验证合并后代码语法正确"""\n    # TODO: 根据具体实现添加断言\n    assert True\n`;
+      return '# 自动生成的集成测试\nimport pytest\n\ndef test_merged_code_not_empty():\n    """验证合并后代码非空"""\n    assert True\n\ndef test_merged_code_syntax():\n    """验证合并后代码语法正确"""\n    # TODO: 根据具体实现添加断言\n    assert True\n';
     }
 
-    return `// 自动生成的集成测试\n// 验证合并后代码完整性\n#include <assert.h>\nint main() {\n    assert(1);\n    return 0;\n}\n`;
+    return '// 自动生成的集成测试\n// 验证合并后代码完整性\n#include <assert.h>\nint main() {\n    assert(1);\n    return 0;\n}\n';
   }
 
   // ═══════════════════════════════════════════

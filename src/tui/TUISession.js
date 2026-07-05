@@ -13,14 +13,30 @@ const FileManager = require('../utils/FileManager');
 
 // P0-P3 新模块
 let TestRunner, MCPClient, VectorMemoryStore, BudgetManager, GitIntegration, SandboxExecutor, ApprovalWorkflow, StreamManager;
-try { TestRunner = require('../core/TestRunner'); } catch (_) {}
-try { MCPClient = require('../mcp/MCPClient'); } catch (_) {}
-try { VectorMemoryStore = require('../core/VectorMemoryStore'); } catch (_) {}
-try { BudgetManager = require('../core/BudgetManager'); } catch (_) {}
-try { GitIntegration = require('../core/GitIntegration'); } catch (_) {}
-try { SandboxExecutor = require('../core/SandboxExecutor'); } catch (_) {}
-try { ApprovalWorkflow = require('../core/ApprovalWorkflow'); } catch (_) {}
-try { StreamManager = require('../utils/StreamManager'); } catch (_) {}
+try {
+  TestRunner = require('../core/TestRunner');
+} catch (_) {}
+try {
+  MCPClient = require('../mcp/MCPClient');
+} catch (_) {}
+try {
+  VectorMemoryStore = require('../core/VectorMemoryStore');
+} catch (_) {}
+try {
+  BudgetManager = require('../core/BudgetManager');
+} catch (_) {}
+try {
+  GitIntegration = require('../core/GitIntegration');
+} catch (_) {}
+try {
+  SandboxExecutor = require('../core/SandboxExecutor');
+} catch (_) {}
+try {
+  ApprovalWorkflow = require('../core/ApprovalWorkflow');
+} catch (_) {}
+try {
+  StreamManager = require('../utils/StreamManager');
+} catch (_) {}
 
 /**
  * TUI 会话管理
@@ -113,7 +129,9 @@ class TUISession extends EventEmitter {
     // MCPClient
     if (MCPClient && !this.mcpClient) {
       this.mcpClient = new MCPClient({});
-      try { await this.mcpClient.loadFromConfig(); } catch (_) {}
+      try {
+        await this.mcpClient.loadFromConfig();
+      } catch (_) {}
     }
   }
 
@@ -351,10 +369,12 @@ class TUISession extends EventEmitter {
       // 增强模块状态
       testRunner: this.testRunner ? 'ready' : 'unavailable',
       budget: this.budgetManager ? this.budgetManager.generateReport() : null,
-      git: this.gitIntegration ? {
-        enabled: this.gitIntegration.isEnabled(),
-        branch: this.gitIntegration.getCurrentBranch()
-      } : null,
+      git: this.gitIntegration
+        ? {
+          enabled: this.gitIntegration.isEnabled(),
+          branch: this.gitIntegration.getCurrentBranch()
+        }
+        : null,
       sandbox: this.sandboxExecutor ? this.sandboxExecutor.getStatus() : null,
       approvals: this.approvalWorkflow ? this.approvalWorkflow.getStats() : null,
       vectorMemory: this.vectorMemory ? this.vectorMemory.getStats() : null,
@@ -384,11 +404,13 @@ class TUISession extends EventEmitter {
    * Git 操作
    */
   gitStatus () {
-    return this.gitIntegration ? {
-      branch: this.gitIntegration.getCurrentBranch(),
-      changedFiles: this.gitIntegration.getChangedFiles(),
-      log: this.gitIntegration.getLog(10)
-    } : null;
+    return this.gitIntegration
+      ? {
+        branch: this.gitIntegration.getCurrentBranch(),
+        changedFiles: this.gitIntegration.getChangedFiles(),
+        log: this.gitIntegration.getLog(10)
+      }
+      : null;
   }
 
   /**

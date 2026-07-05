@@ -376,14 +376,14 @@ class TaskSplitterAgent extends BaseAgent {
   _identifyCoreModules (taskDescription, complexity) {
     const modules = [];
     const moduleKeywords = {
-      '数据层': ['数据', '存储', '数据库', '模型', 'schema', '持久化'],
-      '业务逻辑': ['逻辑', '算法', '计算', '处理', '业务', '规则'],
-      '接口层': ['API', '接口', '路由', 'endpoint', 'handler', 'controller'],
-      'UI层': ['界面', 'UI', '前端', '页面', '组件', '视图', 'render'],
-      '安全模块': ['安全', '认证', '授权', '加密', 'auth', '权限'],
-      '测试模块': ['测试', 'test', '验证', '验收', '断言'],
-      '配置模块': ['配置', 'config', '环境', 'settings'],
-      '工具模块': ['工具', 'helper', 'utils', '辅助']
+      数据层: ['数据', '存储', '数据库', '模型', 'schema', '持久化'],
+      业务逻辑: ['逻辑', '算法', '计算', '处理', '业务', '规则'],
+      接口层: ['API', '接口', '路由', 'endpoint', 'handler', 'controller'],
+      UI层: ['界面', 'UI', '前端', '页面', '组件', '视图', 'render'],
+      安全模块: ['安全', '认证', '授权', '加密', 'auth', '权限'],
+      测试模块: ['测试', 'test', '验证', '验收', '断言'],
+      配置模块: ['配置', 'config', '环境', 'settings'],
+      工具模块: ['工具', 'helper', 'utils', '辅助']
     };
 
     for (const [module, keywords] of Object.entries(moduleKeywords)) {
@@ -409,11 +409,11 @@ class TaskSplitterAgent extends BaseAgent {
 
     // 基于模块名推断依赖
     const depRules = {
-      '接口层': ['业务逻辑', '数据层'],
-      'UI层': ['接口层', '业务逻辑'],
-      '业务逻辑': ['数据层'],
-      '安全模块': ['配置模块'],
-      '测试模块': ['业务逻辑', '接口层']
+      接口层: ['业务逻辑', '数据层'],
+      UI层: ['接口层', '业务逻辑'],
+      业务逻辑: ['数据层'],
+      安全模块: ['配置模块'],
+      测试模块: ['业务逻辑', '接口层']
     };
 
     for (const [from, targets] of Object.entries(depRules)) {

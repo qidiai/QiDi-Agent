@@ -616,18 +616,18 @@ class TaskExecutor {
     const criteriaStr = Array.isArray(criteria) ? criteria.join('\n') : (typeof criteria === 'string' ? criteria : '无');
 
     let desc = `## 任务：${task.title}\n${task.description || ''}\n\n`;
-    desc += `### 🔷 你主要负责的模块\n`;
+    desc += '### 🔷 你主要负责的模块\n';
     desc += `模块名称: ${primaryModule.title || primaryModule.id || '主模块'}\n`;
     desc += `模块描述: ${primaryModule.description || primaryModule.content || primaryModule.title || ''}\n`;
     desc += `验收标准: ${criteriaStr}\n`;
     desc += `约束: ${JSON.stringify(context.constraints || {}, null, 2) || '无'}\n\n`;
 
     if (otherModules.length > 0) {
-      desc += `### 🔗 相邻模块接口契约（只读参考，请勿实现这些模块）\n`;
+      desc += '### 🔗 相邻模块接口契约（只读参考，请勿实现这些模块）\n';
       for (const m of otherModules) {
         desc += `- ${m.title}: ${m.contracts.length > 0 ? m.contracts.join(', ') : '（接口摘要不可用）'}\n`;
       }
-      desc += `\n⚠️ 请仅实现你负责的模块，确保与上述契约兼容。\n`;
+      desc += '\n⚠️ 请仅实现你负责的模块，确保与上述契约兼容。\n';
     }
 
     desc += `\n### 已有代码\n${context.previousCode || '无'}`;
@@ -767,28 +767,28 @@ class TaskExecutor {
 
     // ═══ 契约驱动：传递必须实现的接口和可依赖的接口 ═══
     if (task.producesContracts && task.producesContracts.length > 0) {
-      desc += `\n\n### 🔒 必须实现的接口契约（你必须实现以下接口，签名不可更改）\n`;
+      desc += '\n\n### 🔒 必须实现的接口契约（你必须实现以下接口，签名不可更改）\n';
       for (const contract of task.producesContracts) {
         desc += `- ${contract}\n`;
       }
-      desc += `\n⚠️ 你的代码必须严格实现上述接口，函数名、参数名、返回类型必须完全匹配。\n`;
+      desc += '\n⚠️ 你的代码必须严格实现上述接口，函数名、参数名、返回类型必须完全匹配。\n';
     }
 
     if (task.requiredContracts && task.requiredContracts.length > 0) {
-      desc += `\n\n### 📎 可依赖的接口契约（以下接口已由其他模块实现，你可以直接调用）\n`;
+      desc += '\n\n### 📎 可依赖的接口契约（以下接口已由其他模块实现，你可以直接调用）\n';
       for (const contract of task.requiredContracts) {
         desc += `- ${contract}\n`;
       }
-      desc += `\n⚠️ 请基于上述接口编写调用代码，不要重新实现这些接口。\n`;
+      desc += '\n⚠️ 请基于上述接口编写调用代码，不要重新实现这些接口。\n';
     }
 
     // ═══ 增量上下文：传递前序子任务的接口摘要（不传实现，保护隐私）═══
     if (context.previousInterfaceSummaries && context.previousInterfaceSummaries.length > 0) {
-      desc += `\n\n### 📋 前序模块接口摘要（只读参考，帮助你与已有模块兼容）\n`;
+      desc += '\n\n### 📋 前序模块接口摘要（只读参考，帮助你与已有模块兼容）\n';
       for (const summary of context.previousInterfaceSummaries) {
         desc += `\n**${summary.taskId}: ${summary.title}**\n`;
         if (summary.functions && summary.functions.length > 0) {
-          desc += `函数:\n`;
+          desc += '函数:\n';
           for (const fn of summary.functions.slice(0, 10)) {
             desc += `  - ${fn.signature || fn.name}\n`;
           }
@@ -797,7 +797,7 @@ class TaskExecutor {
           }
         }
         if (summary.classes && summary.classes.length > 0) {
-          desc += `类/结构体:\n`;
+          desc += '类/结构体:\n';
           for (const cls of summary.classes.slice(0, 5)) {
             desc += `  - ${cls.signature || cls.name}\n`;
           }
@@ -1140,7 +1140,7 @@ console.log('✓ 快速测试完成');
       python: `# Auto-generated quick test — ${timestamp}
 import ast, sys
 
-source_code = '''${sourceCode.replace(/'''/g, "'''")}'''
+source_code = '''${sourceCode.replace(/'''/g, '\'\'\'')}'''
 
 try:
     ast.parse(source_code)

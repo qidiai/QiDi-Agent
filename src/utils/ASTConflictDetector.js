@@ -46,7 +46,7 @@ const LANG_PATTERNS = {
     decorator: /@(\w+)/g
   },
   c: {
-    functionDef: /^\s*(?:static\s+|extern\s+|inline\s+)*(\w[\w\s\*]*?)\s+(\w+)\s*\(([^)]*)\)/gm,
+    functionDef: /^\s*(?:static\s+|extern\s+|inline\s+)*(\w[\w\s*]*?)\s+(\w+)\s*\(([^)]*)\)/gm,
     structDef: /(?:typedef\s+)?struct\s+(\w+)\s*\{/g,
     typedefDef: /typedef\s+.*?\s+(\w+)\s*;/g,
     includeDef: /#include\s*[<"]([^>"]+)[>"]/g,
@@ -113,11 +113,14 @@ class SymbolExtractor {
       patterns.functionDef.lastIndex = 0;
       while ((match = patterns.functionDef.exec(code)) !== null) {
         const name = lang === 'c' || lang === 'cpp' || lang === 'java'
-          ? match[2] : match[1];
+          ? match[2]
+          : match[1];
         const params = lang === 'c' || lang === 'cpp' || lang === 'java'
-          ? match[3] : (match[2] || '');
+          ? match[3]
+          : (match[2] || '');
         const returnType = lang === 'c' || lang === 'cpp' || lang === 'java'
-          ? match[1] : undefined;
+          ? match[1]
+          : undefined;
         symbols.functions.push({
           name,
           params: SymbolExtractor._parseParams(params),

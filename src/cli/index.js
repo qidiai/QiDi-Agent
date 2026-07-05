@@ -934,10 +934,10 @@ program
       orch.setOrchestrationMode(options.mode);
       const modeNames = { auto: '自适应（全自动）', manual: '手动（用户控制）', hybrid: '混合（推荐+确认）' };
       console.log(chalk.green(`✅ 编排模式已切换: ${modeNames[options.mode]}`));
-      console.log(chalk.gray(`\n说明:`));
-      console.log(chalk.gray(`  auto: 系统分析任务后自动应用最佳工具+策略+模式`));
-      console.log(chalk.gray(`  manual: 完全跳过推荐，用户自选工具+策略+模式`));
-      console.log(chalk.gray(`  hybrid: 系统推荐但需用户确认后才应用（默认）`));
+      console.log(chalk.gray('\n说明:'));
+      console.log(chalk.gray('  auto: 系统分析任务后自动应用最佳工具+策略+模式'));
+      console.log(chalk.gray('  manual: 完全跳过推荐，用户自选工具+策略+模式'));
+      console.log(chalk.gray('  hybrid: 系统推荐但需用户确认后才应用（默认）'));
       console.log('');
       return;
     }
@@ -1026,13 +1026,13 @@ program
   .option('-w, --workspace <dir>', '工作目录', './workspace')
   .action(async (options) => {
     const ChatSession = require('./ChatSession');
-    
+
     const session = new ChatSession({
       mode: options.mode,
       provider: options.provider || undefined,
       workspaceDir: options.workspace
     });
-    
+
     await session.start();
   });
 

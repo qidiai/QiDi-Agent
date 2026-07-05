@@ -128,7 +128,7 @@ class SelfEvolveAdapter extends BaseToolAdapter {
     // 提取代码路径或代码内容
     const codeInfo = this._extractCodeInfo(task);
     let codeContent = codeInfo.content;
-    let codePath = codeInfo.path;
+    const codePath = codeInfo.path;
     let language = options.language || 'python';
 
     // 从文件读取代码内容
@@ -170,7 +170,7 @@ class SelfEvolveAdapter extends BaseToolAdapter {
     // 处理输出
     const evolvedCodePath = path.join(outputDir, 'evolved_code.py');
     let evolvedContent = '';
-    let generatedFiles = [];
+    const generatedFiles = [];
 
     if (result.detectionResult) {
       // 写入检测报告
@@ -342,7 +342,7 @@ class SelfEvolveAdapter extends BaseToolAdapter {
     // 尝试从任务中提取代码路径或代码内容
     const pathMatch = task.match(/path:\s*([^\s]+)/);
     const pathMatch2 = task.match(/file:\s*([^\s]+)/);
-    const codeMatch = task.match(/code:\s*["\']([^"\']*)["\']/);
+    const codeMatch = task.match(/code:\s*["']([^"']*)["']/);
 
     if (pathMatch) {
       return { path: pathMatch[1], content: null };
@@ -361,7 +361,7 @@ class SelfEvolveAdapter extends BaseToolAdapter {
       const result = spawnSync('python3', args, {
         encoding: 'utf-8',
         timeout: 30000,
-        cwd: cwd
+        cwd
       });
 
       const output = result.stdout + result.stderr;

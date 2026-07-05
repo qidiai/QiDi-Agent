@@ -336,11 +336,11 @@ class WebUIServer {
     this.app.post('/api/smart-send', async (req, res) => {
       try {
         const { task, models, constraints, mode, forceMode } = req.body;
-        
+
         const TaskClassifier = require('../utils/TaskClassifier');
         const classifier = new TaskClassifier();
         const classification = classifier.classify(task);
-        
+
         logger.info(`[智能发送] task="${task}", type=${classification.type}, confidence=${classification.confidence}`);
 
         if (forceMode === 'task' || classification.type === 'programming') {
@@ -1664,8 +1664,8 @@ class WebUIServer {
       logger.info(`[任务分类] type=${classification.type}, confidence=${classification.confidence}`);
 
       if (classification.type === 'greeting' || classification.type === 'chat') {
-        logger.info(`[任务分类] 非编程任务，切换到聊天模式`);
-        
+        logger.info('[任务分类] 非编程任务，切换到聊天模式');
+
         const enabledAgents = this.agentHub?.getEnabledAgents?.() || [];
         if (enabledAgents.length === 0) {
           this._activeTasks.set(taskId, {
@@ -1680,7 +1680,7 @@ class WebUIServer {
 
         const agent = enabledAgents[0];
         const provider = agent.provider;
-        
+
         if (!provider || typeof provider.chat !== 'function') {
           this._activeTasks.set(taskId, {
             ...this._activeTasks.get(taskId),
@@ -1699,7 +1699,7 @@ class WebUIServer {
         });
 
         const systemPrompt = '你叫 QIDI Agent（启迪智能体），是一个多模型协同编程助手。你的核心能力包括：\n\n1. 多模型协同：同时调用多个 AI 模型（Ollama、OpenAI、Claude 等）协同完成编程任务\n2. 智能路由：根据任务类型自动选择合适的模型和工具\n3. 代码生成：支持 C、Python、TypeScript、Go、Rust、Java 等多语言代码生成\n4. 隐私模式：代码碎片化分发，敏感信息不出本地\n5. 高质量模式：调用多个云端模型协同编排，输出代码质量对标国际前沿模型\n6. 任务编排：自动分解复杂任务，按序执行子任务\n7. 文件操作：可以读取、分析、修改、创建本地文件和目录\n\n关键能力说明：\n- 当用户提供文件路径（如 C:\\Users\\xxx\\project 或 ./workspace）时，你可以直接分析该路径下的文件\n- 你可以读取项目的目录结构、源代码文件内容\n- 你可以理解项目的业务逻辑、架构设计和代码实现\n- 你可以生成、修改、优化代码文件\n- 你有完整的文件系统访问能力，不是只能通过文本对话\n\n回答策略：\n- 先理解用户意图，再回答。不要急于输出，先分析用户的核心需求\n- 当用户提供文件路径时，立即开始分析，不要询问"你无法访问本地文件"\n- 复杂问题先拆解，再逐一解决。主动识别潜在问题并提醒用户\n- 代码生成前，先确认需求细节；实现后主动提供测试建议\n- 不确定时，诚实告知用户，而非猜测或编造\n- 定期总结进度和下一步计划\n- 保持对话上下文连贯，记住之前的对话内容\n\n身份要求：\n- 始终以 QIDI Agent 的身份回应，不要说"我是某某模型"\n- 保持友好、专业的态度，使用自然语言回复';
-        
+
         const chatResult = await provider.chat([
           { role: 'system', content: systemPrompt },
           { role: 'user', content: task }
@@ -1722,14 +1722,14 @@ class WebUIServer {
         logger.info(`[任务启动] 用户指定模型: ${models.join(', ')}`);
         const specifiedAgent = this.agentHub?.getAgent?.(models[0]);
         logger.info(`[任务启动] getAgent('${models[0]}') 结果: ${specifiedAgent ? '找到' : '未找到'}`);
-        
+
         if (specifiedAgent) {
           resolvedProvider = specifiedAgent.provider;
           logger.info(`[任务启动] 使用 agentHub 中的 provider: ${resolvedProvider?.name || '未知'}`);
         } else {
           const agentConfig = this.agentHub?.config?.agents?.[models[0]];
           logger.info(`[任务启动] 从配置中查找: ${agentConfig ? '找到配置' : '未找到配置'}`);
-          
+
           if (agentConfig) {
             try {
               const ProviderFactory = require('../providers');
@@ -1751,7 +1751,7 @@ class WebUIServer {
         }
         resolvedProvider = enabledAgents[0]?.provider || null;
       }
-      
+
       logger.info(`[任务启动] 最终使用的 provider: ${resolvedProvider?.name || 'null'}`);
 
       const executor = new RealTaskExecutor({

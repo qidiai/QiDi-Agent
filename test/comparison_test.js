@@ -13,9 +13,9 @@ const COMPLEX_TASK = `用Python写一个函数，实现快速排序算法，要�
 5. 包含测试用例验证正确性`;
 
 async function runTest (name, adapterFilter = null, executionMode = 'privacy') {
-  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`测试: ${name}`);
-  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
@@ -49,7 +49,7 @@ async function runTest (name, adapterFilter = null, executionMode = 'privacy') {
     let totalQualityScore = 0;
     let codeCount = 0;
     let generatedCode = '';
-    let usedTools = [];
+    const usedTools = [];
 
     for (const task of completedTasks) {
       if (task.result?.codeBlocks?.length > 0) {
@@ -67,7 +67,7 @@ async function runTest (name, adapterFilter = null, executionMode = 'privacy') {
     const avgQualityScore = completedTasks.length > 0 ? Math.round(totalQualityScore / completedTasks.length) : 0;
     const codeLines = generatedCode.split('\n').length;
 
-    console.log(`✅ 任务完成`);
+    console.log('✅ 任务完成');
     console.log(`⏱️  耗时: ${(duration / 1000).toFixed(2)}秒`);
     console.log(`📊 完成任务: ${completedTasks.length}个`);
     console.log(`❌ 失败任务: ${failedTasks.length}个`);
@@ -86,7 +86,6 @@ async function runTest (name, adapterFilter = null, executionMode = 'privacy') {
       avgQualityScore,
       success: true
     };
-
   } catch (e) {
     console.log(`❌ 任务失败: ${e.message}`);
     return {
@@ -105,7 +104,7 @@ async function runTest (name, adapterFilter = null, executionMode = 'privacy') {
 }
 
 async function main () {
-  console.log(`\n🚀 质量对比测试 - DeepSeek`);
+  console.log('\n🚀 质量对比测试 - DeepSeek');
   console.log('='.repeat(60));
   console.log(`测试任务: ${COMPLEX_TASK.substring(0, 80)}...`);
 
@@ -156,7 +155,7 @@ async function main () {
     } else if (improvement < 0) {
       console.log(`  ❌ 工具模式比纯AI模式质量下降: ${Math.abs(improvement)}分`);
     } else {
-      console.log(`  ⚠️ 工具模式与纯AI模式质量持平`);
+      console.log('  ⚠️ 工具模式与纯AI模式质量持平');
     }
   }
 

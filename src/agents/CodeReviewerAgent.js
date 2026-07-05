@@ -78,7 +78,7 @@ class CodeReviewerAgent extends BaseAgent {
 
     // 历史反馈避免重复
     if (enhancedContext.recentFeedback && enhancedContext.recentFeedback.length > 0) {
-      prompt += `\n【历史审查反馈（避免重复）】\n`;
+      prompt += '\n【历史审查反馈（避免重复）】\n';
       prompt += enhancedContext.recentFeedback.map(f => `- ${f}`).join('\n');
       prompt += '\n';
     }

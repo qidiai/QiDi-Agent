@@ -38,7 +38,7 @@ async function testAIProvider () {
 
   const duration = Date.now() - startTime;
 
-  console.log(`✅ 任务完成`);
+  console.log('✅ 任务完成');
   console.log(`⏱️  耗时: ${(duration / 1000).toFixed(2)}秒`);
   console.log(`📄 代码块: ${writeResult.codeBlocks?.length || 0}个`);
   console.log(`📈 质量评分: ${qualityResult.qualityScore || 0}分`);
@@ -85,7 +85,7 @@ async function testTool (toolName) {
       console.log(`❌ 连接失败: ${connectResult.message}`);
       return { name: `单工具模式 - ${toolName}`, success: false, error: '连接失败' };
     }
-    console.log(`✅ 连接成功`);
+    console.log('✅ 连接成功');
 
     const executeResult = await adapter.execute(TEST_TASK, {
       taskId: `test_${toolName}`,
@@ -110,7 +110,7 @@ async function testTool (toolName) {
 
     const duration = Date.now() - startTime;
 
-    console.log(`✅ 任务完成`);
+    console.log('✅ 任务完成');
     console.log(`⏱️  耗时: ${(duration / 1000).toFixed(2)}秒`);
     console.log(`📄 代码块: ${executeResult.codeBlocks?.length || 0}个`);
     console.log(`📈 质量评分: ${qualityScore}分`);
@@ -122,7 +122,6 @@ async function testTool (toolName) {
       qualityScore,
       success: true
     };
-
   } catch (e) {
     console.log(`❌ 错误: ${e.message}`);
     return { name: `单工具模式 - ${toolName}`, success: false, error: e.message };
@@ -130,7 +129,7 @@ async function testTool (toolName) {
 }
 
 async function main () {
-  console.log(`\n🚀 简化质量对比测试`);
+  console.log('\n🚀 简化质量对比测试');
   console.log('='.repeat(60));
   console.log(`测试任务: ${TEST_TASK}`);
 

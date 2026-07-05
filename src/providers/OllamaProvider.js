@@ -202,7 +202,9 @@ class OllamaProvider extends BaseProvider {
       const req = http.request(reqOptions, (res) => {
         if (res.statusCode >= 400) {
           let body = '';
-          res.on('data', (c) => { body += c; });
+          res.on('data', (c) => {
+            body += c;
+          });
           res.on('end', () => {
             if (!settled) {
               settled = true;

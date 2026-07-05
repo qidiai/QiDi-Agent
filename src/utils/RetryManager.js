@@ -15,14 +15,14 @@ const logger = require('../utils/Logger')('RetryManager');
 // ── 错误类型 ──
 
 const ErrorType = {
-  TRANSIENT: 'transient',       // 瞬时错误：网络超时、服务暂不可用 → 重试
-  RATE_LIMIT: 'rate_limit',     // 速率限制 → 等待后重试
-  LOGICAL: 'logical',          // 逻辑错误：代码bug、参数错误 → 不重试
-  AUTH: 'auth',                // 认证错误：API Key无效 → 不重试
-  QUOTA: 'quota',              // 配额耗尽 → 不重试（或等待长时间）
-  PARSE: 'parse',              // 解析错误：JSON解析失败 → 重试（降低temperature）
-  TIMEOUT: 'timeout',          // 超时 → 重试（增加超时时间）
-  UNKNOWN: 'unknown'           // 未知 → 保守重试
+  TRANSIENT: 'transient', // 瞬时错误：网络超时、服务暂不可用 → 重试
+  RATE_LIMIT: 'rate_limit', // 速率限制 → 等待后重试
+  LOGICAL: 'logical', // 逻辑错误：代码bug、参数错误 → 不重试
+  AUTH: 'auth', // 认证错误：API Key无效 → 不重试
+  QUOTA: 'quota', // 配额耗尽 → 不重试（或等待长时间）
+  PARSE: 'parse', // 解析错误：JSON解析失败 → 重试（降低temperature）
+  TIMEOUT: 'timeout', // 超时 → 重试（增加超时时间）
+  UNKNOWN: 'unknown' // 未知 → 保守重试
 };
 
 // ── 错误分类规则 ──

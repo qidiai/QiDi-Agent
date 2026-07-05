@@ -206,7 +206,9 @@ class OpenAIProvider extends BaseProvider {
       const req = httpModule.request(reqOptions, (res) => {
         if (res.statusCode >= 400) {
           let body = '';
-          res.on('data', (c) => { body += c; });
+          res.on('data', (c) => {
+            body += c;
+          });
           res.on('end', () => {
             if (!settled) {
               settled = true;

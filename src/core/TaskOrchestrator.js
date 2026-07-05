@@ -14,6 +14,7 @@ const TaskScheduler = require('./TaskScheduler');
 const TaskExecutor = require('./TaskExecutor');
 const ToolLearning = require('./ToolLearning');
 const AdaptiveOrchestrator = require('./AdaptiveOrchestrator');
+const logger = require('../utils/Logger').createLogger('TaskOrchestrator');
 
 /**
  * 任务编排器（门面）：负责完整的任务生命周期管理。
@@ -541,7 +542,7 @@ class TaskOrchestrator extends EventEmitter {
 
       // ═══ G1: 任务完成后 — Git 提交 ═══
       if (this.gitIntegration && this.gitIntegration.isEnabled() && finalResult.successRate >= 60) {
-        const commitHash = this.gitIntegration.commitChanges(this._currentRunId, 
+        const commitHash = this.gitIntegration.commitChanges(this._currentRunId,
           `Qidi Agent: 任务完成 (成功率 ${finalResult.successRate}%)`);
         if (commitHash) {
           this.emit('git:committed', { hash: commitHash });
@@ -580,10 +581,16 @@ class TaskOrchestrator extends EventEmitter {
       // ═══ P4: 自适应学习闭环 — 任务完成后回写结果 ═══
       if (this.adaptiveOrchestrator && adaptiveRecommendation) {
         try {
+          const adaptiveQualityScores = (finalResult.tasks || [])
+            .filter(t => t.qualityScore !== null && t.qualityScore !== undefined)
+            .map(t => t.qualityScore);
+          const adaptiveAvgQuality = adaptiveQualityScores.length > 0
+            ? Math.round(adaptiveQualityScores.reduce((a, b) => a + b, 0) / adaptiveQualityScores.length)
+            : 0;
           this.adaptiveOrchestrator.recordOutcome(
             adaptiveRecommendation.timestamp,
             finalResult.successRate >= 0.6,
-            avgQuality,
+            adaptiveAvgQuality,
             {
               taskType: adaptiveRecommendation.features?.taskType || 'unknown',
               language: adaptiveRecommendation.features?.language || 'unknown',
@@ -591,7 +598,7 @@ class TaskOrchestrator extends EventEmitter {
               successRate: finalResult.successRate
             }
           );
-          logger.info(`[Adaptive] 学习闭环已更新: 推荐ID=${adaptiveRecommendation.timestamp}, 成功率=${finalResult.successRate}`);
+          this.emit('adaptive:learning', { timestamp: adaptiveRecommendation.timestamp, successRate: finalResult.successRate });
         } catch (e) {
           logger.warn('[Adaptive] 学习闭环失败: ' + e.message);
         }
@@ -851,10 +858,12 @@ class TaskOrchestrator extends EventEmitter {
       cacheStats: this.cacheStore.getStats(),
       // G1: 增强模块状态
       budget: this.budgetManager ? this.budgetManager.generateReport() : null,
-      git: this.gitIntegration ? {
-        enabled: this.gitIntegration.isEnabled(),
-        branch: this.gitIntegration.getCurrentBranch()
-      } : null,
+      git: this.gitIntegration
+        ? {
+          enabled: this.gitIntegration.isEnabled(),
+          branch: this.gitIntegration.getCurrentBranch()
+        }
+        : null,
       approvals: this.approvalWorkflow ? this.approvalWorkflow.getStats() : null,
       vectorMemory: this.vectorMemory ? this.vectorMemory.getStats() : null,
       mcpServers: this.mcpClient ? this.mcpClient.getStatus() : []

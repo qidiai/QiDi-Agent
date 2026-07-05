@@ -15,7 +15,7 @@ const FileManager = require('../utils/FileManager');
 const ConfigManager = require('./ConfigManager');
 
 class ChatSession {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.workspaceDir = options.workspaceDir || './workspace';
     this.mode = options.mode || 'privacy';
     this.provider = options.provider || process.env.MODEL_PROVIDER || 'ollama';
@@ -35,12 +35,12 @@ class ChatSession {
     this._loadHistory();
   }
 
-  _ensureDirs() {
+  _ensureDirs () {
     if (!fs.existsSync(this._qidiHome)) fs.mkdirSync(this._qidiHome, { recursive: true });
     if (!fs.existsSync(this.workspaceDir)) fs.mkdirSync(this.workspaceDir, { recursive: true });
   }
 
-  _loadHistory() {
+  _loadHistory () {
     try {
       if (fs.existsSync(this._historyFile)) {
         this.chatHistory = safeJsonParse(fs.readFileSync(this._historyFile, 'utf-8'), []).slice(-50);
@@ -50,13 +50,13 @@ class ChatSession {
     }
   }
 
-  _saveHistory() {
+  _saveHistory () {
     try {
       fs.writeFileSync(this._historyFile, JSON.stringify(this.chatHistory.slice(-50), null, 2), 'utf-8');
     } catch (_) { /* ignore */ }
   }
 
-  async start() {
+  async start () {
     console.log(chalk.cyan.bold('\n╔══════════════════════════════════════════════════════╗'));
     console.log(chalk.cyan.bold('║       Qidi Agent Chat - 聊天式编程助手              ║'));
     console.log(chalk.cyan.bold('╚══════════════════════════════════════════════════════╝'));
@@ -86,12 +86,12 @@ class ChatSession {
     this._showPrompt();
   }
 
-  _showPrompt() {
+  _showPrompt () {
     this.rl.setPrompt(chalk.green.bold('\n  You: '));
     this.rl.prompt(true);
   }
 
-  async _ensureProvider() {
+  async _ensureProvider () {
     try {
       this.providerInstance = ProviderFactory.create(this.provider);
       const ok = await this.providerInstance.checkConnection();
@@ -105,7 +105,7 @@ class ChatSession {
     }
   }
 
-  async _autoScanTools() {
+  async _autoScanTools () {
     try {
       this.toolScanner = new ToolScanner();
       this.toolScanner.registerAdapters(AdapterFactory.createAll());
@@ -118,7 +118,7 @@ class ChatSession {
     } catch (_) { /* ignore */ }
   }
 
-  _completer(line) {
+  _completer (line) {
     const commands = [
       '/help', '/exit', '/quit', '/clear', '/cls',
       '/scan', '/tools', '/status', '/mode', '/provider',
@@ -131,7 +131,7 @@ class ChatSession {
     return [hits.length ? hits : [], line];
   }
 
-  async _onLine(input) {
+  async _onLine (input) {
     const raw = input;
     const trimmed = raw.trim();
 
@@ -144,13 +144,13 @@ class ChatSession {
     await this._dispatch(trimmed);
   }
 
-  _onClose() {
+  _onClose () {
     this._saveHistory();
     console.log(chalk.yellow('\n  👋 再见！\n'));
     process.exit(0);
   }
 
-  async _dispatch(input) {
+  async _dispatch (input) {
     if (input.startsWith('/')) {
       await this._handleCommand(input.slice(1));
       return;
@@ -159,133 +159,133 @@ class ChatSession {
     await this._handleChat(input);
   }
 
-  async _handleCommand(cmdStr) {
+  async _handleCommand (cmdStr) {
     const [cmd, ...args] = cmdStr.split(/\s+/);
     const c = cmd.toLowerCase();
 
     switch (c) {
-      case 'exit':
-      case 'quit':
-        this._onClose();
-        return;
+    case 'exit':
+    case 'quit':
+      this._onClose();
+      return;
 
-      case 'help':
-        this._printHelp();
-        break;
+    case 'help':
+      this._printHelp();
+      break;
 
-      case 'clear':
-      case 'cls':
-        console.clear && console.clear();
-        break;
+    case 'clear':
+    case 'cls':
+      console.clear && console.clear();
+      break;
 
-      case 'history':
-        this._printHistory();
-        break;
+    case 'history':
+      this._printHistory();
+      break;
 
-      case 'scan':
-        await this._cmdScan();
-        break;
+    case 'scan':
+      await this._cmdScan();
+      break;
 
-      case 'tools':
-        this._cmdTools();
-        break;
+    case 'tools':
+      this._cmdTools();
+      break;
 
-      case 'status':
-        this._cmdStatus();
-        break;
+    case 'status':
+      this._cmdStatus();
+      break;
 
-      case 'mode':
-        this._cmdMode(args);
-        break;
+    case 'mode':
+      this._cmdMode(args);
+      break;
 
-      case 'provider':
-        await this._cmdProvider(args);
-        break;
+    case 'provider':
+      await this._cmdProvider(args);
+      break;
 
-      case 'ls':
-        await this._cmdLs(args);
-        break;
+    case 'ls':
+      await this._cmdLs(args);
+      break;
 
-      case 'view':
-      case 'cat':
-        await this._cmdView(args);
-        break;
+    case 'view':
+    case 'cat':
+      await this._cmdView(args);
+      break;
 
-      case 'pwd':
-        console.log(chalk.gray('  ' + path.resolve(this.workspaceDir)));
-        break;
+    case 'pwd':
+      console.log(chalk.gray('  ' + path.resolve(this.workspaceDir)));
+      break;
 
-      case 'run':
-        await this._runTask(args.join(' '));
-        break;
+    case 'run':
+      await this._runTask(args.join(' '));
+      break;
 
-      case 'tasks':
-        this._printRecentTasks();
-        break;
+    case 'tasks':
+      this._printRecentTasks();
+      break;
 
-      case 'reports':
-        this._printReports();
-        break;
+    case 'reports':
+      this._printReports();
+      break;
 
-      case 'report':
-        await this._cmdReport(args);
-        break;
+    case 'report':
+      await this._cmdReport(args);
+      break;
 
-      case 'context':
-        this._printContext();
-        break;
+    case 'context':
+      this._printContext();
+      break;
 
-      case 'reset':
-        this.chatHistory = [];
-        this._saveHistory();
-        console.log(chalk.green('  ✅ 已重置聊天历史'));
-        break;
+    case 'reset':
+      this.chatHistory = [];
+      this._saveHistory();
+      console.log(chalk.green('  ✅ 已重置聊天历史'));
+      break;
 
-      case 'config':
-        this._printConfig();
-        break;
+    case 'config':
+      this._printConfig();
+      break;
 
-      case 'edit':
-        await this._cmdEdit(args);
-        break;
+    case 'edit':
+      await this._cmdEdit(args);
+      break;
 
-      case 'find':
-        await this._cmdFind(args);
-        break;
+    case 'find':
+      await this._cmdFind(args);
+      break;
 
-      case 'grep':
-        await this._cmdGrep(args);
-        break;
+    case 'grep':
+      await this._cmdGrep(args);
+      break;
 
-      case 'mkdir':
-        await this._cmdMkdir(args);
-        break;
+    case 'mkdir':
+      await this._cmdMkdir(args);
+      break;
 
-      case 'touch':
-        await this._cmdTouch(args);
-        break;
+    case 'touch':
+      await this._cmdTouch(args);
+      break;
 
-      case 'rm':
-        await this._cmdRm(args);
-        break;
+    case 'rm':
+      await this._cmdRm(args);
+      break;
 
-      case 'cd':
-        this._cmdCd(args);
-        break;
+    case 'cd':
+      this._cmdCd(args);
+      break;
 
-      case 'rename':
-        await this._cmdRename(args);
-        break;
+    case 'rename':
+      await this._cmdRename(args);
+      break;
 
-      default:
-        console.log(chalk.yellow('  ❓ 未知命令: ' + cmd));
-        console.log(chalk.gray('  输入 /help 查看可用命令'));
+    default:
+      console.log(chalk.yellow('  ❓ 未知命令: ' + cmd));
+      console.log(chalk.gray('  输入 /help 查看可用命令'));
     }
 
     this._showPrompt();
   }
 
-  async _handleChat(message) {
+  async _handleChat (message) {
     console.log(chalk.blue('\n  Qidi: '));
 
     let contextInfo = '';
@@ -294,7 +294,7 @@ class ChatSession {
       console.log(chalk.gray(`  🔍 检测到路径: ${pathMatch}`));
       contextInfo = await this._getContextFromPath(pathMatch);
       if (contextInfo) {
-        console.log(chalk.gray(`  📁 获取到上下文信息`));
+        console.log(chalk.gray('  📁 获取到上下文信息'));
         message = `${message}\n\n上下文信息：\n${contextInfo}`;
       }
     }
@@ -391,16 +391,16 @@ class ChatSession {
     this._showPrompt();
   }
 
-  _extractPath(message) {
+  _extractPath (message) {
     const patterns = [
-      /[A-Za-z]:[\\/][^\s<>:\"|?*\r\n]+/g,
-      /[A-Za-z]:\\[^\s<>:\"|?*\r\n]+/g,
-      /[A-Za-z]:\/[^\s<>:\"|?*\r\n]+/g,
-      /\/[^\s<>:\"|?*\r\n]+/g,
-      /~[\\/][^\s<>:\"|?*\r\n]+/g,
-      /\.\.[\\/][^\s<>:\"|?*\r\n]+/g,
-      /\.[\\/][^\s<>:\"|?*\r\n]+/g,
-      /[^\\/]+[\\/][^\s<>:\"|?*\r\n]+/g
+      /[A-Za-z]:[\\/][^\s<>:"|?*\r\n]+/g,
+      /[A-Za-z]:\\[^\s<>:"|?*\r\n]+/g,
+      /[A-Za-z]:\/[^\s<>:"|?*\r\n]+/g,
+      /\/[^\s<>:"|?*\r\n]+/g,
+      /~[\\/][^\s<>:"|?*\r\n]+/g,
+      /\.\.[\\/][^\s<>:"|?*\r\n]+/g,
+      /\.[\\/][^\s<>:"|?*\r\n]+/g,
+      /[^\\/]+[\\/][^\s<>:"|?*\r\n]+/g
     ];
 
     for (const pattern of patterns) {
@@ -412,7 +412,7 @@ class ChatSession {
     return null;
   }
 
-  async _getContextFromPath(pathStr) {
+  async _getContextFromPath (pathStr) {
     try {
       const fs = require('fs');
       const path = require('path');
@@ -453,12 +453,12 @@ class ChatSession {
     }
   }
 
-  _looksLikeTask(message) {
+  _looksLikeTask (message) {
     const keywords = ['创建', '编写', '实现', '修复', '开发', '代码', '程序', '脚本', 'build', 'create', 'write', 'fix', 'implement', 'code'];
     return keywords.some(k => message.includes(k));
   }
 
-  async _runTask(taskDescription) {
+  async _runTask (taskDescription) {
     if (!taskDescription) {
       console.log(chalk.yellow('  用法: /run <任务描述>'));
       return;
@@ -502,7 +502,7 @@ class ChatSession {
     }
   }
 
-  _previewFiles(outputDir) {
+  _previewFiles (outputDir) {
     if (!outputDir) return;
     try {
       const fm = new FileManager(outputDir);
@@ -516,9 +516,9 @@ class ChatSession {
     } catch (_) { /* ignore */ }
   }
 
-  _printHelp() {
+  _printHelp () {
     console.log(chalk.cyan('\n  📖 命令帮助\n'));
-    
+
     console.log(chalk.bold.yellow('  💬 基础命令'));
     const basicRows = [
       ['/help', '显示本帮助'],
@@ -577,7 +577,7 @@ class ChatSession {
     console.log(chalk.gray('\n  💡 直接输入消息即可聊天，输入路径自动获取上下文\n'));
   }
 
-  _printHistory() {
+  _printHistory () {
     if (this.chatHistory.length === 0) {
       console.log(chalk.gray('  📭 暂无聊天历史'));
       return;
@@ -590,7 +590,7 @@ class ChatSession {
     console.log('');
   }
 
-  async _cmdScan() {
+  async _cmdScan () {
     const spinner = ora('  🔍 扫描中...').start();
     try {
       this.toolScanner = new ToolScanner();
@@ -608,7 +608,7 @@ class ChatSession {
     }
   }
 
-  _cmdTools() {
+  _cmdTools () {
     if (!this.scanned) {
       console.log(chalk.yellow('  ⚠️ 请先执行 /scan'));
       return;
@@ -624,7 +624,7 @@ class ChatSession {
     console.log('');
   }
 
-  _cmdStatus() {
+  _cmdStatus () {
     console.log(chalk.cyan('\n  📊 当前状态:'));
     console.log(chalk.gray('  模式    : ' + (this.mode === 'privacy' ? '🔒 隐私模式' : '✨ 高质量模式')));
     console.log(chalk.gray('  提供商  : ' + (this.providerInstance ? this.providerInstance.name : this.provider)));
@@ -634,7 +634,7 @@ class ChatSession {
     console.log('');
   }
 
-  _cmdMode(args) {
+  _cmdMode (args) {
     const m = args[0];
     if (m === 'privacy' || m === 'quality') {
       this.mode = m;
@@ -644,7 +644,7 @@ class ChatSession {
     }
   }
 
-  async _cmdProvider(args) {
+  async _cmdProvider (args) {
     const p = args[0];
     if (!p) {
       console.log(chalk.gray('  当前提供商: ' + this.provider));
@@ -664,7 +664,7 @@ class ChatSession {
     }
   }
 
-  async _cmdLs(args) {
+  async _cmdLs (args) {
     const sub = args[0] || '.';
     try {
       const fm = new FileManager(this.workspaceDir);
@@ -677,7 +677,7 @@ class ChatSession {
     }
   }
 
-  async _cmdView(args) {
+  async _cmdView (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /view <路径>'));
       return;
@@ -712,15 +712,15 @@ class ChatSession {
     }
   }
 
-  _printRecentTasks() {
+  _printRecentTasks () {
     console.log(chalk.gray('  📭 暂无任务记录，使用 /run <任务> 执行任务'));
   }
 
-  _printReports() {
+  _printReports () {
     console.log(chalk.gray('  📭 暂无报告，执行任务后会生成报告'));
   }
 
-  async _cmdReport(args) {
+  async _cmdReport (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /report <id>'));
       return;
@@ -728,7 +728,7 @@ class ChatSession {
     console.log(chalk.yellow('  ⚠️ 报告功能开发中'));
   }
 
-  _printContext() {
+  _printContext () {
     console.log(chalk.cyan('\n  📚 上下文:'));
     console.log(chalk.gray('  聊天记录: ' + this.chatHistory.length + ' 条'));
     console.log(chalk.gray('  工作目录: ' + path.resolve(this.workspaceDir)));
@@ -736,7 +736,7 @@ class ChatSession {
     console.log('');
   }
 
-  _printConfig() {
+  _printConfig () {
     const config = this.configManager.getConfig();
     console.log(chalk.cyan('\n  ⚙️ 当前配置:'));
     console.log(chalk.gray('  执行模式: ' + config.executionMode));
@@ -745,7 +745,7 @@ class ChatSession {
     console.log('');
   }
 
-  async _cmdEdit(args) {
+  async _cmdEdit (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /edit <路径>'));
       return;
@@ -766,7 +766,7 @@ class ChatSession {
     }
   }
 
-  async _cmdFind(args) {
+  async _cmdFind (args) {
     const pattern = args[0];
     if (!pattern) {
       console.log(chalk.yellow('  用法: /find <文件名模式>'));
@@ -792,7 +792,7 @@ class ChatSession {
     }
   }
 
-  async _cmdGrep(args) {
+  async _cmdGrep (args) {
     const pattern = args[0];
     const target = args[1] || '.';
     if (!pattern) {
@@ -803,7 +803,7 @@ class ChatSession {
       const results = [];
       const searchDir = path.resolve(this.workspaceDir, target);
       this._grepRecursive(searchDir, new RegExp(pattern, 'gi'), results);
-      
+
       if (results.length === 0) {
         console.log(chalk.gray('  📭 未找到匹配内容'));
         return;
@@ -823,7 +823,7 @@ class ChatSession {
     }
   }
 
-  _grepRecursive(dir, pattern, results) {
+  _grepRecursive (dir, pattern, results) {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
@@ -845,7 +845,7 @@ class ChatSession {
     } catch (_) { /* ignore permission issues */ }
   }
 
-  async _cmdMkdir(args) {
+  async _cmdMkdir (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /mkdir <目录名>'));
       return;
@@ -859,7 +859,7 @@ class ChatSession {
     }
   }
 
-  async _cmdTouch(args) {
+  async _cmdTouch (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /touch <文件名>'));
       return;
@@ -877,7 +877,7 @@ class ChatSession {
     }
   }
 
-  async _cmdRm(args) {
+  async _cmdRm (args) {
     if (!args[0]) {
       console.log(chalk.yellow('  用法: /rm <路径>'));
       return;
@@ -901,7 +901,7 @@ class ChatSession {
     }
   }
 
-  _cmdCd(args) {
+  _cmdCd (args) {
     if (!args[0]) {
       console.log(chalk.gray('  当前目录: ' + path.resolve(this.workspaceDir)));
       return;
@@ -924,7 +924,7 @@ class ChatSession {
     }
   }
 
-  async _cmdRename(args) {
+  async _cmdRename (args) {
     if (args.length < 2) {
       console.log(chalk.yellow('  用法: /rename <旧名称> <新名称>'));
       return;

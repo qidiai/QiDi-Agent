@@ -41,45 +41,45 @@ const CODE_WRITER_PROMPT = `你是一位经验丰富的软件工程师，精通�
 
 const CODE_TEMPLATES = {
   c: {
-    main: `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n// {{DESCRIPTION}}\n\nint main(int argc, char *argv[]) {\n    // TODO: 实现主要逻辑\n    return 0;\n}\n`,
-    header: `#ifndef {{GUARD}}\n#define {{GUARD}}\n\n// {{DESCRIPTION}}\n\n// 函数声明\n\n#endif // {{GUARD}}\n`,
-    lib: `#include "{{HEADER}}"\n\n// 函数实现\n`
+    main: '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n// {{DESCRIPTION}}\n\nint main(int argc, char *argv[]) {\n    // TODO: 实现主要逻辑\n    return 0;\n}\n',
+    header: '#ifndef {{GUARD}}\n#define {{GUARD}}\n\n// {{DESCRIPTION}}\n\n// 函数声明\n\n#endif // {{GUARD}}\n',
+    lib: '#include "{{HEADER}}"\n\n// 函数实现\n'
   },
   cpp: {
-    main: `#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\n// {{DESCRIPTION}}\n\nint main() {\n    // TODO: 实现主要逻辑\n    return 0;\n}\n`,
-    header: `#pragma once\n\n#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\n// {{DESCRIPTION}}\n\n// 类/函数声明\n`,
-    class: `// {{DESCRIPTION}}\nclass {{CLASS_NAME}} {\npublic:\n    {{CLASS_NAME}}();\n    ~{{CLASS_NAME}}();\n\nprivate:\n    // 私有成员\n};\n`
+    main: '#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\n// {{DESCRIPTION}}\n\nint main() {\n    // TODO: 实现主要逻辑\n    return 0;\n}\n',
+    header: '#pragma once\n\n#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\n// {{DESCRIPTION}}\n\n// 类/函数声明\n',
+    class: '// {{DESCRIPTION}}\nclass {{CLASS_NAME}} {\npublic:\n    {{CLASS_NAME}}();\n    ~{{CLASS_NAME}}();\n\nprivate:\n    // 私有成员\n};\n'
   },
   python: {
-    main: `#!/usr/bin/env python3\n\"\"\"{{DESCRIPTION}}\"\"\"\n\nimport sys\nimport os\n\n\ndef main():\n    \"\"\"主函数\"\"\"\n    # TODO: 实现主要逻辑\n    pass\n\n\nif __name__ == '__main__':\n    main()\n`,
-    module: `\"\"\"{{DESCRIPTION}}\"\"\"\n\nimport logging\n\nlogger = logging.getLogger(__name__)\n\n\n# 类/函数定义\n`,
-    test: `#!/usr/bin/env python3\n\"\"\"测试文件: {{DESCRIPTION}}\"\"\"\n\nimport pytest\n\n\nclass Test{{CLASS_NAME}}:\n    def setup_method(self):\n        pass\n\n    def test_basic(self):\n        pass\n`
+    main: '#!/usr/bin/env python3\n"""{{DESCRIPTION}}"""\n\nimport sys\nimport os\n\n\ndef main():\n    """主函数"""\n    # TODO: 实现主要逻辑\n    pass\n\n\nif __name__ == \'__main__\':\n    main()\n',
+    module: '"""{{DESCRIPTION}}"""\n\nimport logging\n\nlogger = logging.getLogger(__name__)\n\n\n# 类/函数定义\n',
+    test: '#!/usr/bin/env python3\n"""测试文件: {{DESCRIPTION}}"""\n\nimport pytest\n\n\nclass Test{{CLASS_NAME}}:\n    def setup_method(self):\n        pass\n\n    def test_basic(self):\n        pass\n'
   },
   javascript: {
-    main: `'use strict';\n\n// {{DESCRIPTION}}\n\nfunction main() {\n  // TODO: 实现主要逻辑\n}\n\nmain();\n`,
-    module: `'use strict';\n\n// {{DESCRIPTION}}\n\nmodule.exports = {\n  // 导出的函数/对象\n};\n`,
-    class: `'use strict';\n\n// {{DESCRIPTION}}\nclass {{CLASS_NAME}} {\n  constructor() {\n    // 初始化\n  }\n\n  // 方法\n}\n\nmodule.exports = {{CLASS_NAME}};\n`,
-    test: `'use strict';\n\n// 测试: {{DESCRIPTION}}\n\ndescribe('{{CLASS_NAME}}', () => {\n  test('基本功能', () => {\n    // TODO: 测试逻辑\n  });\n});\n`
+    main: '\'use strict\';\n\n// {{DESCRIPTION}}\n\nfunction main() {\n  // TODO: 实现主要逻辑\n}\n\nmain();\n',
+    module: '\'use strict\';\n\n// {{DESCRIPTION}}\n\nmodule.exports = {\n  // 导出的函数/对象\n};\n',
+    class: '\'use strict\';\n\n// {{DESCRIPTION}}\nclass {{CLASS_NAME}} {\n  constructor() {\n    // 初始化\n  }\n\n  // 方法\n}\n\nmodule.exports = {{CLASS_NAME}};\n',
+    test: '\'use strict\';\n\n// 测试: {{DESCRIPTION}}\n\ndescribe(\'{{CLASS_NAME}}\', () => {\n  test(\'基本功能\', () => {\n    // TODO: 测试逻辑\n  });\n});\n'
   },
   typescript: {
-    main: `// {{DESCRIPTION}}\n\nfunction main(): void {\n  // TODO: 实现主要逻辑\n}\n\nmain();\n`,
-    module: `// {{DESCRIPTION}}\n\nexport interface I{{CLASS_NAME}} {\n  // 接口定义\n}\n\nexport class {{CLASS_NAME}} implements I{{CLASS_NAME}} {\n  constructor() {}\n}\n`,
-    test: `// 测试: {{DESCRIPTION}}\n\nimport { {{CLASS_NAME}} } from './module';\n\ndescribe('{{CLASS_NAME}}', () => {\n  test('基本功能', () => {\n    // TODO\n  });\n});\n`
+    main: '// {{DESCRIPTION}}\n\nfunction main(): void {\n  // TODO: 实现主要逻辑\n}\n\nmain();\n',
+    module: '// {{DESCRIPTION}}\n\nexport interface I{{CLASS_NAME}} {\n  // 接口定义\n}\n\nexport class {{CLASS_NAME}} implements I{{CLASS_NAME}} {\n  constructor() {}\n}\n',
+    test: '// 测试: {{DESCRIPTION}}\n\nimport { {{CLASS_NAME}} } from \'./module\';\n\ndescribe(\'{{CLASS_NAME}}\', () => {\n  test(\'基本功能\', () => {\n    // TODO\n  });\n});\n'
   },
   go: {
-    main: `package main\n\nimport (\n\t"fmt"\n)\n\n// {{DESCRIPTION}}\nfunc main() {\n\t// TODO: 实现主要逻辑\n\tfmt.Println("Hello, World!")\n}\n`,
-    module: `package {{PACKAGE}}\n\n// {{DESCRIPTION}}\n\n// 函数定义\n`,
-    test: `package {{PACKAGE}}\n\nimport "testing"\n\nfunc Test{{CLASS_NAME}}(t *testing.T) {\n\t// TODO: 测试逻辑\n}\n`
+    main: 'package main\n\nimport (\n\t"fmt"\n)\n\n// {{DESCRIPTION}}\nfunc main() {\n\t// TODO: 实现主要逻辑\n\tfmt.Println("Hello, World!")\n}\n',
+    module: 'package {{PACKAGE}}\n\n// {{DESCRIPTION}}\n\n// 函数定义\n',
+    test: 'package {{PACKAGE}}\n\nimport "testing"\n\nfunc Test{{CLASS_NAME}}(t *testing.T) {\n\t// TODO: 测试逻辑\n}\n'
   },
   java: {
-    main: `// {{DESCRIPTION}}\npublic class Main {\n    public static void main(String[] args) {\n        // TODO: 实现主要逻辑\n    }\n}\n`,
-    class: `// {{DESCRIPTION}}\npublic class {{CLASS_NAME}} {\n    public {{CLASS_NAME}}() {\n        // 构造函数\n    }\n}\n`,
-    test: `import org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n\n// 测试: {{DESCRIPTION}}\nclass {{CLASS_NAME}}Test {\n    @Test\n    void testBasic() {\n        // TODO\n    }\n}\n`
+    main: '// {{DESCRIPTION}}\npublic class Main {\n    public static void main(String[] args) {\n        // TODO: 实现主要逻辑\n    }\n}\n',
+    class: '// {{DESCRIPTION}}\npublic class {{CLASS_NAME}} {\n    public {{CLASS_NAME}}() {\n        // 构造函数\n    }\n}\n',
+    test: 'import org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n\n// 测试: {{DESCRIPTION}}\nclass {{CLASS_NAME}}Test {\n    @Test\n    void testBasic() {\n        // TODO\n    }\n}\n'
   },
   rust: {
-    main: `// {{DESCRIPTION}}\n\nfn main() {\n    // TODO: 实现主要逻辑\n    println!("Hello, World!");\n}\n`,
-    module: `// {{DESCRIPTION}}\n\npub fn {{FUNCTION_NAME}}() {\n    // TODO\n}\n`,
-    test: `#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_basic() {\n        // TODO\n    }\n}\n`
+    main: '// {{DESCRIPTION}}\n\nfn main() {\n    // TODO: 实现主要逻辑\n    println!("Hello, World!");\n}\n',
+    module: '// {{DESCRIPTION}}\n\npub fn {{FUNCTION_NAME}}() {\n    // TODO\n}\n',
+    test: '#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_basic() {\n        // TODO\n    }\n}\n'
   }
 };
 
@@ -125,7 +125,7 @@ class CodeWriterAgent extends BaseAgent {
     const isIncremental = this.enableIncremental && (context.existingCode || context.previousCode);
 
     // 3. 构建prompt
-    let prompt = this._buildPrompt(task, enhancedContext, isIncremental);
+    const prompt = this._buildPrompt(task, enhancedContext, isIncremental);
 
     // 4. 生成代码
     const result = await this.sendOnce(prompt, options);
@@ -326,7 +326,7 @@ class CodeWriterAgent extends BaseAgent {
 
     let prompt = `请修正以下代码中的问题：\n\n任务：${task.title}\n\n`;
     prompt += `【发现问题】\n${issuesSummary}\n\n`;
-    prompt += `【当前代码】\n`;
+    prompt += '【当前代码】\n';
 
     for (const block of codeBlocks) {
       prompt += `\`\`\`${block.language || ''}\n// 文件路径: ${block.filePath}\n${block.code}\n\`\`\`\n`;

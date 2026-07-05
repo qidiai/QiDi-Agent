@@ -100,7 +100,7 @@ class MCPServer {
       process.exit(0);
     });
 
-    process.stderr.write(`[MCP] 服务器就绪，等待客户端连接...\n`);
+    process.stderr.write('[MCP] 服务器就绪，等待客户端连接...\n');
   }
 
   // ═══════════════════════════════════════════
@@ -470,11 +470,13 @@ class MCPServer {
         })),
         tokenStats: result.tokenStats || null,
         finalQuality: result.finalQuality || null,
-        contractAssembly: result.contractAssembly ? {
-          success: result.contractAssembly.success,
-          language: result.contractAssembly.language,
-          conflicts: result.contractAssembly.conflicts
-        } : null
+        contractAssembly: result.contractAssembly
+          ? {
+            success: result.contractAssembly.success,
+            language: result.contractAssembly.language,
+            conflicts: result.contractAssembly.conflicts
+          }
+          : null
       };
 
       process.stderr.write(`[MCP] 任务完成: 成功率 ${result.successRate}%\n`);
@@ -690,7 +692,7 @@ class MCPServer {
   _handleResourcesRead (params) {
     const { uri } = params;
 
-    let contents = [];
+    const contents = [];
     switch (uri) {
     case 'qidi://config': {
       const configPath = path.join(this.options.configDir, 'agents.json');

@@ -3,13 +3,13 @@ const fs = require('fs');
 const path = require('path');
 
 class EmergenceAudit {
-  constructor() {
+  constructor () {
     this.auditLog = [];
     this._logPath = path.join(__dirname, '..', '..', 'data', 'emergence_audit.json');
     this._load();
   }
 
-  record({ taskId, mode, synchrony, emergenceGain, verdict, controlGroup, tools, timestamp }) {
+  record ({ taskId, mode, synchrony, emergenceGain, verdict, controlGroup, tools, timestamp }) {
     try {
       const flag = controlGroup === null || controlGroup === undefined
         ? 'MISSING_BASELINE'
@@ -38,7 +38,7 @@ class EmergenceAudit {
     }
   }
 
-  generateReport() {
+  generateReport () {
     try {
       const stats = {
         total: this.auditLog.length,
@@ -50,18 +50,18 @@ class EmergenceAudit {
 
       for (const record of this.auditLog) {
         switch (record.verdict) {
-          case 'EMERGENT':
-            stats.emergent++;
-            break;
-          case 'MARGINAL':
-            stats.marginal++;
-            break;
-          case 'NEGATIVE':
-            stats.negative++;
-            break;
-          case 'NO_CONTROL_GROUP':
-            stats.noControlGroup++;
-            break;
+        case 'EMERGENT':
+          stats.emergent++;
+          break;
+        case 'MARGINAL':
+          stats.marginal++;
+          break;
+        case 'NEGATIVE':
+          stats.negative++;
+          break;
+        case 'NO_CONTROL_GROUP':
+          stats.noControlGroup++;
+          break;
         }
       }
 
@@ -82,23 +82,23 @@ class EmergenceAudit {
       const contradictions = this._detectContradictions();
       let contradictionSection = '';
       if (contradictions.length > 0) {
-        contradictionSection = `\n\n### ⚠ 矛盾点检测\n\n`;
+        contradictionSection = '\n\n### ⚠ 矛盾点检测\n\n';
         contradictionSection += contradictions.slice(0, 5).map(c => `- ${c}`).join('\n');
       }
 
-      const report = `## 涌现审计报告\n\n` +
-        `### 统计概览\n\n` +
-        `| 指标 | 数量 |\n` +
-        `|------|------|\n` +
+      const report = '## 涌现审计报告\n\n' +
+        '### 统计概览\n\n' +
+        '| 指标 | 数量 |\n' +
+        '|------|------|\n' +
         `| 总评估次数 | ${stats.total} |\n` +
         `| EMERGENT | ${stats.emergent} |\n` +
         `| MARGINAL | ${stats.marginal} |\n` +
         `| NEGATIVE | ${stats.negative} |\n` +
         `| NO_CONTROL_GROUP | ${stats.noControlGroup} |\n` +
         `| 可信度等级 | ${credibility} |\n\n` +
-        `### 最近10条记录\n\n` +
-        `| 任务ID | 模式 | 结论 | 增益 | 状态 | 时间 |\n` +
-        `|--------|------|------|------|------|------|\n` +
+        '### 最近10条记录\n\n' +
+        '| 任务ID | 模式 | 结论 | 增益 | 状态 | 时间 |\n' +
+        '|--------|------|------|------|------|------|\n' +
         table +
         contradictionSection;
 
@@ -109,16 +109,16 @@ class EmergenceAudit {
     }
   }
 
-  getRedFlags() {
+  getRedFlags () {
     return this.auditLog.filter(record => record.flag !== 'OK');
   }
 
-  reset() {
+  reset () {
     this.auditLog = [];
     this._save();
   }
 
-  _detectContradictions() {
+  _detectContradictions () {
     const taskResults = {};
     const contradictions = [];
 
@@ -146,7 +146,7 @@ class EmergenceAudit {
     return contradictions;
   }
 
-  _load() {
+  _load () {
     try {
       if (fs.existsSync(this._logPath)) {
         const data = fs.readFileSync(this._logPath, 'utf8');
@@ -158,7 +158,7 @@ class EmergenceAudit {
     }
   }
 
-  _save() {
+  _save () {
     try {
       const dir = path.dirname(this._logPath);
       if (!fs.existsSync(dir)) {

@@ -200,7 +200,7 @@ class HttpClient {
     }
 
     // 如果外部传入了 signal，在外部 signal abort 时同步中止内部 controller
-    let externalSignal = chainConfig.signal;
+    const externalSignal = chainConfig.signal;
     let onExternalAbort = null;
     if (externalSignal) {
       if (externalSignal.aborted) {
@@ -332,7 +332,9 @@ class HttpClient {
     // 构造响应对象
     const responseType = config.responseType ?? this.defaults.responseType;
     const respHeaders = {};
-    raw.headers.forEach((v, k) => { respHeaders[k.toLowerCase()] = v; });
+    raw.headers.forEach((v, k) => {
+      respHeaders[k.toLowerCase()] = v;
+    });
 
     /** @type {HttpResponse} */
     const httpResponse = {
@@ -350,19 +352,19 @@ class HttpClient {
     } else {
       try {
         switch (responseType) {
-          case 'text':
-            httpResponse.data = await raw.text();
-            break;
-          case 'blob':
-            httpResponse.data = await raw.blob();
-            break;
-          case 'arraybuffer':
-            httpResponse.data = await raw.arrayBuffer();
-            break;
-          case 'json':
-          default:
-            httpResponse.data = await raw.json();
-            break;
+        case 'text':
+          httpResponse.data = await raw.text();
+          break;
+        case 'blob':
+          httpResponse.data = await raw.blob();
+          break;
+        case 'arraybuffer':
+          httpResponse.data = await raw.arrayBuffer();
+          break;
+        case 'json':
+        default:
+          httpResponse.data = await raw.json();
+          break;
         }
       } catch (parseErr) {
         // 解析失败时保留原始文本，并附加诊断信息

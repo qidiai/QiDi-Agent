@@ -27,17 +27,17 @@ class BudgetManager extends EventEmitter {
 
     // 环节预算分配比例
     this.phaseRatios = options.phaseRatios || {
-      splitter: 0.05,    // 任务拆分 5%
-      codeWriter: 0.50,  // 代码生成 50%
-      reviewer: 0.10,    // 代码审查 10%
-      quality: 0.15,     // 质检 15%
-      merge: 0.15,       // 合并 15%
-      other: 0.05        // 其他 5%
+      splitter: 0.05, // 任务拆分 5%
+      codeWriter: 0.50, // 代码生成 50%
+      reviewer: 0.10, // 代码审查 10%
+      quality: 0.15, // 质检 15%
+      merge: 0.15, // 合并 15%
+      other: 0.05 // 其他 5%
     };
 
     // 模型成本（每千token价格，单位：美元）
     this.modelCosts = options.modelCosts || {
-      'qwen2.5:7b': { input: 0, output: 0 },      // 本地免费
+      'qwen2.5:7b': { input: 0, output: 0 }, // 本地免费
       'qwen2.5:3b': { input: 0, output: 0 },
       'deepseek-chat': { input: 0.14, output: 0.28 }, // 每百万token
       'gpt-4': { input: 30, output: 60 },

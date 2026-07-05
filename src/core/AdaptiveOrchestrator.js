@@ -34,11 +34,11 @@ class AdaptiveOrchestrator {
     // 用户偏好（默认值，可被覆盖）
     this.userPreferences = {
       privacySensitivity: options.privacySensitivity || 'medium', // low/medium/high
-      qualityPriority: options.qualityPriority || 'high',         // low/medium/high
-      efficiencyPriority: options.efficiencyPriority || 'medium',  // low/medium/high
+      qualityPriority: options.qualityPriority || 'high', // low/medium/high
+      efficiencyPriority: options.efficiencyPriority || 'medium', // low/medium/high
       maxParallelTools: options.maxParallelTools || 3,
-      preferredTools: options.preferredTools || [],                // 用户偏好工具
-      excludedTools: options.excludedTools || []                   // 排除的工具
+      preferredTools: options.preferredTools || [], // 用户偏好工具
+      excludedTools: options.excludedTools || [] // 排除的工具
     };
 
     // 历史推荐记录（用于自我学习）
@@ -115,7 +115,9 @@ class AdaptiveOrchestrator {
       { lang: 'backend', pattern: /(后端|服务端|server|数据库|database)/ }
     ];
     for (const { lang, pattern } of langPatterns) {
-      if (pattern.test(desc)) { language = lang; break; }
+      if (pattern.test(desc)) {
+        language = lang; break;
+      }
     }
 
     // 2. 任务类型检测（注意：顺序很重要，更具体的先匹配）
@@ -133,7 +135,9 @@ class AdaptiveOrchestrator {
       { type: 'feature', pattern: /(功能|feature|新增|添加|实现|开发)/ }
     ];
     for (const { type, pattern } of typePatterns) {
-      if (pattern.test(desc)) { taskType = type; break; }
+      if (pattern.test(desc)) {
+        taskType = type; break;
+      }
     }
 
     // 3. 复杂度评估（基于关键词信号 + 长度）
@@ -347,7 +351,7 @@ class AdaptiveOrchestrator {
 
     let strategy = rule.strategy;
     let mode = rule.mode;
-    let toolCount = Math.min(rule.toolCount, tools.length);
+    const toolCount = Math.min(rule.toolCount, tools.length);
 
     // 用户偏好覆盖
     if (this.userPreferences.qualityPriority === 'high' && mode === 'privacy') {
