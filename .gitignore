@@ -127,7 +127,6 @@ ai-bridge/clients-acl.json
 ai-bridge/deprecated/
 ai-bridge/output/
 ai-bridge/node_modules/
-ai-bridge/read-cred.ps1
 ai-bridge/*.bak
 cloud-control/.wrangler/
 
