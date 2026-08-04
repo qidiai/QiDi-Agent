@@ -1,0 +1,46 @@
+[
+  {
+    "name": "openclaw",
+    "displayName": "OpenClaw",
+    "description": "OpenClaw AI Agent (agnes-2.0-flash)",
+    "transport": "cli",
+    "command": "openclaw",
+    "args": ["agent", "--agent", "main", "--session-key", "{{sessionId}}", "--json", "--message-file", "{{messageFile}}"],
+    "inputMode": "message-file",
+    "outputMode": "stdout-json",
+    "parse": {
+      "textPath": "payloads[0].text || result.payloads[0].text || result.meta.finalAssistantVisibleText || result.meta.finalAssistantRawText || reply || content || message",
+      "usagePath": "result.meta.agentMeta.usage || usage"
+    },
+    "timeout": 120000
+  },
+  {
+    "name": "atom-code",
+    "displayName": "AtomCode",
+    "description": "AtomCode AI (GLM)",
+    "transport": "cli",
+    "command": "atomcode",
+    "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
+    "args": ["--prompt", "{{task}}", "--dir", "{{outputDir}}"],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 120000
+  },
+  {
+    "name": "claude-code",
+    "displayName": "Claude Code",
+    "description": "Claude Code CLI",
+    "transport": "cli",
+    "command": "claude",
+    "args": ["-p", "{{task}}"],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 120000
+  },
+  {
+    "name": "agnes-mcp",
+    "displayName": "Agnes MCP",
+    "description": "Route task to Agnes (top-level orchestrator) — no external process",
+    "transport": "routing-marker"
+  }
+]

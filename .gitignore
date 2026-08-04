@@ -113,3 +113,25 @@ n.includes('Contract')
 *.pyc
 __pycache__/
 .pytest_cache/
+
+# ai-bridge
+ai-bridge/config.json
+ai-bridge/token-stats.json
+ai-bridge/memory.json
+ai-bridge/logs.jsonl
+ai-bridge/logs.jsonl.1
+ai-bridge/traffic.jsonl
+ai-bridge/traffic.jsonl.1
+ai-bridge/switches.json
+ai-bridge/clients-acl.json
+ai-bridge/deprecated/
+ai-bridge/output/
+ai-bridge/node_modules/
+ai-bridge/read-cred.ps1
+ai-bridge/*.bak
+cloud-control/.wrangler/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example

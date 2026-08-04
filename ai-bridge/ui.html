@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Bridge — 智能体调度中枢</title>
+<style>
+:root{
+  --bg:#0a0e1a;--surface:#131826;--surface2:#1a2035;--border:#252d44;
+  --accent:#6366f1;--accent2:#8b5cf6;--cyan:#06b6d4;--green:#10b981;
+  --red:#ef4444;--amber:#f59e0b;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+/* Header */
+.header{position:sticky;top:0;z-index:100;background:rgba(10,14,26,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:16px 32px;display:flex;align-items:center;justify-content:space-between}
+.header-left{display:flex;align-items:center;gap:14px}
+.logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px rgba(99,102,241,.3)}
+.header h1{font-size:18px;font-weight:700;letter-spacing:-.02em;background:linear-gradient(90deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-right{display:flex;align-items:center;gap:20px}
+.status-pill{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);font-size:12px;color:var(--green);font-weight:500}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.nav-tabs{display:flex;gap:4px;background:var(--surface);padding:4px;border-radius:10px;border:1px solid var(--border)}
+.nav-tab{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .2s;border:none;background:none}
+.nav-tab.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.3)}
+.nav-tab:hover:not(.active){color:var(--text);background:var(--surface2)}
+
+/* Layout */
+.main{max-width:1280px;margin:0 auto;padding:24px 32px}
+.page{display:none}
+.page.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.card-title{font-size:14px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px;position:relative;overflow:hidden;transition:border-color .2s}
+.stat-card:hover{border-color:var(--accent)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--cyan))}
+.stat-value{font-size:32px;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--text),var(--text2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-label{font-size:11px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+.stat-icon{position:absolute;top:16px;right:16px;font-size:20px;opacity:.3}
+
+/* Tool Cards */
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.tool-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:18px;transition:all .2s;position:relative}
+.tool-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.tool-card.off{opacity:.5}
+.tool-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.tool-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.tool-badge{width:8px;height:8px;border-radius:50%}
+.tool-badge.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.tool-badge.off{background:var(--red)}
+.tool-type{font-size:10px;padding:2px 8px;border-radius:4px;background:var(--surface);color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.switch{position:relative;width:42px;height:24px;cursor:pointer;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--border);border-radius:12px;transition:.25s}
+.slider:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:var(--text);border-radius:50%;transition:.25s;box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.switch input:checked+.slider{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.switch input:checked+.slider:before{transform:translateX(18px);background:#fff}
+.tool-desc{font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5}
+.tool-meta{display:flex;gap:16px;font-size:11px;color:var(--text3)}
+.tool-meta span{display:flex;align-items:center;gap:4px}
+
+/* Input */
+.input-area textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;color:var(--text);padding:14px;font-size:14px;font-family:inherit;resize:vertical;min-height:72px;transition:border-color .2s}
+.input-area textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.input-area textarea::placeholder{color:var(--text3)}
+.tool-picker{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.tool-chip{padding:6px 14px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .15s;user-select:none}
+.tool-chip:hover{border-color:var(--accent)}
+.tool-chip.selected{background:rgba(99,102,241,.15);border-color:var(--accent);color:var(--accent)}
+
+/* Buttons */
+.btn{padding:10px 22px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 14px rgba(99,102,241,.3)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(99,102,241,.4)}
+.btn-primary:active{transform:translateY(0)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent)}
+.btn-row{display:flex;gap:10px;margin-top:14px;align-items:center}
+
+/* Result */
+.result-box{margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px;max-height:500px;overflow-y:auto;font-size:13px;line-height:1.6}
+.result-empty{color:var(--text3);text-align:center;padding:30px}
+.result-item{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.result-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.result-tool{font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.result-code{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto;font-size:12px;font-family:'JetBrains Mono','Fira Code',monospace}
+.result-stats{font-size:11px;color:var(--text3);margin-top:6px;display:flex;gap:12px}
+
+/* Logs */
+.log-list{max-height:500px;overflow-y:auto;font-family:'JetBrains Mono','Fira Code',monospace;font-size:12px;line-height:1.8}
+.log-entry{display:flex;gap:12px;padding:4px 0;border-bottom:1px solid rgba(37,45,68,.3)}
+.log-time{color:var(--text3);flex-shrink:0;width:80px}
+.log-level{font-weight:600;width:50px;flex-shrink:0}
+.log-level.info{color:var(--cyan)}
+.log-level.warn{color:var(--amber)}
+.log-level.error{color:var(--red)}
+.log-level.debug{color:var(--text3)}
+.log-msg{color:var(--text2)}
+
+/* Memory */
+.memory-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px}
+.memory-item:hover{border-color:var(--accent)}
+.memory-time{font-size:11px;color:var(--text3)}
+.memory-task{font-size:14px;margin:4px 0}
+.memory-tools{font-size:11px;color:var(--text2)}
+
+/* Clients */
+.client-grid{display:flex;gap:10px;flex-wrap:wrap}
+.client-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:10px}
+.client-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.client-dot.offline{background:var(--text3);box-shadow:none}
+.client-dot.connecting{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.client-name{font-size:13px;font-weight:500}
+.client-state{font-size:10px;color:var(--text3);margin-top:2px}
+.client-busy{font-size:10px;color:var(--amber)}
+
+/* Discuss */
+.discuss-result{margin-top:16px}
+.msg-block{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.msg-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.msg-speaker{font-weight:600;font-size:14px}
+.msg-time{font-size:11px;color:var(--text3)}
+.msg-content{font-size:13px;line-height:1.7;color:var(--text2);white-space:pre-wrap}
+
+/* Empty state */
+.empty{text-align:center;padding:40px;color:var(--text3);font-size:14px}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <div class="logo-icon">🔌</div>
+    <h1>AI Bridge</h1>
+  </div>
+  <div class="header-right">
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('dashboard',this)">仪表盘</button>
+      <button class="nav-tab" onclick="showPage('dispatch',this)">派发</button>
+      <button class="nav-tab" onclick="showPage('discuss',this)">讨论</button>
+      <button class="nav-tab" onclick="showPage('memory',this)">记忆</button>
+      <button class="nav-tab" onclick="showPage('logs',this)">日志</button>
+      <button class="nav-tab" onclick="showPage('traffic',this)">流量</button>
+      <button class="nav-tab" onclick="showPage('chat',this)">模型</button>
+    </div>
+    <div class="status-pill"><div class="status-dot"></div> 运行中</div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Dashboard -->
+  <div id="page-dashboard" class="page active">
+    <div class="stats-grid" id="stats"></div>
+    <div class="card" style="margin-top:20px">
+      <div class="card-header"><div class="card-title">🔧 工具管理</div><button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="refreshTools()">🔄 刷新</button></div>
+      <div class="tools-grid" id="tools"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">🔐 接入管理</div><button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="refreshData()">🔄 刷新</button></div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">待审批</div>
+      <div class="client-grid" id="pendingClients"></div>
+      <div style="font-size:12px;color:var(--text3);margin:16px 0 8px">已连接</div>
+      <div class="client-grid" id="clients"></div>
+      <div style="font-size:12px;color:var(--text3);margin:16px 0 8px">黑名单</div>
+      <div class="client-grid" id="blockedClients"></div>
+    </div>
+  </div>
+
+  <!-- Dispatch -->
+  <div id="page-dispatch" class="page">
+    <div class="card">
+      <div class="card-title">📤 派发任务</div>
+      <div class="input-area" style="margin-top:14px">
+        <textarea id="taskInput" placeholder="输入任务描述,如:写一个 Python fibonacci 函数"></textarea>
+        <div style="margin-top:10px;font-size:12px;color:var(--text3);margin-bottom:6px">选择工具(不选=全部已开启):</div>
+        <div class="tool-picker" id="toolPicker"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doDispatch()">🚀 派发</button>
+          <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="autoFallback" checked> 自动故障转移</label>
+        </div>
+      </div>
+      <div class="result-box" id="dispatchResult"><div class="result-empty">等待派发...</div></div>
+    </div>
+  </div>
+
+  <!-- Discuss -->
+  <div id="page-discuss" class="page">
+    <div class="card">
+      <div class="card-title">🗣️ 发起讨论</div>
+      <div class="input-area" style="margin-top:14px">
+        <textarea id="discussTopic" placeholder="输入讨论话题,如:这个模块用队列还是数组?"></textarea>
+        <div style="margin-top:10px;font-size:12px;color:var(--text3);margin-bottom:6px">参与者(不选=全部已开启):</div>
+        <div class="tool-picker" id="discussPicker"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doDiscuss()">🗣️ 开始讨论</button>
+          <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="round2" checked> 第二轮补充</label>
+        </div>
+      </div>
+      <div class="result-box" id="discussResult"><div class="result-empty">等待讨论...</div></div>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div id="page-memory" class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 任务历史</div>
+        <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="loadMemory()">🔄</button>
+      </div>
+      <div id="memoryList"></div>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div id="page-logs" class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📝 运行日志</div>
+        <div style="display:flex;gap:8px">
+          <select id="logLevel" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px" onchange="loadLogs()">
+            <option value="">全部</option><option value="info">INFO</option><option value="warn">WARN</option><option value="error">ERROR</option><option value="debug">DEBUG</option>
+          </select>
+          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="loadLogs()">🔄</button>
+        </div>
+      </div>
+      <div class="log-list" id="logList"></div>
+    </div>
+  </div>
+
+  <!-- Traffic -->
+  <div id="page-traffic" class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📡 流量监控</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="trafficSource" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px" onchange="loadTraffic()">
+            <option value="all">全部来源</option><option value="bridge">Bridge</option><option value="agnes">AgnesCode</option><option value="mitm">mitmproxy</option>
+          </select>
+          <select id="trafficTool" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px" onchange="loadTraffic()">
+            <option value="">全部工具</option>
+          </select>
+          <select id="trafficDir" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px" onchange="loadTraffic()">
+            <option value="">全部方向</option><option value="out">发出</option><option value="in">返回</option>
+          </select>
+          <input id="trafficLimit" type="number" value="50" min="5" max="500" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px;width:60px" onchange="loadTraffic()">
+          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="loadTraffic()">🔄</button>
+        </div>
+      </div>
+      <div id="mitmStatus" style="margin-bottom:12px;padding:8px 14px;border-radius:8px;font-size:12px;display:none"></div>
+      <div id="trafficList"></div>
+    </div>
+  </div>
+
+  <!-- Chat / Model -->
+  <div id="page-chat" class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🤖 模型对话</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="chatModel" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px;min-width:180px">
+            <option value="">加载中...</option>
+          </select>
+          <label style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="chatStream" checked> 流式</label>
+        </div>
+      </div>
+      <div id="chatMessages" style="max-height:400px;overflow-y:auto;margin-bottom:14px"></div>
+      <div class="input-area">
+        <textarea id="chatInput" placeholder="输入消息,Enter 发送,Shift+Enter 换行" style="min-height:48px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doChat()}"></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doChat()">📤 发送</button>
+          <button class="btn btn-secondary" style="padding:10px 16px;font-size:13px" onclick="clearChat()">🗑 清空</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function showPage(name,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+name).classList.add('active');document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));if(btn)btn.classList.add('active')}
+
+async function api(path,opts){const r=await fetch(path,opts);return r.json()}
+async function post(path,body){return api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+
+var allTools=[];
+async function refreshData(){
+  try{
+    const d=await api('/api/tools');allTools=d.tools||[];
+    // Stats
+    document.getElementById('stats').innerHTML=
+      '<div class="stat-card"><div class="stat-icon">🔧</div><div class="stat-value">'+allTools.length+'</div><div class="stat-label">工具总数</div></div>'+
+      '<div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">'+allTools.filter(function(t){return t.available&&t.enabled}).length+'</div><div class="stat-label">可用+已开</div></div>'+
+      '<div class="stat-card"><div class="stat-icon">📊</div><div class="stat-value">'+(d.total&&d.total.total||0).toLocaleString()+'</div><div class="stat-label">累计 Tokens</div></div>'+
+      '<div class="stat-card"><div class="stat-icon">📞</div><div class="stat-value">'+(d.total&&d.total.calls||0)+'</div><div class="stat-label">总调用次数</div></div>';
+    // Tools
+    document.getElementById('tools').innerHTML=allTools.map(function(t){
+      return '<div class="tool-card'+(t.enabled?'':' off')+'">'+
+        '<div class="tool-top"><div class="tool-name"><span class="tool-badge '+(t.enabled?'on':'off')+'"></span>'+esc(t.displayName)+(t.type==='client'?' 🔗':'')+'</div>'+
+        '<label class="switch"><input type="checkbox" '+(t.enabled?'checked':'')+' onchange="toggle(\''+esc(t.name)+'\',this.checked)"><span class="slider"></span></label></div>'+
+        '<div class="tool-desc">'+esc(t.description)+'</div>'+
+        '<div class="tool-meta"><span>📊 '+(t.tokens||0).toLocaleString()+' tokens</span><span>📞 '+(t.calls||0)+' 次</span><span class="tool-type">'+esc(t.type)+'</span></div></div>';
+    }).join('');
+    // Pickers — save selections before redrawing
+    var sel1=getSelected('toolPicker');var sel2=getSelected('discussPicker');
+    var enabled=allTools.filter(function(t){return t.available&&t.enabled});
+    document.getElementById('toolPicker').innerHTML=enabled.map(function(t){return '<div class="tool-chip'+(sel1.indexOf(t.name)>=0?' selected':'')+'" data-tool="'+esc(t.name)+'" onclick="this.classList.toggle(\'selected\')">'+esc(t.displayName)+'</div>'}).join('');
+    document.getElementById('discussPicker').innerHTML=enabled.map(function(t){return '<div class="tool-chip'+(sel2.indexOf(t.name)>=0?' selected':'')+'" data-tool="'+esc(t.name)+'" onclick="this.classList.toggle(\'selected\')">'+esc(t.displayName)+'</div>'}).join('');
+    // Clients
+    try{var c=await api('/api/clients');
+      document.getElementById('clients').innerHTML=(c.clients&&c.clients.length)?c.clients.map(function(cl){
+        var state=cl.state||((cl.busy)?'online_busy':'online_idle');
+        var dotClass=cl.online?'':(state==='connecting'||state==='reconnecting'?' connecting':' offline');
+        var labels={approved_offline:'已批准·离线',connecting:'连接中',reconnecting:'重连中',online_idle:'在线·空闲',online_busy:'在线·忙碌',stale:'连接过期'};
+        var stateLabel=labels[state]||state;
+        if(cl.online) stateLabel+=(cl.executionEligible?' · 可执行':' · 仅控制');
+        return '<div class="client-card"><div class="client-dot'+dotClass+'"></div><div style="flex:1"><div class="client-name">'+esc(cl.name)+(cl.busy?' <span class="client-busy">忙</span>':'')+'</div><div class="client-state">'+esc(stateLabel)+'</div></div><button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="kickClient(\''+esc(cl.id)+'\')">'+(cl.online?'踢出':'移除授权')+'</button></div>';
+      }).join(''):'<div class="empty">暂无已授权客户端</div>';
+      document.getElementById('pendingClients').innerHTML=(c.pending&&c.pending.length)?c.pending.map(function(pd){
+        return '<div class="client-card"><div class="client-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div><div style="flex:1"><div class="client-name">'+esc(pd.name)+'</div><div class="memory-time">'+esc((pd.requestedAt||'').substring(11,19))+'</div></div><button class="btn btn-primary" style="padding:4px 10px;font-size:11px" onclick="approveClient(\''+esc(pd.clientId)+'\')">批准</button><button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="denyClient(\''+esc(pd.clientId)+'\')">拒绝</button></div>';
+      }).join(''):'<div class="empty">无待审批</div>';
+      document.getElementById('blockedClients').innerHTML=(c.blocklist&&c.blocklist.length)?c.blocklist.map(function(b){
+        return '<div class="client-card"><div class="client-dot" style="background:var(--red);box-shadow:none"></div><div style="flex:1"><div class="client-name">'+esc(b)+'</div></div><button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="approveClient(\''+esc(b)+'\')">解封</button></div>';
+      }).join(''):'<div class="empty">无</div>';
+    }catch(_){}
+  }catch(e){console.error(e)}
+}
+
+async function toggle(name,en){await post('/api/toggle',{tool:name,enabled:en});refreshData()}
+async function refreshTools(){await post('/api/refresh',{});refreshData()}
+
+async function approveClient(id){await post('/api/clients/approve',{clientId:id});refreshData()}
+async function denyClient(id){if(!confirm('拒绝并拉黑 '+id+' ？'))return;await post('/api/clients/deny',{clientId:id});refreshData()}
+async function kickClient(id){if(!confirm('踢出 '+id+' ？(确定后需重新审批才能再加入)'))return;await post('/api/clients/kick',{clientId:id});refreshData()}
+
+function getSelected(containerId){
+  return Array.from(document.querySelectorAll('#'+containerId+' .tool-chip.selected')).map(function(c){return c.dataset.tool});
+}
+
+async function doDispatch(){
+  var task=document.getElementById('taskInput').value.trim();if(!task){alert('请输入任务');return;}
+  var tools=getSelected('toolPicker');
+  var fb=document.getElementById('autoFallback').checked;
+  document.getElementById('dispatchResult').innerHTML='<div class="result-empty">⏳ 正在派发...</div>';
+  try{
+    var d=await post('/api/dispatch',{task:task,tools:tools,auto_fallback:fb});
+    if(d.error){document.getElementById('dispatchResult').innerHTML='<div class="result-empty">❌ '+esc(d.error)+'</div>';return;}
+    var html='';
+    (d.results||[]).forEach(function(r){
+      if(r.success){
+        html+='<div class="result-item"><div class="result-tool">✅ '+esc(r.displayName)+(r.fallback?' ⚡接力自'+esc(r.fallbackFrom):'')+'</div>';
+        if(r.codeBlocks&&r.codeBlocks.length)r.codeBlocks.forEach(function(b){html+='<div class="result-code">'+esc(b.code)+'</div>'});
+        else html+='<div style="color:var(--text3);font-size:12px">'+esc((r.content||'').substring(0,300))+'</div>';
+        html+='<div class="result-stats"><span>⏱ '+esc(r.duration)+'</span><span>📊 '+r.tokens.total+' tokens</span></div></div>';
+      }else{
+        html+='<div class="result-item"><div class="result-tool">❌ '+esc(r.tool)+'</div><div style="color:var(--red);font-size:12px">'+esc(r.reason)+'</div></div>';
+      }
+    });
+    if(d.fallbackLog&&d.fallbackLog.length){html+='<div style="font-size:12px;color:var(--amber);margin-top:8px">⚡ 故障转移: '+d.fallbackLog.map(function(f){return f.from+'→'+f.to+' '+(f.success?'✅':'❌')}).join(', ')+'</div>'}
+    html+='<div class="result-stats" style="margin-top:10px">📊 '+d.totalTokens+' tokens | '+d.successCount+'/'+d.total+' 成功</div>';
+    document.getElementById('dispatchResult').innerHTML=html;
+    refreshData();
+  }catch(e){document.getElementById('dispatchResult').innerHTML='<div class="result-empty">❌ '+esc(e.message)+'</div>'}
+}
+
+async function doDiscuss(){
+  var topic=document.getElementById('discussTopic').value.trim();if(!topic){alert('请输入讨论话题');return;}
+  var parts=getSelected('discussPicker');var r2=document.getElementById('round2').checked;
+  document.getElementById('discussResult').innerHTML='<div class="result-empty">⏳ 讨论进行中...(可能需要 1-3 分钟)</div>';
+  try{
+    var d=await post('/api/discuss',{topic:topic,participants:parts,round2:r2});
+    if(d.error){document.getElementById('discussResult').innerHTML='<div class="result-empty">❌ '+esc(d.error)+'</div>';return;}
+    var html='<div style="margin-bottom:12px;font-size:13px;color:var(--text2)">📋 '+esc(d.topic)+' | 👥 '+esc((d.participants||[]).join(', '))+' | 💬 '+d.messageCount+' 条 | 📊 '+d.totalTokens+' tokens</div>';
+    (d.messages||[]).forEach(function(m){
+      html+='<div class="msg-block"><div class="msg-header"><span class="msg-speaker">'+esc(m.speaker)+'</span><span class="msg-time">'+esc((m.ts||'').substring(11,19))+'</span></div><div class="msg-content">'+esc(m.content)+'</div></div>';
+    });
+    document.getElementById('discussResult').innerHTML=html;
+  }catch(e){document.getElementById('discussResult').innerHTML='<div class="result-empty">❌ '+esc(e.message)+'</div>'}
+}
+
+async function loadMemory(){
+  try{
+    var d=await api('/api/memory/recent?limit=20');
+    var tasks=d.tasks||[];
+    document.getElementById('memoryList').innerHTML=tasks.length?tasks.map(function(t){
+      return '<div class="memory-item"><div class="memory-time">'+esc(t.ts)+' · ID: '+esc(t.id)+'</div><div class="memory-task">'+esc(t.task)+'</div><div class="memory-tools">🔧 '+esc((t.tools||[]).join(', '))+' | ✅ '+t.successCount+'/'+(t.results||[]).length+' | 📊 '+t.totalTokens+' tokens</div></div>';
+    }).join(''):'<div class="empty">暂无任务记录</div>';
+  }catch(e){console.error(e)}
+}
+
+async function loadLogs(){
+  try{
+    var level=document.getElementById('logLevel').value;
+    var d=await api('/api/logs?limit=100'+(level?'&level='+level:''));
+    var logs=d.logs||[];
+    document.getElementById('logList').innerHTML=logs.length?logs.map(function(l){
+      return '<div class="log-entry"><span class="log-time">'+esc((l.ts||'').substring(11,19))+'</span><span class="log-level '+(l.level||'')+'">'+esc((l.level||'').toUpperCase())+'</span><span class="log-msg">'+esc(l.msg)+'</span></div>';
+    }).join(''):'<div class="empty">暂无日志</div>';
+  }catch(e){console.error(e)}
+}
+
+// ── Traffic ──
+function fmtContent(text,maxLen){
+  text=String(text||'');
+  if(text.length<=maxLen)return esc(text);
+  return esc(text.substring(0,maxLen))+'<span style="color:var(--text3);cursor:pointer" onclick="this.parentElement.querySelector(\'.full\').style.display=\'block\';this.style.display=\'none\'"> ...显示全部</span><span class="full" style="display:none">'+esc(text.substring(maxLen))+'</span>';
+}
+
+async function loadTraffic(){
+  try{
+    var source=document.getElementById('trafficSource').value;
+    var tool=document.getElementById('trafficTool').value;
+    var dir=document.getElementById('trafficDir').value;
+    var limit=document.getElementById('trafficLimit').value||50;
+    var qs='/api/traffic?limit='+limit;
+    if(source&&source!=='all')qs+='&source='+source;
+    if(tool)qs+='&tool='+encodeURIComponent(tool);
+    if(dir)qs+='&direction='+dir;
+    var d=await api(qs);
+    var items=d.traffic||[];
+    // 更新工具筛选下拉
+    var toolSel=document.getElementById('trafficTool');
+    var curTool=toolSel.value;
+    var tools=[...new Set(items.map(function(i){return i.tool}))];
+    toolSel.innerHTML='<option value="">全部工具</option>'+tools.map(function(t){return '<option value="'+esc(t)+'"'+(t===curTool?' selected':'')+'>'+esc(t)+'</option>'}).join('');
+    if(!items.length){document.getElementById('trafficList').innerHTML='<div class="empty">暂无流量记录</div>';return;}
+    var html=items.map(function(t){
+      var isOut=t.direction==='out';
+      var icon=isOut?'📤':'📥';
+      var color=isOut?'var(--cyan)':'var(--green)';
+      var meta=[];
+      if(t.model)meta.push('🤖 '+esc(t.model));
+      if(t.duration)meta.push('⏱ '+esc(t.duration));
+      if(t.usage){var u=t.usage;meta.push('📊 '+(u.input||0)+'→'+(u.output||0)+' tok');}
+      if(t.source)meta.push('['+esc(t.source)+']');
+      var content='<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;font-size:12px;font-family:inherit;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow-y:auto">'+fmtContent(t.content,500)+'</div>';
+      var sysPrompt=t.system_prompt?'<div style="font-size:11px;color:var(--text3);margin-top:4px">System: '+fmtContent(t.system_prompt,200)+'</div>':'';
+      var errBlock=t.error?'<div style="color:var(--red);font-size:12px;margin-top:4px">❌ '+esc(t.error)+'</div>':'';
+      return '<div class="memory-item" style="border-left:3px solid '+color+'">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+        '<span style="font-size:16px">'+icon+'</span>'+
+        '<span class="memory-time">'+esc((t.ts||'').substring(11,19))+'</span>'+
+        '<span style="font-weight:600;font-size:13px;color:'+color+'">'+esc(t.tool)+'</span>'+
+        (t.success===false?'<span style="color:var(--red);font-size:11px">失败</span>':'')+
+        '</div>'+
+        (meta.length?'<div style="font-size:11px;color:var(--text3);margin-bottom:4px">'+meta.join(' · ')+'</div>':'')+
+        content+sysPrompt+errBlock+
+        '</div>';
+    }).join('');
+    document.getElementById('trafficList').innerHTML=html;
+  }catch(e){console.error(e);document.getElementById('trafficList').innerHTML='<div class="empty">加载失败: '+esc(e.message)+'</div>'}
+}
+
+refreshData();setInterval(refreshData,5000);
+// Auto-load memory/logs when switching tabs
+document.querySelectorAll('.nav-tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    var page=t.textContent.trim();
+    if(page==='记忆')loadMemory();
+    if(page==='日志')loadLogs();
+    if(page==='流量')loadTraffic();
+    if(page==='模型')loadChatModels();
+  });
+});
+// ── Chat ──
+var chatHistory=[];
+async function loadChatModels(){
+  try{
+    var d=await api('/v1/models');
+    var models=d.data||[];
+    var sel=document.getElementById('chatModel');
+    sel.innerHTML=models.map(function(m){return '<option value="'+esc(m.id)+'">'+esc(m.id)+' ('+esc(m.owned_by)+')</option>'}).join('');
+  }catch(e){console.error(e)}
+}
+
+function renderChat(){
+  var el=document.getElementById('chatMessages');
+  el.innerHTML=chatHistory.map(function(m){
+    var isUser=m.role==='user';
+    var bg=isUser?'rgba(99,102,241,.1)':'var(--surface2)';
+    var color=isUser?'var(--accent)':'var(--cyan)';
+    return '<div style="background:'+bg+';border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:10px">'+
+      '<div style="font-size:11px;color:'+color+';font-weight:600;margin-bottom:4px">'+(isUser?'🧑 你':'🤖 '+esc(m.model||'AI'))+'</div>'+
+      '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap">'+esc(m.content)+'</div>'+
+      (m.usage?'<div style="font-size:10px;color:var(--text3);margin-top:6px">'+m.usage.total+' tokens</div>':'')+
+      '</div>';
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+async function doChat(){
+  var input=document.getElementById('chatInput');
+  var msg=input.value.trim();
+  if(!msg)return;
+  var model=document.getElementById('chatModel').value;
+  var stream=document.getElementById('chatStream').checked;
+  input.value='';
+  chatHistory.push({role:'user',content:msg});
+  renderChat();
+  // Add placeholder for response
+  chatHistory.push({role:'assistant',content:'⏳ 思考中...',model:model});
+  renderChat();
+
+  var messages=chatHistory.filter(function(m){return m.content!=='⏳ 思考中...'}).map(function(m){return {role:m.role,content:m.content}});
+  try{
+    if(stream){
+      var resp=await fetch('/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:model,messages:messages,stream:true})});
+      var reader=resp.body.getReader();
+      var decoder=new TextDecoder();
+      var fullContent='';
+      while(true){
+        var chunk=await reader.read();
+        if(chunk.done)break;
+        var text=decoder.decode(chunk.value);
+        var lines=text.split('\n').filter(Boolean);
+        for(var line of lines){
+          if(line.startsWith('data: ')&&line!=='data: [DONE]'){
+            try{var json=JSON.parse(line.slice(6));if(json.choices&&json.choices[0].delta&&json.choices[0].delta.content)fullContent+=json.choices[0].delta.content}catch(_){}
+          }
+        }
+        chatHistory[chatHistory.length-1].content=fullContent||'(等待响应...)';
+        renderChat();
+      }
+      chatHistory[chatHistory.length-1].content=fullContent||'(空响应)';
+    }else{
+      var d=await post('/v1/chat/completions',{model:model,messages:messages,stream:false});
+      var content=d.choices&&d.choices[0]&&d.choices[0].message?d.choices[0].message.content:'(空响应)';
+      chatHistory[chatHistory.length-1].content=content;
+      chatHistory[chatHistory.length-1].usage=d.usage||null;
+    }
+    renderChat();
+  }catch(e){
+    chatHistory[chatHistory.length-1].content='❌ '+esc(e.message);
+    renderChat();
+  }
+}
+
+function clearChat(){chatHistory=[];renderChat()}
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "ai-bridge-mcp",
+  "version": "0.1.0",
+  "description": "AI Bridge 共享中枢:本机常驻 HTTP 服务,所有 AI 编程工具作为客户端接入,提供调度/讨论/记忆/准入管理",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "edge": "node edge-agent.js"
+  },
+  "devDependencies": {
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "dependencies": {
+    "ws": "^8.21.1"
+  }
+}

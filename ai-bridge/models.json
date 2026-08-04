@@ -1,0 +1,68 @@
+[
+  {
+    "id": "agnes-2.0-flash",
+    "owned_by": "agnes",
+    "switch": "agnes-code",
+    "transport": "agnes-http",
+    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
+    "upstreamModel": "agnes-2.0-flash"
+  },
+  {
+    "id": "agnes-2.5-flash",
+    "owned_by": "agnes",
+    "switch": "agnes-code",
+    "transport": "agnes-http",
+    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
+    "upstreamModel": "agnes-2.5-flash"
+  },
+  {
+    "id": "auto",
+    "owned_by": "agnes",
+    "switch": "agnes-code",
+    "transport": "agnes-http",
+    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
+    "upstreamModel": "auto"
+  },
+  {
+    "id": "glm-5.2",
+    "owned_by": "atomcode",
+    "switch": "atom-code",
+    "transport": "cli",
+    "cli": {
+      "command": "atomcode",
+      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
+      "args": ["-p", "{{task}}", "--provider", "AtomGit-GLM-5.2", "--no-telemetry", "-y"],
+      "inputMode": "arg",
+      "outputMode": "stdout-text",
+      "timeout": 120000
+    }
+  },
+  {
+    "id": "deepseek-v4-flash",
+    "owned_by": "atomcode",
+    "switch": "atom-code",
+    "transport": "cli",
+    "cli": {
+      "command": "atomcode",
+      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
+      "args": ["-p", "{{task}}", "--provider", "AtomGit-deepseek-v4-flash", "--no-telemetry", "-y"],
+      "inputMode": "arg",
+      "outputMode": "stdout-text",
+      "timeout": 120000
+    }
+  },
+  {
+    "id": "qwen3-vl-8b-instruct",
+    "owned_by": "atomcode",
+    "switch": "atom-code",
+    "transport": "cli",
+    "cli": {
+      "command": "atomcode",
+      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
+      "args": ["-p", "{{task}}", "--provider", "AtomGit-Qwen-Qwen3-VL-8B-Instruct", "--no-telemetry", "-y"],
+      "inputMode": "arg",
+      "outputMode": "stdout-text",
+      "timeout": 120000
+    }
+  }
+]
