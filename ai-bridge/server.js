@@ -148,6 +148,97 @@ function readAtomToken () {
   }
 }
 
+// ── Codely(团结 Cowork)凭据与 cli_api_key ──
+const CODELY_API_BASE = 'https://codely.tuanjie.cn';
+const CODELY_LITELLM_BASE = 'https://codely-litellm.tuanjie.cn';
+let _codelyKey = null;
+let _codelyKeyTime = 0;
+const CODELY_KEY_TTL = 3600000;
+
+// 服务以 LocalSystem 运行时 os.homedir() 指向系统目录,这里探测真实用户目录下的 .codely-cli
+function codelyAuthDir () {
+  const envDir = process.env.CODELY_AUTH_DIR;
+  const candidates = [];
+  if (envDir) candidates.push(envDir);
+  candidates.push(os.homedir());
+  if (process.env.USERPROFILE) candidates.push(process.env.USERPROFILE);
+  for (const base of candidates) {
+    if (!base) continue;
+    const p = path.join(base, '.codely-cli');
+    if (fs.existsSync(path.join(p, 'oauth_creds.json'))) return p;
+  }
+  // 兜底:扫描 C:\Users\* 下已登录的 .codely-cli
+  try {
+    const usersRoot = 'C:\\Users';
+    for (const name of fs.readdirSync(usersRoot)) {
+      const p = path.join(usersRoot, name, '.codely-cli');
+      if (fs.existsSync(path.join(p, 'oauth_creds.json'))) return p;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function readCodelyCreds () {
+  const dir = codelyAuthDir();
+  if (!dir) return null;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'oauth_creds.json'), 'utf-8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+function codelyOrgId (creds) {
+  const dir = codelyAuthDir();
+  try {
+    if (dir && fs.existsSync(path.join(dir, 'org.json'))) {
+      const orgData = JSON.parse(fs.readFileSync(path.join(dir, 'org.json'), 'utf-8'));
+      const accounts = orgData.accounts || {};
+      const uid = String(creds.user_id || '');
+      if (uid && accounts[uid]) return accounts[uid].currentOrgId || '';
+    }
+  } catch (_) {}
+  return creds.org_id || '';
+}
+
+function fetchCodelyCliApiKey () {
+  const creds = readCodelyCreds();
+  if (!creds || !creds.access_token) throw new Error('未找到团结登录态(~/.codely-cli/oauth_creds.json)');
+  const orgId = codelyOrgId(creds);
+  const params = new URLSearchParams();
+  if (orgId) params.set('teamId', orgId);
+  const qs = params.toString();
+  return new Promise((resolve, reject) => {
+    const url = `${CODELY_API_BASE}/api/api-token/cli-api-key${qs ? '?' + qs : ''}`;
+    const req = https.get(url, {
+      headers: { Authorization: `Bearer ${creds.access_token}`, Accept: 'application/json' },
+      timeout: 15000
+    }, res => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(d);
+          if (data.cli_api_key) resolve(data.cli_api_key);
+          else reject(new Error(`cli-api-key 响应无 key: ${d.substring(0, 200)}`));
+        } catch (e) { reject(new Error(`cli-api-key 解析失败: ${d.substring(0, 200)}`)); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('获取 cli_api_key 超时')); });
+  });
+}
+
+function getCodelyCliApiKey () {
+  if (_codelyKey && Date.now() - _codelyKeyTime < CODELY_KEY_TTL) return Promise.resolve(_codelyKey);
+  return fetchCodelyCliApiKey().then(key => {
+    _codelyKey = key;
+    _codelyKeyTime = Date.now();
+    log('info', 'Codely cli_api_key refreshed');
+    return key;
+  });
+}
+
 // ── OpenAI 兼容反代:模型注册表(配置驱动,新增模型只改 models.json,不改代码) ──
 let _modelsCache = null;
 let _modelsCacheTime = 0;
@@ -724,13 +815,13 @@ function sendJSON (res, code, data) {
   res.end(JSON.stringify(data));
 }
 
-function readBody (req) {
+function readBody (req, cap = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let body = '';
     let size = 0;
     req.on('data', c => {
       body += c; size += c.length;
-      if (size > 1024 * 1024) { reject(new Error('请求体过大')); req.destroy(); return; }
+      if (size > cap) { reject(new Error('请求体过大')); req.destroy(); return; }
     });
     req.on('end', () => { try { resolve(JSON.parse(body)); } catch (_) { resolve({}); } });
     req.on('error', reject);
@@ -1398,7 +1489,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/v1/chat/completions' && req.method === 'POST') {
-      const body = await readBody(req);
+      const body = await readBody(req, PROXY_MAX_BODY);
       const isStream = body.stream === true;
       const model = findModel(body.model);
       if (!model) { sendJSON(res, 404, { error: `未知模型: ${body.model || '(空)'}。可用模型见 GET /v1/models` }); return; }
@@ -1415,6 +1506,71 @@ const server = http.createServer(async (req, res) => {
         const proxyReq = https.request(model.upstream, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(reqData), 'Authorization': 'Bearer ' + token }
+        }, (proxyRes) => {
+          if (proxyRes.statusCode !== 200) {
+            let errBody = '';
+            proxyRes.on('data', d => errBody += d);
+            proxyRes.on('end', () => sendJSON(res, proxyRes.statusCode, { error: '上游错误', detail: errBody.substring(0, 500) }));
+            return;
+          }
+          if (isStream) {
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+            let fullContent = '';
+            proxyRes.on('data', chunk => {
+              res.write(chunk);
+              for (const line of chunk.toString().split('\n').filter(Boolean)) {
+                if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                  try { fullContent += JSON.parse(line.slice(6)).choices?.[0]?.delta?.content || ''; } catch (_) {}
+                }
+              }
+            });
+            proxyRes.on('end', () => {
+              res.end();
+              db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: fullContent.substring(0, 8000), source: 'bridge' });
+              recordTokens(model.id, { input: estimateTokens(JSON.stringify(body.messages || [])), output: estimateTokens(fullContent), estimated: true }, '—');
+            });
+          } else {
+            let respData = '';
+            proxyRes.on('data', d => respData += d);
+            proxyRes.on('end', () => {
+              res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' });
+              res.end(respData);
+              try {
+                const parsed = JSON.parse(respData);
+                db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: (parsed.choices?.[0]?.message?.content || '').substring(0, 8000), usage: parsed.usage || null, source: 'bridge' });
+                if (parsed.usage) recordTokens(model.id, { input: parsed.usage.prompt_tokens || 0, output: parsed.usage.completion_tokens || 0 }, '—');
+              } catch (_) {}
+            });
+          }
+        });
+        proxyReq.on('error', e => { if (!res.headersSent) sendJSON(res, 502, { error: '上游请求失败', detail: e.message }); else res.end(); });
+        proxyReq.write(reqData);
+        proxyReq.end();
+        return;
+      }
+
+      // ── 分支 A2:Codely(团结 Cowork)LiteLLM 转发(先用 access_token 换 cli_api_key,再带特殊 header 转发) ──
+      if (model.transport === 'codely-http') {
+        let cliKey;
+        try {
+          cliKey = await getCodelyCliApiKey();
+        } catch (e) {
+          sendJSON(res, 500, { error: '获取 Codely cli_api_key 失败', detail: String(e.message || e).substring(0, 300) });
+          return;
+        }
+        const fwdBody = { ...body, model: model.upstreamModel || model.id };
+        const reqData = JSON.stringify(fwdBody);
+        const headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${cliKey}`,
+          'User-Agent': 'codely-cli/1.0.0-release.43 (win32; x64)',
+          'x-litellm-session-id': crypto.randomUUID()
+        };
+        db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: JSON.stringify(fwdBody.messages || []).substring(0, 8000), source: 'bridge' });
+        const proxyReq = https.request(`${CODELY_LITELLM_BASE}/v1/chat/completions`, {
+          method: 'POST',
+          headers
         }, (proxyRes) => {
           if (proxyRes.statusCode !== 200) {
             let errBody = '';

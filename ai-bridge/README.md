@@ -38,6 +38,36 @@ node server.js     # 启动服务 (端口 9800)
 - **OpenAI 反代** — `/v1/chat/completions` 统一暴露免费模型
 - **MCP 桥接** — 任何支持 MCP 的 AI 工具可接入
 
+## OpenAI 反代模型
+
+所有模型统一入口：`http://127.0.0.1:9800/v1`，API Key 随便填（本地代理不校验）。
+
+| 模型 | 来源 | transport |
+|------|------|-----------|
+| agnes-2.0-flash / agnes-2.5-flash / auto | AgnesCode | agnes-http |
+| glm-5.2 / deepseek-v4-flash / qwen3-vl-8b-instruct | AtomCode | cli |
+| codely-core / codely-flash / codely-air / codely-vl | 团结 Cowork | codely-http |
+| GLM-5.2 / GLM-5.3 | 团结 Cowork | codely-http |
+
+### Codely（团结 Cowork）接入说明
+
+`codely-http` transport 由 ai-bridge 内建实现（无需单独运行 codely2api 服务）：
+
+1. 启动时自动探测 `~/.codely-cli/oauth_creds.json`（`os.homedir()` 失败时回退 `USERPROFILE`，再兜底扫描 `C:\Users\*`，兼容 LocalSystem 服务）
+2. 用 `access_token` 调团结后端换取 `cli_api_key`（缓存 1 小时）
+3. 带 `x-litellm-session-id` + 特制 `User-Agent` 转发到团结 LiteLLM 后端
+
+前提：本机已安装并登录团结 Cowork 桌面端。支持流式（stream）与非流式调用，流量自动记录进 traffic 监控。
+
+### zcode / 任何 OpenAI 兼容客户端接入
+
+```
+Base URL: http://127.0.0.1:9800/v1
+API Key:  随便填（如 sk-1234）
+模型名:   codely-core / GLM-5.3 / codely-flash / codely-vl 等（见上表）
+```
+
+
 ## 配置文件
 
 | 文件 | 说明 | 首次运行 |

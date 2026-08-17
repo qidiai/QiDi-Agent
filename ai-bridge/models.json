@@ -64,5 +64,47 @@
       "outputMode": "stdout-text",
       "timeout": 120000
     }
+  },
+  {
+    "id": "codely-core",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "codely-core"
+  },
+  {
+    "id": "codely-flash",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "codely-flash"
+  },
+  {
+    "id": "codely-air",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "codely-air"
+  },
+  {
+    "id": "codely-vl",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "codely-vl"
+  },
+  {
+    "id": "GLM-5.2",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "GLM-5.2"
+  },
+  {
+    "id": "GLM-5.3",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "GLM-5.3"
   }
 ]

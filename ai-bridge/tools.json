@@ -5,7 +5,16 @@
     "description": "OpenClaw AI Agent (agnes-2.0-flash)",
     "transport": "cli",
     "command": "openclaw",
-    "args": ["agent", "--agent", "main", "--session-key", "{{sessionId}}", "--json", "--message-file", "{{messageFile}}"],
+    "args": [
+      "agent",
+      "--agent",
+      "main",
+      "--session-key",
+      "{{sessionId}}",
+      "--json",
+      "--message-file",
+      "{{messageFile}}"
+    ],
     "inputMode": "message-file",
     "outputMode": "stdout-json",
     "parse": {
@@ -20,11 +29,18 @@
     "description": "AtomCode AI (GLM)",
     "transport": "cli",
     "command": "atomcode",
-    "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
-    "args": ["--prompt", "{{task}}", "--dir", "{{outputDir}}"],
+    "commandPaths": [
+      "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
+    ],
+    "args": [
+      "--prompt",
+      "{{task}}",
+      "--dir",
+      "{{outputDir}}"
+    ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
-    "timeout": 120000
+    "timeout": 1800000
   },
   {
     "name": "claude-code",
@@ -32,7 +48,10 @@
     "description": "Claude Code CLI",
     "transport": "cli",
     "command": "claude",
-    "args": ["-p", "{{task}}"],
+    "args": [
+      "-p",
+      "{{task}}"
+    ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
     "timeout": 120000
@@ -42,5 +61,47 @@
     "displayName": "Agnes MCP",
     "description": "Route task to Agnes (top-level orchestrator) — no external process",
     "transport": "routing-marker"
+  },
+  {
+    "name": "mimo-code",
+    "displayName": "Mimo Code",
+    "description": "Mimo Code CLI (mimo run 非交互模式)",
+    "transport": "cli",
+    "command": "mimo",
+    "args": [
+      "run",
+      "{{task}}"
+    ],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 120000
+  },
+  {
+    "name": "qoder",
+    "displayName": "Qoder",
+    "description": "Qoder CLI (qodercli -p 非交互模式)",
+    "transport": "cli",
+    "command": "qodercli",
+    "args": [
+      "-p",
+      "{{task}}"
+    ],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 120000
+  },
+  {
+    "name": "workbuddy",
+    "displayName": "WorkBuddy",
+    "description": "WorkBuddy Code CLI (codebuddy -p 非交互模式)",
+    "transport": "cli",
+    "command": "codebuddy",
+    "args": [
+      "-p",
+      "{{task}}"
+    ],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 120000
   }
 ]
