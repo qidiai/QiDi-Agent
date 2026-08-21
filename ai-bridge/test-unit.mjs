@@ -31,6 +31,13 @@ const {
   buildRoutingProfile,
   rankRoutingProfiles
 } = require('./routing-score.js');
+const {
+  codelySigningKey,
+  codelySignature,
+  codelyCliVersion,
+  codelyUserAgent
+} = require('./codely-client.js');
+const crypto = require('node:crypto');
 
 let passed = 0;
 let failed = 0;
@@ -135,6 +142,31 @@ async function main () {
     now
   );
   check('失败后有更新成功则立即解除冷却', recovered.coolingDown === false && recovered.cooldownUntil === null);
+
+  // ── codely-client 签名(与官方 CLI 算法对齐,逆向自 release.52) ──
+  section('codely-client(X-Codely-Signature 签名/UA 跟版)');
+  // 签名算法独立重算验证:测试内用原生 crypto 重走一遍派生链,与模块输出逐字节比对
+  const SECRET = Buffer.from('406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018', 'hex');
+  const fakeKey = 'sk-test-key-1234567890';
+  const k1 = crypto.createHmac('sha256', SECRET).update('codely-signing-v1').digest();
+  const expectedSigningKey = crypto.createHmac('sha256', k1).update(fakeKey).digest();
+  check('signingKey 派生链 = HMAC(HMAC(secret,"codely-signing-v1"), cli_api_key)', codelySigningKey(fakeKey).equals(expectedSigningKey));
+  const ts = '1787309310';
+  const expectedSig = `v1.${ts}.${crypto.createHmac('sha256', expectedSigningKey).update(['v1', '/v1/chat/completions', ts].join('\n')).digest('base64url')}`;
+  const actualSig = codelySignature('/v1/chat/completions', codelySigningKey(fakeKey), ts);
+  check('签名值 = v1.{unix秒}.{base64url(HMAC(key,"v1\\n"+path+"\\n"+ts))}', actualSig === expectedSig, `期望 ${expectedSig} 实际 ${actualSig}`);
+  check('签名为 base64url 字符集(无 + / =)', /^[v0-9.]+$/u.test(actualSig.split('.').slice(0, 2).join('.') + '.') && !/[+/=]/.test(actualSig.split('.')[2]));
+  const sig2 = codelySignature('/v1/messages', codelySigningKey(fakeKey), ts);
+  check('不同 path 产生不同签名', sig2 !== actualSig);
+  check('时间戳参与签名(同 path 不同 ts 签名不同)', codelySignature('/v1/chat/completions', codelySigningKey(fakeKey), '1787309311') !== actualSig);
+  // UA 跟版
+  const ver = codelyCliVersion();
+  check('本地 exe 版本提取或回退(格式 x.y.z-release.NN)', /^\d+\.\d+\.\d+-release\.\d+$/.test(ver), `实际 ${ver}`);
+  check('UA 格式 = codely-cli/{version} (win32; x64)', /^codely-cli\/\d+\.\d+\.\d+-release\.\d+ \(win32; x64\)$/.test(codelyUserAgent()), `实际 ${codelyUserAgent()}`);
+  process.env.CODELY_CLI_EXE = 'Z:\\definitely\\not\\exists\\codely.exe';
+  const fallbackVer = codelyCliVersion(true);
+  check('exe 缺失时回退内置版本', fallbackVer === '1.0.0-release.52', `实际 ${fallbackVer}`);
+  delete process.env.CODELY_CLI_EXE;
 }
 
 main()

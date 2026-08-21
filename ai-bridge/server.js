@@ -148,96 +148,17 @@ function readAtomToken () {
   }
 }
 
-// ── Codely(团结 Cowork)凭据与 cli_api_key ──
-const CODELY_API_BASE = 'https://codely.tuanjie.cn';
-const CODELY_LITELLM_BASE = 'https://codely-litellm.tuanjie.cn';
-let _codelyKey = null;
-let _codelyKeyTime = 0;
-const CODELY_KEY_TTL = 3600000;
-
-// 服务以 LocalSystem 运行时 os.homedir() 指向系统目录,这里探测真实用户目录下的 .codely-cli
-function codelyAuthDir () {
-  const envDir = process.env.CODELY_AUTH_DIR;
-  const candidates = [];
-  if (envDir) candidates.push(envDir);
-  candidates.push(os.homedir());
-  if (process.env.USERPROFILE) candidates.push(process.env.USERPROFILE);
-  for (const base of candidates) {
-    if (!base) continue;
-    const p = path.join(base, '.codely-cli');
-    if (fs.existsSync(path.join(p, 'oauth_creds.json'))) return p;
-  }
-  // 兜底:扫描 C:\Users\* 下已登录的 .codely-cli
-  try {
-    const usersRoot = 'C:\\Users';
-    for (const name of fs.readdirSync(usersRoot)) {
-      const p = path.join(usersRoot, name, '.codely-cli');
-      if (fs.existsSync(path.join(p, 'oauth_creds.json'))) return p;
-    }
-  } catch (_) {}
-  return null;
-}
-
-function readCodelyCreds () {
-  const dir = codelyAuthDir();
-  if (!dir) return null;
-  try {
-    return JSON.parse(fs.readFileSync(path.join(dir, 'oauth_creds.json'), 'utf-8'));
-  } catch (e) {
-    return null;
-  }
-}
-
-function codelyOrgId (creds) {
-  const dir = codelyAuthDir();
-  try {
-    if (dir && fs.existsSync(path.join(dir, 'org.json'))) {
-      const orgData = JSON.parse(fs.readFileSync(path.join(dir, 'org.json'), 'utf-8'));
-      const accounts = orgData.accounts || {};
-      const uid = String(creds.user_id || '');
-      if (uid && accounts[uid]) return accounts[uid].currentOrgId || '';
-    }
-  } catch (_) {}
-  return creds.org_id || '';
-}
-
-function fetchCodelyCliApiKey () {
-  const creds = readCodelyCreds();
-  if (!creds || !creds.access_token) throw new Error('未找到团结登录态(~/.codely-cli/oauth_creds.json)');
-  const orgId = codelyOrgId(creds);
-  const params = new URLSearchParams();
-  if (orgId) params.set('teamId', orgId);
-  const qs = params.toString();
-  return new Promise((resolve, reject) => {
-    const url = `${CODELY_API_BASE}/api/api-token/cli-api-key${qs ? '?' + qs : ''}`;
-    const req = https.get(url, {
-      headers: { Authorization: `Bearer ${creds.access_token}`, Accept: 'application/json' },
-      timeout: 15000
-    }, res => {
-      let d = '';
-      res.on('data', c => d += c);
-      res.on('end', () => {
-        try {
-          const data = JSON.parse(d);
-          if (data.cli_api_key) resolve(data.cli_api_key);
-          else reject(new Error(`cli-api-key 响应无 key: ${d.substring(0, 200)}`));
-        } catch (e) { reject(new Error(`cli-api-key 解析失败: ${d.substring(0, 200)}`)); }
-      });
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('获取 cli_api_key 超时')); });
-  });
-}
-
-function getCodelyCliApiKey () {
-  if (_codelyKey && Date.now() - _codelyKeyTime < CODELY_KEY_TTL) return Promise.resolve(_codelyKey);
-  return fetchCodelyCliApiKey().then(key => {
-    _codelyKey = key;
-    _codelyKeyTime = Date.now();
-    log('info', 'Codely cli_api_key refreshed');
-    return key;
-  });
-}
+// ── Codely(团结 Cowork)客户端:凭据/cli_api_key/签名/版本跟版,实现见 codely-client.js ──
+const {
+  CODELY_LITELLM_BASE,
+  fetchCodelyCliApiKey,
+  getCodelyCliApiKey,
+  invalidateCodelyKey,
+  buildCodelyHeaders,
+  requestCodelyLiteLLM,
+  codelyCliVersion,
+  codelyTokenExpiryDays
+} = require('./codely-client');
 
 // ── OpenAI 兼容反代:模型注册表(配置驱动,新增模型只改 models.json,不改代码) ──
 let _modelsCache = null;
@@ -263,6 +184,106 @@ function findModel (id) {
 // 模型是否可用:绑定的工具开关未被显式关闭(与 dispatch 共用 switches.json)
 function modelEnabled (m) {
   return !m.switch || isToolEnabled(m.switch);
+}
+
+// ── 反代幂等缓存(内存 LRU,不落盘避免敏感内容持久化;仅缓存 200 成功响应) ──
+const CACHE_TTL = parsePositiveInt(process.env.AI_BRIDGE_CACHE_TTL, 10 * 60 * 1000);
+const CACHE_MAX = parsePositiveInt(process.env.AI_BRIDGE_CACHE_MAX, 100);
+const _respCache = new Map(); // key → { value(Buffer), at }
+function cacheKey (modelId, body) {
+  const stable = { model: body.model, messages: body.messages, temperature: body.temperature, top_p: body.top_p, max_tokens: body.max_tokens };
+  return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
+}
+function cacheGet (key) {
+  const hit = _respCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CACHE_TTL) { _respCache.delete(key); return null; }
+  _respCache.delete(key); _respCache.set(key, hit); // LRU 触碰
+  return hit;
+}
+function cacheSet (key, value) {
+  if (_respCache.size >= CACHE_MAX) _respCache.delete(_respCache.keys().next().value);
+  _respCache.set(key, { value: Buffer.from(value), at: Date.now() });
+}
+
+// ── Codely LiteLLM 转发(流式/非流式;401/403 时换新 key 重试一次,应对服务端密钥轮换) ──
+// ctx: { res, reqPath, reqData, messages, model, taskId, isStream, cliKey, retried }
+// 非流式 200 响应写入幂等缓存;流式命中缓存时直接合成单块 SSE 回放
+function forwardCodelyLiteLLM (ctx) {
+  const { res, reqPath, reqData, messages, model, taskId, isStream } = ctx;
+  const headers = buildCodelyHeaders(reqPath, ctx.cliKey, reqData);
+  const targetUrl = ctx.reqUrl || `${CODELY_LITELLM_BASE}${reqPath}`;
+  db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: JSON.stringify(messages || (reqData ? JSON.parse(reqData).messages : [])).substring(0, 8000), source: 'bridge' });
+  const proxyReq = https.request(targetUrl, {
+    method: 'POST',
+    headers
+  }, (proxyRes) => {
+    if ((proxyRes.statusCode === 401 || proxyRes.statusCode === 403) && !ctx.retried) {
+      let errBody = '';
+      proxyRes.on('data', d => errBody += d);
+      proxyRes.on('end', async () => {
+        invalidateCodelyKey();
+        log('warn', `Codely 上游 ${proxyRes.statusCode},换新 cli_api_key 重试一次: ${errBody.substring(0, 200)}`);
+        try {
+          ctx.cliKey = await fetchCodelyCliApiKey();
+          ctx.retried = true;
+          forwardCodelyLiteLLM(ctx);
+        } catch (e) {
+          sendJSON(res, 502, { error: '重试时获取 Codely cli_api_key 失败', detail: String(e.message || e).substring(0, 300) });
+        }
+      });
+      return;
+    }
+    if (proxyRes.statusCode === 401 || proxyRes.statusCode === 403) {
+      // 重试仍 401:大概率官方更换了签名算法/内置盐(UA 已跟本地 exe 版本,只剩签名常量轮换这一种可能)
+      let errBody = '';
+      proxyRes.on('data', d => errBody += d);
+      proxyRes.on('end', () => {
+        log('error', `Codely 上游持续 ${proxyRes.statusCode},官方可能更换签名算法,需重新逆向 codely.exe: ${errBody.substring(0, 300)}`);
+        sendJSON(res, proxyRes.statusCode, { error: '上游持续拒绝(签名或密钥失效)', detail: errBody.substring(0, 500) });
+      });
+      return;
+    }
+    if (proxyRes.statusCode !== 200) {
+      let errBody = '';
+      proxyRes.on('data', d => errBody += d);
+      proxyRes.on('end', () => sendJSON(res, proxyRes.statusCode, { error: '上游错误', detail: errBody.substring(0, 500) }));
+      return;
+    }
+    if (isStream) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+      let fullContent = '';
+      proxyRes.on('data', chunk => {
+        res.write(chunk);
+        for (const line of chunk.toString().split('\n').filter(Boolean)) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            try { fullContent += JSON.parse(line.slice(6)).choices?.[0]?.delta?.content || JSON.parse(line.slice(6)).delta?.text || ''; } catch (_) {}
+          }
+        }
+      });
+      proxyRes.on('end', () => {
+        res.end();
+        db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: fullContent.substring(0, 8000), source: 'bridge' });
+        recordTokens(model.id, { input: estimateTokens(JSON.stringify(messages || [])), output: estimateTokens(fullContent), estimated: true }, '—');
+      });
+    } else {
+      let respData = '';
+      proxyRes.on('data', d => respData += d);
+      proxyRes.on('end', () => {
+        res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' });
+        res.end(respData);
+        try {
+          const parsed = JSON.parse(respData);
+          db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: (parsed.choices?.[0]?.message?.content || parsed.content?.[0]?.text || '').substring(0, 8000), usage: parsed.usage || null, source: 'bridge' });
+          const usageTokens = parsed.usage ? { input: parsed.usage.prompt_tokens || parsed.usage.input_tokens || 0, output: parsed.usage.completion_tokens || parsed.usage.output_tokens || 0 } : { input: estimateTokens(JSON.stringify(messages || [])), output: estimateTokens(parsed.choices?.[0]?.message?.content || parsed.content?.[0]?.text || ''), estimated: true };
+          recordTokens(model.id, usageTokens, '—');
+        } catch (_) {}
+      });
+    }
+  });
+  proxyReq.on('error', e => { if (!res.headersSent) sendJSON(res, 502, { error: '上游请求失败', detail: e.message }); else res.end(); });
+  proxyReq.write(reqData);
+  proxyReq.end();
 }
 
 // OpenAI messages[] → 单条 prompt(CLI 型订阅一次性输入用;兼容 content 为字符串或分段数组)
@@ -927,15 +948,44 @@ const server = http.createServer(async (req, res) => {
 
     // 健康检查(免鉴权/免工具检测,供守护进程/服务管理器探活)
     if (p === '/api/health' && req.method === 'GET') {
-      sendJSON(res, 200, {
+      const tokenDays = codelyTokenExpiryDays();
+      if (tokenDays !== null && tokenDays <= 7) {
+        log('warn', `Codely access_token 将在 ${tokenDays} 天后过期,请尽快打开 Codely CLI 重新登录(微信登录无 refresh_token,无法自动刷新)`);
+      }
+      const dailyBudget = parseInt(process.env.AI_BRIDGE_DAILY_TOKEN_BUDGET) || 0;
+      const today = db.todayTokens();
+      const payload = {
         status: isShuttingDown ? 'shutting_down' : 'ok',
         uptime: Math.floor((Date.now() - START_TIME) / 1000),
         port: CONFIG.PORT,
         clients: onlineClientCount(),
         activeDispatches: activeDispatchCount,
         dispatchTotal: METRICS.dispatchTotal,
-        version: '1.1'
-      });
+        version: '1.1',
+        codely: {
+          cliVersion: codelyCliVersion(),
+          tokenDaysLeft: tokenDays,
+          tokenWarning: tokenDays !== null && tokenDays <= 7 ? `access_token 剩 ${tokenDays} 天,请打开 Codely CLI 重新登录` : null
+        },
+        usage: dailyBudget > 0 ? { todayTokens: today, dailyBudget, warning: today >= dailyBudget } : { todayTokens: today }
+      };
+      // ?probe=1:带签名探测 LiteLLM 上游真实连通性(只在本机回环监听,无密钥泄露面)
+      if (url.searchParams.get('probe') === '1') {
+        const t0 = Date.now();
+        try {
+          const cliKey = await getCodelyCliApiKey();
+          const upRes = await requestCodelyLiteLLM('/v1/models', { method: 'GET', cliKey, timeout: 10000 });
+          let rd = '';
+          upRes.on('data', d => rd += d);
+          await new Promise((resolve, reject) => { upRes.on('end', resolve); upRes.on('error', reject); });
+          let modelCount = null;
+          try { modelCount = (JSON.parse(rd).data || []).length; } catch (_) {}
+          payload.upstream = { ok: upRes.statusCode === 200, status: upRes.statusCode, latencyMs: Date.now() - t0, models: modelCount };
+        } catch (e) {
+          payload.upstream = { ok: false, error: String(e.message || e).substring(0, 200), latencyMs: Date.now() - t0 };
+        }
+      }
+      sendJSON(res, 200, payload);
       return;
     }
 
@@ -1405,6 +1455,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ── 用量报表:按天/按模型聚合 token 与调用数(数据源:traffic 表反代入站记录) ──
+    if (p === '/api/usage/report' && req.method === 'GET') {
+      const days = Math.max(1, Math.min(parseInt(url.searchParams.get('days') || '7') || 7, 90));
+      sendJSON(res, 200, db.usageReport(days));
+      return;
+    }
+
     // ── 日志 API ──
     if (p === '/api/logs' && req.method === 'GET') {
       const level = url.searchParams.get('level') || null;
@@ -1488,6 +1545,62 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ── Anthropic 兼容端点:Claude Code 类工具可直接以 Anthropic 协议接入(仅 codely-http 模型) ──
+    if (p === '/v1/messages' && req.method === 'POST') {
+      const body = await readBody(req, PROXY_MAX_BODY);
+      const isStream = body.stream === true;
+      const model = findModel(body.model);
+      if (!model) { sendJSON(res, 404, { type: 'error', error: { type: 'not_found_error', message: `未知模型: ${body.model || '(空)'}。可用模型见 GET /v1/models` } }); return; }
+      if (!modelEnabled(model)) { sendJSON(res, 403, { type: 'error', error: { type: 'permission_error', message: `模型 ${model.id} 已被开关禁用(${model.switch})` } }); return; }
+      if (model.transport !== 'codely-http') { sendJSON(res, 400, { type: 'error', error: { type: 'invalid_request_error', message: `/v1/messages 仅支持 codely-http 模型,${model.id} 是 ${model.transport}` } }); return; }
+      const taskId = `proxy_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+      const fwdBody = { ...body, model: model.upstreamModel || model.id };
+      fwdBody.stream = isStream; // 统一显式声明
+      const reqData = JSON.stringify(fwdBody);
+      try {
+        const cliKey = await getCodelyCliApiKey();
+        // 签名按纯 path 计算(官方 fetch 拦截器用 URL.pathname),请求 URL 需带 ?beta=1 启用 Anthropic 兼容层
+        forwardCodelyLiteLLM({ res, reqPath: '/v1/messages', reqUrl: `${CODELY_LITELLM_BASE}/v1/messages?beta=1`, reqData, messages: fwdBody.messages, model, taskId, isStream, cliKey, retried: false });
+      } catch (e) {
+        sendJSON(res, 500, { error: '获取 Codely cli_api_key 失败', detail: String(e.message || e).substring(0, 300) });
+      }
+      return;
+    }
+
+    // ── 模型清单自动同步:带签名拉 LiteLLM /v1/models,与 models.json 的 codely-http 条目 diff ──
+    if (p === '/api/models/sync' && req.method === 'POST') {
+      try {
+        const cliKey = await getCodelyCliApiKey();
+        const upRes = await requestCodelyLiteLLM('/v1/models', { method: 'GET', cliKey, timeout: 20000 });
+        let rd = '';
+        upRes.on('data', d => rd += d);
+        await new Promise((resolve, reject) => { upRes.on('end', resolve); upRes.on('error', reject); });
+        if (upRes.statusCode !== 200) {
+          sendJSON(res, 502, { error: `上游 /v1/models 返回 ${upRes.statusCode}`, detail: rd.substring(0, 300) });
+          return;
+        }
+        let upstreamModels = [];
+        try { upstreamModels = (JSON.parse(rd).data || []).map(x => x.id).filter(Boolean); } catch (_) {}
+        const models = loadModels();
+        const existing = new Set(models.filter(m => m.transport === 'codely-http').map(m => m.upstreamModel || m.id));
+        const added = [];
+        for (const id of upstreamModels) {
+          if (existing.has(id)) continue;
+          models.push({ id, owned_by: 'codely', switch: 'codely', transport: 'codely-http', upstreamModel: id });
+          added.push(id);
+        }
+        if (added.length > 0) {
+          fs.writeFileSync(path.join(__dirname, 'models.json'), JSON.stringify(models, null, 2) + '\n', 'utf-8');
+          _modelsCache = null; // 立即失效缓存
+        }
+        sendJSON(res, 200, { upstream: upstreamModels.length, added, total: loadModels().length });
+        log('info', `模型清单同步完成: 上游 ${upstreamModels.length} 个, 新增 ${added.length} 个${added.length ? ': ' + added.join(', ') : ''}`);
+      } catch (e) {
+        sendJSON(res, 500, { error: '模型同步失败', detail: String(e.message || e).substring(0, 300) });
+      }
+      return;
+    }
+
     if (p === '/v1/chat/completions' && req.method === 'POST') {
       const body = await readBody(req, PROXY_MAX_BODY);
       const isStream = body.stream === true;
@@ -1549,68 +1662,133 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ── 分支 A2:Codely(团结 Cowork)LiteLLM 转发(先用 access_token 换 cli_api_key,再带特殊 header 转发) ──
+      // ── 分支 A2:Codely(团结 Cowork)LiteLLM 转发(cli_api_key + X-Codely-Signature 签名,401/403 换新 key 重试一次) ──
       if (model.transport === 'codely-http') {
-        let cliKey;
-        try {
-          cliKey = await getCodelyCliApiKey();
-        } catch (e) {
-          sendJSON(res, 500, { error: '获取 Codely cli_api_key 失败', detail: String(e.message || e).substring(0, 300) });
-          return;
-        }
         const fwdBody = { ...body, model: model.upstreamModel || model.id };
         const reqData = JSON.stringify(fwdBody);
-        const headers = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${cliKey}`,
-          'User-Agent': 'codely-cli/1.0.0-release.43 (win32; x64)',
-          'x-litellm-session-id': crypto.randomUUID()
-        };
-        db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: JSON.stringify(fwdBody.messages || []).substring(0, 8000), source: 'bridge' });
-        const proxyReq = https.request(`${CODELY_LITELLM_BASE}/v1/chat/completions`, {
-          method: 'POST',
-          headers
-        }, (proxyRes) => {
-          if (proxyRes.statusCode !== 200) {
-            let errBody = '';
-            proxyRes.on('data', d => errBody += d);
-            proxyRes.on('end', () => sendJSON(res, proxyRes.statusCode, { error: '上游错误', detail: errBody.substring(0, 500) }));
+        // 幂等缓存命中:非流式直接回放;流式合成单块 SSE(省上游调用,免费额度有限时价值明显)
+        const ck = cacheKey(model.id, fwdBody);
+        const cached = cacheGet(ck);
+        if (cached) {
+          if (isStream) {
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Cache': 'HIT' });
+            res.write(cached.value);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } else {
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'X-Cache': 'HIT' });
+            res.end(cached.value);
+          }
+          db.recordEvent({ source: 'bridge', channel: 'cache', type: 'llm_request', model: model.id, detail: 'cache HIT' });
+          return;
+        }
+        try {
+          const cliKey = await getCodelyCliApiKey();
+          const ctx = { res, reqPath: '/v1/chat/completions', reqData, messages: fwdBody.messages, model, taskId, isStream, cliKey, retried: false };
+          // 非流式:包装 res 捕获 200 响应体写缓存
+          if (!isStream) {
+            ctx.res = {
+              headersSent: false,
+              writeHead (code, headers) { this._code = code; this._headers = headers || {}; this.headersSent = true; return this; },
+              end (data) {
+                if (this._code === 200 && data) {
+                  cacheSet(ck, data);
+                  const h = { ...this._headers, 'Content-Type': 'application/json; charset=utf-8' };
+                  res.writeHead(200, h);
+                  res.end(data);
+                } else {
+                  res.writeHead(this._code || 502, this._headers || {});
+                  res.end(data);
+                }
+              }
+            };
+          }
+          forwardCodelyLiteLLM(ctx);
+        } catch (e) {
+          sendJSON(res, 500, { error: '获取 Codely cli_api_key 失败', detail: String(e.message || e).substring(0, 300) });
+        }
+        return;
+      }
+
+      // ── 分支 A3:本地 Ollama VL(qwen2.5-vl 等,零云端 token;图片走 base64) ──
+      if (model.transport === 'local-vl') {
+        const ollamaModel = model.ollamaModel || 'qwen2.5vl:3b';
+        const ollamaBase = model.ollamaBase || process.env.AI_BRIDGE_OLLAMA_BASE || 'http://127.0.0.1:11434';
+        // OpenAI messages → Ollama messages(字符串 content 原样;分段数组提取 text + image_url base64)
+        const ollamaMessages = (Array.isArray(body.messages) ? body.messages : []).map(m => {
+          const msg = { role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user' };
+          if (typeof m.content === 'string') { msg.content = m.content; return msg; }
+          const parts = Array.isArray(m.content) ? m.content : [];
+          msg.content = parts.filter(x => x && typeof x.text === 'string').map(x => x.text).join('');
+          const images = parts.filter(x => x && x.image_url && typeof x.image_url.url === 'string')
+            .map(x => x.image_url.url.replace(/^data:[^;]+;base64,/, ''));
+          if (images.length) msg.images = images;
+          return msg;
+        });
+        if (ollamaMessages.length === 0) { sendJSON(res, 400, { error: '缺少 messages 内容' }); return; }
+        const ollamaReqData = JSON.stringify({ model: ollamaModel, messages: ollamaMessages, stream: !!isStream, options: { temperature: body.temperature ?? undefined, top_p: body.top_p ?? undefined } });
+        const ollamaUrl = new URL(ollamaBase + '/api/chat');
+        const oMod = ollamaUrl.protocol === 'https:' ? https : http;
+        db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: JSON.stringify(body.messages || []).substring(0, 2000), source: 'bridge' });
+        const created = Math.floor(Date.now() / 1000);
+        const oReq = oMod.request(ollamaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(ollamaReqData) }, timeout: 120000 }, oRes => {
+          if (oRes.statusCode !== 200) {
+            let eb = '';
+            oRes.on('data', d => eb += d);
+            oRes.on('end', () => sendJSON(res, oRes.statusCode === 404 ? 503 : oRes.statusCode, { error: 'Ollama 上游错误(确认 ollama serve 已运行且模型已拉取)', detail: eb.substring(0, 300) }));
             return;
           }
           if (isStream) {
+            // Ollama NDJSON 流 → OpenAI SSE 逐块转换
             res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-            let fullContent = '';
-            proxyRes.on('data', chunk => {
-              res.write(chunk);
-              for (const line of chunk.toString().split('\n').filter(Boolean)) {
-                if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-                  try { fullContent += JSON.parse(line.slice(6)).choices?.[0]?.delta?.content || ''; } catch (_) {}
-                }
+            let buf = '';
+            let full = '';
+            oRes.on('data', chunk => {
+              buf += chunk.toString('utf-8');
+              let nl;
+              while ((nl = buf.indexOf('\n')) >= 0) {
+                const line = buf.slice(0, nl).trim();
+                buf = buf.slice(nl + 1);
+                if (!line) continue;
+                try {
+                  const j = JSON.parse(line);
+                  const delta = j.message?.content || '';
+                  if (delta) full += delta;
+                  res.write(`data: ${JSON.stringify({ id: taskId, object: 'chat.completion.chunk', created, model: model.id, choices: [{ index: 0, delta: j.done ? {} : { role: 'assistant', content: delta }, finish_reason: j.done ? 'stop' : null }] })}\n\n`);
+                } catch (_) {}
               }
             });
-            proxyRes.on('end', () => {
+            oRes.on('end', () => {
+              res.write('data: [DONE]\n\n');
               res.end();
-              db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: fullContent.substring(0, 8000), source: 'bridge' });
-              recordTokens(model.id, { input: estimateTokens(JSON.stringify(body.messages || [])), output: estimateTokens(fullContent), estimated: true }, '—');
+              db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: full.substring(0, 8000), source: 'bridge' });
+              recordTokens(model.id, { input: estimateTokens(JSON.stringify(body.messages || [])), output: estimateTokens(full), estimated: true }, '—');
             });
           } else {
-            let respData = '';
-            proxyRes.on('data', d => respData += d);
-            proxyRes.on('end', () => {
-              res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' });
-              res.end(respData);
+            let rd = '';
+            oRes.on('data', d => rd += d);
+            oRes.on('end', () => {
               try {
-                const parsed = JSON.parse(respData);
-                db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: (parsed.choices?.[0]?.message?.content || '').substring(0, 8000), usage: parsed.usage || null, source: 'bridge' });
-                if (parsed.usage) recordTokens(model.id, { input: parsed.usage.prompt_tokens || 0, output: parsed.usage.completion_tokens || 0 }, '—');
-              } catch (_) {}
+                const j = JSON.parse(rd);
+                const content = j.message?.content || '';
+                const usage = { prompt_tokens: j.prompt_eval_count || 0, completion_tokens: j.eval_count || 0, total_tokens: (j.prompt_eval_count || 0) + (j.eval_count || 0) };
+                sendJSON(res, 200, {
+                  id: taskId, object: 'chat.completion', created, model: model.id,
+                  choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+                  usage
+                });
+                db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: content.substring(0, 8000), usage, source: 'bridge' });
+                recordTokens(model.id, { input: usage.prompt_tokens, output: usage.completion_tokens }, '—');
+              } catch (e) {
+                sendJSON(res, 502, { error: 'Ollama 响应解析失败', detail: String(e.message).substring(0, 300) });
+              }
             });
           }
         });
-        proxyReq.on('error', e => { if (!res.headersSent) sendJSON(res, 502, { error: '上游请求失败', detail: e.message }); else res.end(); });
-        proxyReq.write(reqData);
-        proxyReq.end();
+        oReq.on('timeout', () => oReq.destroy(new Error('Ollama 上游超时')));
+        oReq.on('error', e => { if (!res.headersSent) sendJSON(res, 502, { error: 'Ollama 上游请求失败(确认 ollama serve 已运行)', detail: e.message }); else res.end(); });
+        oReq.write(ollamaReqData);
+        oReq.end();
         return;
       }
 
@@ -1947,17 +2125,44 @@ async function runDiscussionAsync(meetingId, topic, participants, guidance, roun
 
     // 共识引擎:讨论正常结束后自动生成共识总结(结论/分歧/行动项),沉淀到经验库供 memory_search 复用
     const speeches = (store.getMeeting(meetingId)?.messages || []).filter(m => m.content && !m.content.startsWith('(') && m.speaker !== '主持人' && m.speaker !== '系统');
+    let consensus = null;
     if (speeches.length >= 2 && !overBudget()) {
       try {
         const digest = speeches.map(m => `【${m.speaker}】: ${m.content.substring(0, 800)}`).join('\n\n');
         const sumResult = await executeTool(participants[0], `你是会议主持人。请对以下 AI 讨论会做共识总结,输出三部分:1)达成的结论 2)主要分歧 3)行动项。简洁列点。\n\n话题: ${topic}\n\n讨论记录:\n${digest}`, { taskId: `consensus_${meetingId}_${Date.now()}` });
         totalTokens += sumResult.tokens.total || 0;
-        const consensus = sumResult.content.substring(0, 2000);
+        consensus = sumResult.content.substring(0, 2000);
         store.addMessage(meetingId, '共识总结', consensus);
         store.writeExperience('会议共识', `话题: ${topic}\n${consensus}`, ['讨论会', '共识']);
         log('info', `会议 ${meetingId} 共识总结完成, ${sumResult.tokens.total} tokens`);
       } catch (e) {
         store.addMessage(meetingId, '系统', `(共识总结失败: ${e.message})`);
+      }
+    }
+
+    // 共识度评分:共识总结产出后,请每位参与者对共识表态(赞成/有保留/反对),量化收敛程度
+    if (consensus && participants.length >= 2 && !overBudget()) {
+      const votes = [];
+      for (const name of participants) {
+        if (checkInterrupted()) break;
+        if (overBudget()) break;
+        try {
+          const vResult = await executeTool(name, `以下是关于"${topic}"的讨论共识总结:\n\n${consensus.substring(0, 1200)}\n\n请你对这份共识表态,第一行只写:赞成 / 有保留 / 反对,第二行用一句话说明理由。`, { taskId: `vote_${name}_${meetingId}_${Date.now()}` });
+          totalTokens += vResult.tokens.total || 0;
+          const firstLine = (vResult.content.split('\n').find(l => l.trim()) || '').trim();
+          const stance = /赞成/.test(firstLine) ? '赞成' : /反对/.test(firstLine) ? '反对' : /保留/.test(firstLine) ? '有保留' : '未表态';
+          votes.push({ tool: name, stance, reason: vResult.content.split('\n').slice(1).join(' ').trim().substring(0, 200) });
+        } catch (e) {
+          votes.push({ tool: name, stance: '未表态', reason: `(表态失败: ${e.message.substring(0, 100)})` });
+        }
+      }
+      if (votes.length > 0) {
+        const approve = votes.filter(v => v.stance === '赞成').length;
+        const consensusScore = Math.round((approve / votes.length) * 100);
+        const voteDigest = votes.map(v => `${v.tool}: ${v.stance}${v.reason ? ' — ' + v.reason : ''}`).join('\n');
+        store.addMessage(meetingId, '共识度', `共识度 ${consensusScore}%(${approve}/${votes.length} 赞成)\n${voteDigest}`);
+        updateMeeting({ consensusScore, consensusVotes: votes });
+        log('info', `会议 ${meetingId} 共识度评分: ${consensusScore}%(${approve}/${votes.length})`);
       }
     }
 

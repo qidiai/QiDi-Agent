@@ -30,8 +30,17 @@
     "transport": "cli",
     "cli": {
       "command": "atomcode",
-      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
-      "args": ["-p", "{{task}}", "--provider", "AtomGit-GLM-5.2", "--no-telemetry", "-y"],
+      "commandPaths": [
+        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
+      ],
+      "args": [
+        "-p",
+        "{{task}}",
+        "--provider",
+        "AtomGit-GLM-5.2",
+        "--no-telemetry",
+        "-y"
+      ],
       "inputMode": "arg",
       "outputMode": "stdout-text",
       "timeout": 120000
@@ -44,8 +53,17 @@
     "transport": "cli",
     "cli": {
       "command": "atomcode",
-      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
-      "args": ["-p", "{{task}}", "--provider", "AtomGit-deepseek-v4-flash", "--no-telemetry", "-y"],
+      "commandPaths": [
+        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
+      ],
+      "args": [
+        "-p",
+        "{{task}}",
+        "--provider",
+        "AtomGit-deepseek-v4-flash",
+        "--no-telemetry",
+        "-y"
+      ],
       "inputMode": "arg",
       "outputMode": "stdout-text",
       "timeout": 120000
@@ -58,8 +76,17 @@
     "transport": "cli",
     "cli": {
       "command": "atomcode",
-      "commandPaths": ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"],
-      "args": ["-p", "{{task}}", "--provider", "AtomGit-Qwen-Qwen3-VL-8B-Instruct", "--no-telemetry", "-y"],
+      "commandPaths": [
+        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
+      ],
+      "args": [
+        "-p",
+        "{{task}}",
+        "--provider",
+        "AtomGit-Qwen-Qwen3-VL-8B-Instruct",
+        "--no-telemetry",
+        "-y"
+      ],
       "inputMode": "arg",
       "outputMode": "stdout-text",
       "timeout": 120000
@@ -94,6 +121,20 @@
     "upstreamModel": "codely-vl"
   },
   {
+    "id": "codely-basic",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "codely-basic"
+  },
+  {
+    "id": "KIMI-K3",
+    "owned_by": "codely",
+    "switch": "codely",
+    "transport": "codely-http",
+    "upstreamModel": "KIMI-K3"
+  },
+  {
     "id": "GLM-5.2",
     "owned_by": "codely",
     "switch": "codely",
@@ -106,5 +147,13 @@
     "switch": "codely",
     "transport": "codely-http",
     "upstreamModel": "GLM-5.3"
+  },
+  {
+    "id": "qwen2.5-vl-local",
+    "owned_by": "local",
+    "transport": "local-vl",
+    "ollamaModel": "qwen2.5vl:3b",
+    "upstreamModel": "codely-core",
+    "upstream": "https://codely-litellm.tuanjie.cn"
   }
 ]

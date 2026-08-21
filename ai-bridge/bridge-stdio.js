@@ -198,6 +198,30 @@ const MCP_TOOLS = [
       },
       required: ['clientId']
     }
+  },
+  {
+    name: 'recognize_image',
+    description: '识别图片/截图内容,图片在本地处理,不发送云端,零token消耗。支持两种模式:ocr(快速提取文字,适合代码截图/文档)和vision(AI理解图片内容/布局/UI)。默认 auto 自动选择。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: {
+          type: 'string',
+          description: '图片本地文件路径(如 C:/Users/screenshot.png)或base64数据(带或不带data:前缀)'
+        },
+        question: {
+          type: 'string',
+          description: '识别指令,如"描述图片内容"、"读取图中文字"、"分析这段代码截图"。默认"请详细描述这张图片的内容,包括所有可见的文字、UI元素和布局。"'
+        },
+        mode: {
+          type: 'string',
+          description: '识别模式: ocr=快速文字提取(<1秒); vision=AI理解图片内容(~15秒); auto=根据question自动选择(默认)',
+          enum: ['ocr', 'vision', 'auto'],
+          default: 'auto'
+        }
+      },
+      required: ['image']
+    }
   }
 ];
 
@@ -399,6 +423,148 @@ async function callTool (name, args) {
     const r = await httpPost('/api/clients/kick', args);
     if (!r.success) return { content: [{ type: 'text', text: r.error || '踢出失败' }], isError: true };
     return { content: [{ type: 'text', text: `👢 已踢出客户端 ${r.clientId}${r.blocked ? '(并拉黑)' : ''}` }] };
+  }
+  case 'recognize_image': {
+    const VISION_PORT = parseInt(process.env.AI_BRIDGE_VISION_PORT) || 11434;
+    const VISION_HOST = process.env.AI_BRIDGE_VISION_HOST || '127.0.0.1';
+    const question = args.question || '请详细描述这张图片的内容,包括所有可见的文字、UI元素和布局。';
+    const imageInput = args.image;
+    let mode = args.mode || 'auto';
+
+    if (!imageInput) {
+      return { content: [{ type: 'text', text: '错误: 缺少 image 参数' }], isError: true };
+    }
+
+    // auto 模式：根据 question 关键词自动选择
+    if (mode === 'auto') {
+      const q = question.toLowerCase();
+      const ocrKeywords = ['文字', '读取', '提取', 'ocr', 'text', '代码', 'code', '复制', '抄', '识别文字'];
+      const visionKeywords = ['描述', '理解', '分析', '布局', 'ui', '界面', 'describe', 'analyze', 'explain'];
+      const ocrScore = ocrKeywords.some(k => q.includes(k));
+      const visionScore = visionKeywords.some(k => q.includes(k));
+      mode = ocrScore && !visionScore ? 'ocr' : 'vision';
+    }
+
+    // OCR 模式：需要文件路径，base64 输入先存临时文件
+    if (mode === 'ocr') {
+      const fs = require('fs');
+      const nodePath = require('path');
+      const { execFile } = require('child_process');
+      const os = require('os');
+
+      let filePath = imageInput;
+      let tmpFile = null;
+
+      // base64 输入：写到临时文件
+      if (!imageInput.startsWith('data:') && !/^[A-Za-z]:[\\/]/.test(imageInput) && !imageInput.startsWith('/') && !imageInput.startsWith('./') && !imageInput.startsWith('../')) {
+        const tmpDir = os.tmpdir();
+        tmpFile = nodePath.join(tmpDir, `ocr_${Date.now()}.png`);
+        try {
+          fs.writeFileSync(tmpFile, Buffer.from(imageInput, 'base64'));
+          filePath = tmpFile;
+        } catch (e) {
+          return { content: [{ type: 'text', text: `写入临时文件失败: ${e.message}` }], isError: true };
+        }
+      } else if (imageInput.startsWith('data:')) {
+        const tmpDir = os.tmpdir();
+        tmpFile = nodePath.join(tmpDir, `ocr_${Date.now()}.png`);
+        try {
+          const b64 = imageInput.split(',')[1] || imageInput.replace(/^data:image\/\w+;base64,/, '');
+          fs.writeFileSync(tmpFile, Buffer.from(b64, 'base64'));
+          filePath = tmpFile;
+        } catch (e) {
+          return { content: [{ type: 'text', text: `解析 base64 图片失败: ${e.message}` }], isError: true };
+        }
+      }
+
+      const scriptPath = nodePath.join(__dirname, 'ocr.py');
+      try {
+        const result = await new Promise((resolve, reject) => {
+          execFile('python', ['-X', 'utf8', scriptPath, filePath, '--json'], {
+            timeout: 30000,
+            maxBuffer: 1024 * 1024 * 10
+          }, (err, stdout, stderr) => {
+            if (err) reject(new Error(stderr || err.message));
+            else resolve(stdout.trim());
+          });
+        });
+        if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_) {} }
+        try {
+          const parsed = JSON.parse(result);
+          const text = parsed.text || '(未识别到文字)';
+          return { content: [{ type: 'text', text: `[OCR 模式]\n${text}` }] };
+        } catch (_) {
+          return { content: [{ type: 'text', text: `[OCR 模式]\n${result}` }] };
+        }
+      } catch (e) {
+        if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_) {} }
+        return { content: [{ type: 'text', text: `OCR 识别失败: ${e.message}` }], isError: true };
+      }
+    }
+
+    // vision 模式：调用 Ollama API
+    // 构建 data URI
+    let dataUri;
+    if (imageInput.startsWith('data:')) {
+      dataUri = imageInput;
+    } else if (/^[A-Za-z]:[\\/]/.test(imageInput) || imageInput.startsWith('/') || imageInput.startsWith('./') || imageInput.startsWith('../')) {
+      const fs = require('fs');
+      const nodePath = require('path');
+      try {
+        const buf = fs.readFileSync(imageInput);
+        const ext = nodePath.extname(imageInput).toLowerCase().slice(1) || 'png';
+        const mime = ext === 'jpg' ? 'jpeg' : ext;
+        dataUri = `data:image/${mime};base64,${buf.toString('base64')}`;
+      } catch (e) {
+        return { content: [{ type: 'text', text: `读取图片文件失败: ${e.message}` }], isError: true };
+      }
+    } else {
+      dataUri = `data:image/png;base64,${imageInput}`;
+    }
+
+    const body = JSON.stringify({
+      model: process.env.AI_BRIDGE_VISION_MODEL || 'qwen2.5vl:3b',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: dataUri } },
+          { type: 'text', text: question }
+        ]
+      }],
+      max_tokens: 1024,
+      temperature: 0.1,
+      stream: false
+    });
+
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const req = http.request({
+          hostname: VISION_HOST,
+          port: VISION_PORT,
+          path: '/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+          timeout: 120000
+        }, res => {
+          let d = '';
+          res.on('data', c => d += c);
+          res.on('end', () => {
+            try { resolve(JSON.parse(d)); }
+            catch (_) { reject(new Error('本地模型返回格式错误')); }
+          });
+        });
+        req.on('error', e => reject(new Error(`无法连接本地视觉模型(${VISION_HOST}:${VISION_PORT})。请先启动 Ollama。\n错误: ${e.message}`)));
+        req.on('timeout', () => { req.destroy(); reject(new Error('本地模型响应超时(120s)')); });
+        req.write(body);
+        req.end();
+      });
+
+      const text = result?.choices?.[0]?.message?.content || '';
+      if (!text) return { content: [{ type: 'text', text: '本地模型未返回内容' }], isError: true };
+      return { content: [{ type: 'text', text }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: e.message }], isError: true };
+    }
   }
   default:
     return { content: [{ type: 'text', text: `未知工具: ${name}` }], isError: true };

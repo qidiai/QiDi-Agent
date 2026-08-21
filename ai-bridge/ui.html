@@ -158,6 +158,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang S
       <button class="nav-tab" onclick="showPage('memory',this)">记忆</button>
       <button class="nav-tab" onclick="showPage('logs',this)">日志</button>
       <button class="nav-tab" onclick="showPage('traffic',this)">流量</button>
+      <button class="nav-tab" onclick="showPage('usage',this)">用量</button>
       <button class="nav-tab" onclick="showPage('chat',this)">模型</button>
     </div>
     <div class="approval-badge" id="pendingBadge" onclick="showPage('dashboard')">🔴 待审批 <span id="pendingBadgeCount">0</span></div>
@@ -269,6 +270,23 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang S
     </div>
   </div>
 
+  <!-- Usage -->
+  <div id="page-usage" class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📊 用量报表</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="usageDays" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px" onchange="loadUsage()">
+            <option value="1">今天</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option>
+          </select>
+          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="loadUsage()">🔄</button>
+        </div>
+      </div>
+      <div id="usageByTool"></div>
+      <div id="usageByDay" style="margin-top:16px"></div>
+    </div>
+  </div>
+
   <!-- Chat / Model -->
   <div id="page-chat" class="page">
     <div class="card">
@@ -346,6 +364,25 @@ async function refreshData(){
 
 async function toggle(name,en){await post('/api/toggle',{tool:name,enabled:en});refreshData()}
 async function refreshTools(){await post('/api/refresh',{});refreshData()}
+
+async function loadUsage(){
+  try{
+    var days=document.getElementById('usageDays').value;
+    var d=await api('/api/usage/report?days='+days);
+    if(!d.available){document.getElementById('usageByTool').innerHTML='<div class="empty">全局库不可用</div>';document.getElementById('usageByDay').innerHTML='';return}
+    var maxTok=Math.max.apply(null,[1].concat(d.byTool.map(function(t){return t.tokens||0})));
+    document.getElementById('usageByTool').innerHTML=(d.byTool&&d.byTool.length)?'<div style="font-size:12px;color:var(--text3);margin-bottom:8px">按模型聚合</div>'+d.byTool.map(function(t){
+      var pct=Math.round((t.tokens||0)/maxTok*100);
+      return '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>'+esc(t.tool)+'</span><span style="color:var(--text3)">'+(t.tokens||0).toLocaleString()+' tokens · '+(t.calls||0)+' 次</span></div>'+
+      '<div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--accent);border-radius:4px"></div></div></div>';
+    }).join(''):'<div class="empty">暂无数据</div>';
+    var days2={};(d.byDay||[]).forEach(function(r){days2[r.day]=days2[r.day]||{tokens:0,calls:0};days2[r.day].tokens+=r.tokens||0;days2[r.day].calls+=r.calls||0});
+    var dayKeys=Object.keys(days2).sort().reverse();
+    document.getElementById('usageByDay').innerHTML=dayKeys.length?'<div style="font-size:12px;color:var(--text3);margin-bottom:8px">按天聚合</div>'+dayKeys.map(function(k){
+      return '<div style="display:flex;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13px"><span>'+esc(k)+'</span><span style="color:var(--text3)">'+days2[k].tokens.toLocaleString()+' tokens · '+days2[k].calls+' 次</span></div>';
+    }).join(''):'<div class="empty">暂无数据</div>';
+  }catch(e){console.error(e)}
+}
 
 async function approveClient(id){await post('/api/clients/approve',{clientId:id});refreshData()}
 async function denyClient(id){if(!confirm('拒绝并拉黑 '+id+' ？'))return;await post('/api/clients/deny',{clientId:id});refreshData()}
@@ -505,6 +542,7 @@ document.querySelectorAll('.nav-tab').forEach(function(t){
     if(page==='记忆')loadMemory();
     if(page==='日志')loadLogs();
     if(page==='流量')loadTraffic();
+    if(page==='用量')loadUsage();
     if(page==='模型')loadChatModels();
   });
 });

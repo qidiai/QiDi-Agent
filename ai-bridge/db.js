@@ -272,6 +272,49 @@ function clearTraffic () {
   });
 }
 
+// ── 用量报表:按天/按工具聚合(traffic 表,反代调用;events 表,透传观测) ──
+function usageReport (days = 7) {
+  const db = getDb();
+  if (!db) return { available: false, byDay: [], byTool: [] };
+  try {
+    const since = new Date(Date.now() - Math.max(1, days) * 86400000).toISOString();
+    const byDay = db.prepare(`
+      SELECT substr(ts, 1, 10) AS day, tool,
+             COUNT(*) AS calls,
+             SUM(CASE WHEN success THEN 1 ELSE 0 END) AS ok,
+             COALESCE(SUM(CAST(json_extract(usage, '$.prompt_tokens') AS INTEGER) + CAST(json_extract(usage, '$.completion_tokens') AS INTEGER)), 0) AS tokens
+      FROM traffic
+      WHERE direction = 'in' AND ts >= ?
+      GROUP BY day, tool
+      ORDER BY day DESC, tokens DESC
+    `).all(since).map(r => ({ ...r, ok: !!r.ok }));
+    const byTool = db.prepare(`
+      SELECT tool, COUNT(*) AS calls,
+             COALESCE(SUM(CAST(json_extract(usage, '$.prompt_tokens') AS INTEGER) + CAST(json_extract(usage, '$.completion_tokens') AS INTEGER)), 0) AS tokens
+      FROM traffic
+      WHERE direction = 'in' AND ts >= ?
+      GROUP BY tool ORDER BY tokens DESC
+    `).all(since);
+    return { available: true, days, byDay, byTool };
+  } catch (e) { _lastError = e.message; return { available: false, byDay: [], byTool: [] }; }
+}
+
+// 今日(本地时区)token 总量:预算告警用
+function todayTokens () {
+  const db = getDb();
+  if (!db) return 0;
+  try {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(CAST(json_extract(usage, '$.prompt_tokens') AS INTEGER) + CAST(json_extract(usage, '$.completion_tokens') AS INTEGER)), 0) AS tokens
+      FROM traffic WHERE direction = 'in' AND substr(ts, 1, 10) = ?
+    `).get(today);
+    return row?.tokens || 0;
+  } catch (e) { _lastError = e.message; return 0; }
+}
+
 function stats () {
   const db = getDb();
   const base = { available: _available, dbPath: _dbPath, lastError: _lastError };
@@ -296,6 +339,7 @@ module.exports = {
   createAsyncTask, finishAsyncTask, getAsyncTask, markOrphanTasks,
   recordEvent, eventsSummary,
   recordTraffic, queryTraffic, clearTraffic,
+  usageReport, todayTokens,
   stats,
   get available () { return _available; },
   get dbPath () { return _dbPath; }
