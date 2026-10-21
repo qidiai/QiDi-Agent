@@ -88,7 +88,9 @@ function makeMcpChannel (child) {
         // 含 LONGOUT_MARK 标记时返回超长文本,用于验证 RESULT_MAX_CHARS 截断
         // 含 EMPTYOUT_MARK 标记时返回空文本,模拟 CLI exit0/无输出的静默失败(如额度耗尽)
         // 仅"以标记开头"时空产出:接力 prompt 会内嵌原任务文本,避免标记传播到接力工具
-        const text = lastSamplingTask.trimStart().startsWith('EMPTYOUT_MARK')
+        // 评审 prompt(含"你是代码评审专家")带 REVIEW_EMPTY_MARK 时同样回空文本,验证评审空产出判失败
+        const text = (lastSamplingTask.trimStart().startsWith('EMPTYOUT_MARK')
+          || (lastSamplingTask.includes('你是代码评审专家') && lastSamplingTask.includes('REVIEW_EMPTY_MARK')))
           ? ''
           : lastSamplingTask.includes('LONGOUT_MARK')
             ? 'L'.repeat(5000)
@@ -339,6 +341,12 @@ async function main () {
   check('exec 型客户端任务文本已注入工作区路径', lastSamplingTask.includes('## 工作区目录') && lastSamplingTask.includes(wsCreate.body.path), lastSamplingTask.slice(0, 120));
   const wsDispatchNoExec = await req('POST', '/api/dispatch', { task: 'x', tools: [REVIEWER], workspace: 'e2e-ws', auto_fallback: false });
   check('sampling-only 客户端承接 workspace 任务被显式拒绝', wsDispatchNoExec.body.successCount === 0 && /推理型/.test(JSON.stringify(wsDispatchNoExec.body.results ?? wsDispatchNoExec.body)), JSON.stringify(wsDispatchNoExec.body.results?.[0] ?? wsDispatchNoExec.body).slice(0, 200));
+  // 流量保真:准入拒绝必须发生在 'out' 记录之前(未发出的注入文本不得进流量);成功派发则必须如实记录注入后载荷
+  await sleep(400);
+  const trfCli = await req('GET', '/api/traffic?tool=' + encodeURIComponent('client:' + CLIENT) + '&direction=out&limit=100');
+  check('成功派发的工作区注入简报已如实入流量', (trfCli.body.traffic || []).some(t => (t.content || '').includes('## 工作区目录')), JSON.stringify((trfCli.body.traffic || []).map(t => (t.content || '').slice(0, 40))).slice(0, 300));
+  const trfRev = await req('GET', '/api/traffic?tool=' + encodeURIComponent('client:' + REVIEWER) + '&direction=out&limit=100');
+  check('被拒的 workspace 派发不产生假发出流量', !(trfRev.body.traffic || []).some(t => (t.content || '').includes('## 工作区目录')), JSON.stringify((trfRev.body.traffic || []).map(t => (t.content || '').slice(0, 40))).slice(0, 300));
   const wsAfterUse = await req('GET', '/api/workspaces');
   const usedWs = (wsAfterUse.body.workspaces || []).find(w => w.name === 'e2e-ws');
   // useCount=2:成功派发 1 次 + 被拒绝的 sampling-only 派发 1 次(租约在派发准入时即计数)
@@ -435,6 +443,11 @@ async function main () {
   check('主产出成功', rv.body.successCount === 1, JSON.stringify(rv.body).slice(0, 120));
   check('评审由独立工具完成(reviewer≠producer)', rv.body.review?.reviewer === REVIEWER && rv.body.review?.producer === CLIENT, JSON.stringify(rv.body.review || {}).slice(0, 200));
   check('评审有实质内容', typeof rv.body.review?.content === 'string' && rv.body.review.content.length > 0);
+
+  // 9.6a) 评审空产出:评审者返回空文本必须判失败,不得记成"评审成功但没内容"
+  const rvEmpty = await req('POST', '/api/dispatch', { task: '写一个 Python pow2(x) 函数 REVIEW_EMPTY_MARK', tools: [CLIENT], review: true, reviewer: REVIEWER });
+  check('评审空产出场景主产出仍成功', rvEmpty.body.successCount === 1, JSON.stringify(rvEmpty.body).slice(0, 160));
+  check('评审空产出判失败(skipped+空产出原因)', rvEmpty.body.review?.skipped === true && /空产出/.test(rvEmpty.body.review?.reason || ''), JSON.stringify(rvEmpty.body.review || {}).slice(0, 200));
 
   // 9.65) 空产出假成功:exit0/无输出必须判失败,且能触发自动接力(此前 mimo 额度耗尽被记 1/1 成功)
   section('空产出判失败 + 接力链');

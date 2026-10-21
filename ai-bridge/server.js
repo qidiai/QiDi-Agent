@@ -32,6 +32,7 @@ const store = require('./store');
 const workspaceManager = require('./workspace-manager');
 const db = require('./db');
 const observe = require('./observe');
+const { cleanupStaleTaskDirs } = require('./output-cleaner.js');
 
 // ── 配置(集中管理,不再分散硬编码) ──
 // 解析正整数 env:非数字/0/负数一律回退默认值
@@ -496,6 +497,11 @@ function withWorkspaceBrief (task, workspacePath) {
   return `${task}\n\n## 工作区目录\n${workspacePath}\n请在该目录内完成文件读写任务,不要动其它目录。`;
 }
 
+/** 空产出:无正文且无代码块——CLI 静默失败(额度耗尽)与客户端空回复的共同特征 */
+function isEmptyOutput (result) {
+  return !(result.content || '').trim() && (result.codeBlocks || []).length === 0;
+}
+
 function isToolFailed (result, error) {
   if (error) return { failed: true, reason: error.message || String(error), partialCode: '' };
   const text = (result.content || '').toLowerCase();
@@ -528,6 +534,17 @@ async function executeTool (name, task, opts = {}) {
   const outboundTask = (toolDef.type === 'client' && opts.workspace)
     ? withWorkspaceBrief(task, opts.workspace.path)
     : task;
+
+  // 流量保真:exec 准入预检——未声明 exec 的客户端在 "'out' 流量记录" 之前就被拒绝,
+  // 否则会把"注入过工作区简报但从未发出"的文本假如实入流量。
+  // executeClient 内保留同一校验,防直接调用路径绕过此处。
+  if (toolDef.type === 'client' && opts.workspace) {
+    const clientKey = toolDef.clientKey || executionName;
+    const clientInfo = connectedClients.get(clientKey);
+    if (clientInfo && !clientInfo.supportsExec) {
+      throw new Error(`客户端 ${clientKey} 是推理型(sampling)子智能体,无法在工作区执行文件任务;workspace 任务请派给 CLI 工具,或去掉 workspace 参数`);
+    }
+  }
 
   // 流量记录:发出
   db.recordTraffic({
@@ -855,8 +872,14 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
           try {
             const code = producer.codeBlocks?.[0]?.code || producer.content || '';
             const rvResult = await executeTool(reviewer, `你是代码评审专家。请评审以下由 ${producer.tool} 生成的代码,指出潜在问题与改进建议,简洁列点。\n\n## 原任务\n${task.substring(0, 2000)}\n\n## 产出代码\n\`\`\`\n${code.substring(0, 4000)}\n\`\`\``, { taskId: `review_${dispatchId}`, workspace });
-            totalTokens += rvResult.tokens.total || 0;
-            review = { reviewer, producer: producer.tool, content: rvResult.content.substring(0, 2000), tokens: rvResult.tokens.total || 0 };
+            totalTokens += rvResult.tokens.total || 0; // 空产出同样消耗了 token,照常累加
+            if (isEmptyOutput(rvResult)) {
+              // 空产出评审者不得记成"评审成功但没内容"
+              log('warn', `评审空产出判失败: reviewer=${reviewer} producer=${producer.tool} dispatchId=${dispatchId}`);
+              review = { reviewer, producer: producer.tool, skipped: true, reason: '评审空产出(无输出,视为评审失败)' };
+            } else {
+              review = { reviewer, producer: producer.tool, content: rvResult.content.substring(0, 2000), tokens: rvResult.tokens.total || 0 };
+            }
           } catch (e) {
             review = { skipped: true, reviewer, reason: `评审执行失败: ${e.message}` };
           }
@@ -912,6 +935,11 @@ async function doHandoff (task, existingCode, fromTool, toTool, workspaceRef = n
   const handoffPrompt = `以下是之前另一个 AI 工具写到一半的代码,请在此基础上继续完成。\n\n## 还需要完成的任务\n${task}\n\n## 已有代码\n\`\`\`\n${existingCode}\n\`\`\`\n\n请基于已有代码继续完成,输出完整的最终代码。`;
   try {
     const result = await executeTool(target.name, handoffPrompt, { workspace });
+    if (isEmptyOutput(result)) {
+      // 接力空产出(疑似额度耗尽的静默失败)必须显式失败,不得返回假成功
+      log('warn', `handoff 空产出: tool=${target.name} from=${fromTool || 'unknown'}`);
+      return { success: false, error: '空产出(工具正常退出但无输出,疑似额度耗尽)' };
+    }
     return { success: true, tool: target.name, toolId: target.id, canonicalId: target.canonicalId, displayName: target.displayName, duration: result.duration, codeBlocks: result.codeBlocks, content: result.content, tokens: result.tokens, from: fromTool || 'unknown', workspace: workspace ? { id: workspace.id, name: workspace.name, path: workspace.path } : null };
   } catch (e) {
     return { success: false, error: e.message };
@@ -2176,30 +2204,16 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
 });
 
 // ── 清理超长 prompt 落盘等异常退出遗留的任务目录(>24h；正常路径 CliAdapter 执行后自删) ──
-// 目录命名两类:cli-task-*(反代旧格式) 与 <tool>_<13位以上时间戳>(CliAdapter 现行格式)
-function isStaleTaskDir (name) {
-  return name.startsWith('cli-task-') || /_\d{13,}$/.test(name);
+// 匹配白名单逻辑见 output-cleaner.js;prefixes 每次调用现算,兼容 kimi 热更新新增工具名
+const CLEANUP_ROOTS = [
+  path.join(__dirname, 'output'), // ai-bridge/output(现行统一输出根)
+  path.join(__dirname, '..', 'output') // 仓库根 output(旧进程 cwd 漂移时期遗留)
+];
+function runOutputCleanup () {
+  return cleanupStaleTaskDirs({ roots: CLEANUP_ROOTS, prefixes: TOOLS.map(t => t.name) });
 }
-
-function cleanupStaleTaskDirs () {
-  const roots = [
-    path.join(__dirname, 'output'), // ai-bridge/output(现行统一输出根)
-    path.join(__dirname, '..', 'output') // 仓库根 output(旧进程 cwd 漂移时期遗留)
-  ];
-  for (const outRoot of roots) {
-    try {
-      for (const name of fs.readdirSync(outRoot)) {
-        if (!isStaleTaskDir(name)) continue;
-        const dir = path.join(outRoot, name);
-        try {
-          if (Date.now() - fs.statSync(dir).mtimeMs > 24 * 3600 * 1000) fs.rmSync(dir, { recursive: true, force: true });
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-}
-cleanupStaleTaskDirs();
-setInterval(cleanupStaleTaskDirs, 3600 * 1000).unref();
+runOutputCleanup();
+setInterval(runOutputCleanup, 3600 * 1000).unref();
 
 // ── qidi-code 配置自动同步:桥接模型清单(models.json + kimi-code 自动条目)变化时重写 qidi config.toml ──
 try {
@@ -2269,6 +2283,7 @@ async function runDiscussionAsync(meetingId, topic, participants, guidance, roun
 
       try {
         const result = await executeTool(name, `你正在参加一个 AI 技术讨论会。\n\n话题: ${topic}${gText}\n\n请给出你的技术观点和方案,简洁有料。`, { taskId: `${name}_${meetingId}_r1_${Date.now()}` });
+        if (isEmptyOutput(result)) throw new Error('空产出(无输出)'); // 落入下方既有"发言失败"分支
         const content = result.content.substring(0, 2000);
         store.addMessage(meetingId, name, content);
         round1Results[name] = { content, tokens: result.tokens.total };
@@ -2320,6 +2335,7 @@ async function runDiscussionAsync(meetingId, topic, participants, guidance, roun
 
         try {
           const result = await executeTool(name, `你正在参加一个 AI 技术讨论会。\n\n话题: ${topic}\n\n以下是其他参与者的观点:\n\n${othersText}${injectText}\n\n请基于讨论,给出你的补充意见或最终结论。`, { taskId: `${name}_${meetingId}_r2_${Date.now()}` });
+          if (isEmptyOutput(result)) throw new Error('空产出(无输出)'); // 落入下方既有"发言失败"分支
           store.addMessage(meetingId, name, result.content.substring(0, 2000));
           totalTokens += result.tokens.total;
         } catch (e) {

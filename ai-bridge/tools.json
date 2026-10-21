@@ -21,7 +21,7 @@
       "textPath": "payloads[0].text || result.payloads[0].text || result.meta.finalAssistantVisibleText || result.meta.finalAssistantRawText || reply || content || message",
       "usagePath": "result.meta.agentMeta.usage || usage"
     },
-    "timeout": 120000
+    "timeout": 600000
   },
   {
     "name": "atom-code",
@@ -73,7 +73,7 @@
     ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
-    "timeout": 120000
+    "timeout": 600000
   },
   {
     "name": "workbuddy",
@@ -87,7 +87,7 @@
     ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
-    "timeout": 120000
+    "timeout": 600000
   },
   {
     "name": "codely",

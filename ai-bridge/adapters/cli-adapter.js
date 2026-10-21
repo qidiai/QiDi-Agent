@@ -82,10 +82,11 @@ class CliAdapter extends BaseAdapter {
 
     // Windows 命令行 argv 上限约 32K：arg 模式超长时落盘，任务文本改为让 agent 读文件的短指令
     // 落盘位置用 cwd(workspaceDir)内的相对路径,保证 agent 以自身 cwd 就能读到,且不污染任务目录之外的位置
+    // 文件名含 taskId:同一工作区并发多个超长任务时,固定名会互踩(后写者覆盖/先完成者误删),必须唯一
     let effectiveTask = task;
     let longTaskFile = null;
     if (this.inputMode === 'arg' && task.length > MAX_ARG_TASK_LEN) {
-      const longTaskName = '.ai-bridge-long-task.md';
+      const longTaskName = `ai-bridge-long-task-${taskId}.md`;
       longTaskFile = path.join(workspaceDir, longTaskName);
       fs.writeFileSync(longTaskFile, task, 'utf-8');
       effectiveTask = `完整任务内容已写入当前目录下的文件: ./${longTaskName}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
