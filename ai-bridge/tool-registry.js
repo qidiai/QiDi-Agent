@@ -20,6 +20,7 @@ const { spawn } = require('child_process');
 const { BaseAdapter, estimateTokens, extractCodeBlocks } = require('./adapters/base');
 const { CliAdapter } = require('./adapters/cli-adapter');
 const { HttpAdapter } = require('./adapters/http-adapter');
+const { getKimiToolConfigs, kimiConfigPath } = require('./kimi-models');
 
 // ============================================================
 // Routing Marker Adapter（agnes-mcp 专用，不 spawn 进程）
@@ -37,34 +38,76 @@ class RoutingMarkerAdapter extends BaseAdapter {
 }
 
 // ============================================================
-// 从 tools.json 加载工具
+// 从 tools.json 加载工具 + 自动同步 Kimi Code 模型
 // ============================================================
-function loadTools () {
-  const configPath = path.join(__dirname, 'tools.json');
-  if (!fs.existsSync(configPath)) {
-    console.warn('[tool-registry] tools.json 不存在，返回空列表');
-    return [];
+function buildAdapter (config) {
+  switch (config.transport) {
+    case 'cli': return new CliAdapter(config);
+    case 'http': return new HttpAdapter(config);
+    case 'routing-marker': return new RoutingMarkerAdapter(config);
+    default: return null;
   }
-  const configs = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-  const tools = [];
+}
+
+function addConfigs (tools, seen, configs) {
   for (const config of configs) {
+    if (!config || !config.name || seen.has(config.name)) continue; // 静态配置优先，同名去重
     try {
-      let adapter;
-      switch (config.transport) {
-        case 'cli': adapter = new CliAdapter(config); break;
-        case 'http': adapter = new HttpAdapter(config); break;
-        case 'routing-marker': adapter = new RoutingMarkerAdapter(config); break;
-        default: console.warn(`[tool-registry] 未知 transport "${config.transport}" for tool "${config.name}"，跳过`); continue;
+      const adapter = buildAdapter(config);
+      if (!adapter) {
+        console.warn(`[tool-registry] 未知 transport "${config.transport}" for tool "${config.name}"，跳过`);
+        continue;
       }
+      if (config.autoSync) adapter.autoSync = config.autoSync;
+      seen.add(config.name);
       tools.push(adapter);
     } catch (e) {
       console.error(`[tool-registry] 加载工具 "${config.name}" 失败: ${e.message}`);
     }
   }
+}
+
+function loadTools () {
+  const configPath = path.join(__dirname, 'tools.json');
+  const tools = [];
+  const seen = new Set();
+  if (!fs.existsSync(configPath)) {
+    console.warn('[tool-registry] tools.json 不存在，仅加载自动同步工具');
+  } else {
+    addConfigs(tools, seen, JSON.parse(fs.readFileSync(configPath, 'utf-8')));
+  }
+  // 自动同步 Kimi Code 模型（kimi-code 更新模型后无需手工改 tools.json）
+  addConfigs(tools, seen, getKimiToolConfigs());
   return tools;
 }
 
 const TOOLS = loadTools();
+
+// kimi-code config.toml 热更新：模型增删后自动重同步 dispatch 工具（原地变更 TOOLS，server.js 引用立即可见）
+function resyncKimiTools () {
+  try {
+    for (let i = TOOLS.length - 1; i >= 0; i--) {
+      if (TOOLS[i].autoSync === 'kimi-code') TOOLS.splice(i, 1);
+    }
+    addConfigs(TOOLS, new Set(TOOLS.map(t => t.name)), getKimiToolConfigs());
+    console.log('[tool-registry] kimi-code 模型工具已热更新');
+  } catch (e) {
+    console.error(`[tool-registry] kimi-code 热更新失败: ${e.message}`);
+  }
+}
+
+try {
+  const kimiCfg = kimiConfigPath();
+  if (fs.existsSync(kimiCfg)) {
+    let timer = null;
+    fs.watch(kimiCfg, () => {
+      clearTimeout(timer);
+      timer = setTimeout(resyncKimiTools, 1000); // 防抖：编辑器可能多次触发
+    });
+  }
+} catch (e) {
+  console.error(`[tool-registry] kimi-code config 监听失败: ${e.message}`);
+}
 
 // ============================================================
 // 共享工具函数（向后兼容导出）

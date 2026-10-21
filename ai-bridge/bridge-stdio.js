@@ -31,6 +31,7 @@ const MCP_TOOLS = [
         task: { type: 'string', description: '任务描述' },
         context: { type: 'string', description: '任务上下文(背景/现有代码/约束等),会前置注入给子工具' },
         tools: { type: 'array', items: { type: 'string' }, description: '工具名列表,留空用所有已开启的' },
+        workspace: { type: 'string', description: '工作区名称或 ID(见 list_workspaces);CLI 工具将在该目录执行' },
         auto_fallback: { type: 'boolean', description: '工具限额/失败时自动转给其他工具接力(默认 true)', default: true }
       },
       required: ['task']
@@ -59,6 +60,24 @@ const MCP_TOOLS = [
     inputSchema: { type: 'object', properties: {} }
   },
   {
+    name: 'list_workspaces',
+    description: '列出工作区:登记/受管模式、路径、状态、使用次数、当前活动任务数',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'create_workspace',
+    description: '创建或登记工作区。不传 path 时在受管根目录创建空目录;传 path 时登记已有绝对路径(不会移动/删除用户文件)。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '工作区名称(唯一,省略时用目录名或自动生成)' },
+        path: { type: 'string', description: '已有目录的绝对路径;省略则创建受管工作区' },
+        description: { type: 'string', description: '用途说明' },
+        exclusive: { type: 'boolean', description: '独占模式:同一时间只允许一个任务使用该工作区' }
+      }
+    }
+  },
+  {
     name: 'token_stats',
     description: '查看累计 token 用量统计',
     inputSchema: { type: 'object', properties: {} }
@@ -72,7 +91,8 @@ const MCP_TOOLS = [
         task: { type: 'string', description: '未完成的任务描述' },
         existing_code: { type: 'string', description: '已有的代码' },
         from: { type: 'string', description: '来源工具名' },
-        to: { type: 'string', description: '目标工具名' }
+        to: { type: 'string', description: '目标工具名' },
+        workspace: { type: 'string', description: '工作区名称或 ID;目标工具将在该目录执行' }
       },
       required: ['task', 'existing_code', 'to']
     }
@@ -303,6 +323,25 @@ async function callTool (name, args) {
     const lines = ['# 工具开关状态\n'];
     d.tools.forEach(t => lines.push(`- ${t.enabled ? '🟢' : '🔴'} **${t.displayName}** (${t.name}) — ${t.enabled ? '开' : '关'}`));
     return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+  case 'list_workspaces': {
+    const d = await httpGet('/api/workspaces');
+    const lines = ['# 工作区\n'];
+    if (!(d.workspaces || []).length) lines.push('(无工作区。用 create_workspace 创建受管目录,或传 path 登记已有目录)');
+    (d.workspaces || []).forEach(w => {
+      const status = w.status === 'active' ? '[active]' : '[archived]';
+      const runs = w.activeRuns ? ` [运行中 ${w.activeRuns}]` : '';
+      lines.push(`- ${status} **${w.name}** (${w.mode})${runs} — ${w.useCount || 0} 次使用${w.exists ? '' : ' — 目录缺失!'}`);
+      lines.push(`  \`${w.path}\``);
+      if (w.description) lines.push(`  ${w.description}`);
+    });
+    if (d.stats) lines.push(`\n受管根目录: \`${d.stats.root}\` | 共 ${d.stats.total} 个(active ${d.stats.active} / archived ${d.stats.archived})`);
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+  case 'create_workspace': {
+    const r = await httpPost('/api/workspaces', args);
+    if (!r.id) return { content: [{ type: 'text', text: `创建失败: ${r.error || '未知错误'}` }], isError: true };
+    return { content: [{ type: 'text', text: `工作区已创建\n\n- 名称: ${r.name}\n- ID: ${r.id}\n- 模式: ${r.mode}\n- 路径: ${r.path}\n${r.exclusive ? '- 独占: 是\n' : ''}\ndispatch 时传 workspace: "${r.name}" 即可在该目录执行。` }] };
   }
   case 'token_stats': {
     const d = await httpGet('/api/stats');

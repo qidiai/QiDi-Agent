@@ -188,7 +188,7 @@ async function main () {
   // 1) 启动中枢(JSON/SQLite/观测数据全部指向测试专用目录)
   serverProc = spawn(process.execPath, ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, AI_BRIDGE_PORT: String(PORT), AI_BRIDGE_HOST: HOST, AI_BRIDGE_DATA_DIR: TEST_RUNTIME, AI_BRIDGE_DB: TEST_DB, AI_BRIDGE_OBSERVE_DIR: TEST_OBSERVE, AI_BRIDGE_CLIENT_TTL: '1200', AI_BRIDGE_TOKEN: '' },
+    env: { ...process.env, AI_BRIDGE_PORT: String(PORT), AI_BRIDGE_HOST: HOST, AI_BRIDGE_DATA_DIR: TEST_RUNTIME, AI_BRIDGE_DB: TEST_DB, AI_BRIDGE_OBSERVE_DIR: TEST_OBSERVE, AI_BRIDGE_WORKSPACE_ROOT: path.join(TEST_RUNTIME, 'workspaces'), AI_BRIDGE_CLIENT_TTL: '1200', AI_BRIDGE_TOKEN: '' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   serverProc.stderr.on('data', d => { serverErr += d.toString(); });
@@ -310,10 +310,48 @@ async function main () {
   const tl = await mcp.request('tools/list', {});
   const names = (tl.result?.tools || []).map(t => t.name);
   const expected = ['dispatch', 'list_tools', 'toggle_tool', 'list_switches', 'token_stats', 'handoff',
-    'memory_search', 'memory_recent', 'logs', 'discuss', 'list_clients', 'approve_client', 'deny_client', 'kick_client'];
+    'memory_search', 'memory_recent', 'logs', 'discuss', 'list_clients', 'approve_client', 'deny_client', 'kick_client',
+    'list_workspaces', 'create_workspace'];
   check('tools/list 暴露全部核心工具', expected.every(n => names.includes(n)), '缺失: ' + expected.filter(n => !names.includes(n)).join(','));
   const dispatchTool = (tl.result?.tools || []).find(t => t.name === 'dispatch');
   check('dispatch 工具含 context 参数', !!dispatchTool?.inputSchema?.properties?.context);
+  check('dispatch 工具含 workspace 参数', !!dispatchTool?.inputSchema?.properties?.workspace);
+  check('工作区 MCP 工具已暴露', !!names.includes('list_workspaces') && !!names.includes('create_workspace'));
+
+  // 4.5) 工作区:创建 → dispatch 绑定 → 归档/恢复 → 安全回收
+  section('工作区管理:创建 → dispatch 绑定 → 归档 → 回收');
+  const wsRoot = path.join(TEST_RUNTIME, 'workspaces');
+  const wsList0 = await req('GET', '/api/workspaces');
+  check('初始工作区列表为空且根目录指向测试目录', wsList0.status === 200 && wsList0.body.workspaces.length === 0 && path.resolve(wsList0.body.stats.root) === path.resolve(wsRoot), JSON.stringify(wsList0.body.stats));
+
+  const wsCreate = await req('POST', '/api/workspaces', { name: 'e2e-ws', description: 'e2e workspace', exclusive: true });
+  check('创建受管工作区(201)', wsCreate.status === 201 && wsCreate.body.mode === 'managed', JSON.stringify(wsCreate.body));
+  check('受管目录已创建且在根目录内', fs.statSync(wsCreate.body.path).isDirectory() && path.resolve(wsCreate.body.path).startsWith(path.resolve(wsRoot) + path.sep), wsCreate.body.path);
+  const wsDup = await req('POST', '/api/workspaces', { name: 'E2E-WS' });
+  check('重名创建返回 409', wsDup.status === 409, 'status=' + wsDup.status);
+
+  const wsDispatch = await req('POST', '/api/dispatch', { task: '写一个 Python cube(x) 函数', tools: [CLIENT], workspace: 'e2e-ws' });
+  check('dispatch 绑定工作区成功', wsDispatch.body.successCount === 1 && wsDispatch.body.workspace?.name === 'e2e-ws', JSON.stringify(wsDispatch.body.workspace));
+  const wsAfterUse = await req('GET', '/api/workspaces');
+  const usedWs = (wsAfterUse.body.workspaces || []).find(w => w.name === 'e2e-ws');
+  check('工作区使用统计已更新且租约已释放', usedWs?.useCount === 1 && usedWs?.activeRuns === 0, JSON.stringify(usedWs));
+
+  const wsArchive = await req('POST', `/api/workspaces/${encodeURIComponent(wsCreate.body.id)}/archive`);
+  check('归档工作区成功', wsArchive.status === 200 && wsArchive.body.status === 'archived', JSON.stringify(wsArchive.body));
+  const wsDispatchArchived = await req('POST', '/api/dispatch', { task: 'x', tools: [CLIENT], workspace: 'e2e-ws' });
+  check('归档工作区拒绝 dispatch', !!wsDispatchArchived.body.error && /归档/.test(wsDispatchArchived.body.error), JSON.stringify(wsDispatchArchived.body));
+  const wsRestore = await req('POST', `/api/workspaces/${encodeURIComponent(wsCreate.body.id)}/restore`);
+  check('恢复工作区成功', wsRestore.status === 200 && wsRestore.body.status === 'active');
+
+  const wsLinked = await req('POST', '/api/workspaces', { name: 'e2e-linked', path: TEST_RUNTIME });
+  check('登记已有目录为 linked 工作区', wsLinked.status === 201 && wsLinked.body.mode === 'linked', JSON.stringify(wsLinked.body));
+  const wsBad = await req('POST', '/api/workspaces', { name: 'e2e-bad', path: 'relative/x' });
+  check('相对路径登记被拒(400)', wsBad.status === 400, 'status=' + wsBad.status);
+
+  const wsUnlink = await req('DELETE', `/api/workspaces/${encodeURIComponent(wsLinked.body.id)}`);
+  check('登记目录删除仅解绑,目录未受影响', wsUnlink.body.success === true && wsUnlink.body.filesDeleted === false && fs.existsSync(TEST_RUNTIME), JSON.stringify(wsUnlink.body));
+  const wsRecycle = await req('DELETE', `/api/workspaces/${encodeURIComponent(wsCreate.body.id)}?delete_files=1`);
+  check('受管工作区连同文件回收', wsRecycle.body.success === true && wsRecycle.body.filesDeleted === true && !fs.existsSync(wsCreate.body.path), JSON.stringify(wsRecycle.body));
 
   // 5) 皇冠用例:dispatch 反向调用往返 + 上下文注入 + token 记录
   section('dispatch 反向调用往返(中枢 → 客户端 sampling → 结果回收)');

@@ -1,3 +1,3 @@
 @echo off
-cd /d "C:\Users\ASUS\Documents\trae_projects\ai-orchestrator\ai-bridge"
+cd /d "%~dp0"
 node server.js

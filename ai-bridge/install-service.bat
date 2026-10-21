@@ -4,7 +4,7 @@ setlocal
 set "SERVICE_NAME=AIBridgeHub"
 set "NODE_PATH=C:\Program Files\nodejs\node.exe"
 REM 统一接入:服务运行共享中枢 server.js(非已弃用的 mcp-server.js),默认端口 9800
-set "SCRIPT_PATH=C:\Users\ASUS\Documents\trae_projects\ai-orchestrator\ai-bridge\server.js"
+set "SCRIPT_PATH=%~dp0server.js"
 set "BIN_PATH="%NODE_PATH%" "%SCRIPT_PATH%""
 
 echo Stopping and deleting old service...

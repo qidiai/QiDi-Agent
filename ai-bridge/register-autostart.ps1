@@ -1,4 +1,4 @@
-# AI Bridge 开机自启注册脚本（schtasks 计划任务）
+﻿# AI Bridge 开机自启注册脚本（schtasks 计划任务）
 #
 # 用途：注册名为 AIBridgeHub 的开机自启任务，登录时自动执行生产启动脚本
 #       start-ai-bridge.ps1（内部会先停旧实例再启动 watchdog 守护进程）。
@@ -12,7 +12,9 @@
 # 查看任务状态：
 #   schtasks /query /tn AIBridgeHub /v /fo LIST
 
-$startScript = 'C:\Users\ASUS\Documents\trae_projects\ai-orchestrator\output\qoder_qoder_meeting_1784728826451_r2_1784729242580\start-ai-bridge.ps1'
+# 启动脚本路径:默认取本脚本同目录的 start-ai-bridge.ps1
+# (生产环境部署时,请将 start-ai-bridge.ps1 与本脚本放在同一目录)
+$startScript = Join-Path $PSScriptRoot 'start-ai-bridge.ps1'
 
 # /sc onlogon : 用户登录时触发（比 onstart 更适合用户级 node 服务，无需 SYSTEM 权限）
 # /rl limited : 普通权限运行，中枢不需要管理员

@@ -1,159 +1,22 @@
 [
   {
-    "id": "agnes-2.0-flash",
-    "owned_by": "agnes",
-    "switch": "agnes-code",
-    "transport": "agnes-http",
-    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
-    "upstreamModel": "agnes-2.0-flash"
-  },
-  {
-    "id": "agnes-2.5-flash",
-    "owned_by": "agnes",
-    "switch": "agnes-code",
-    "transport": "agnes-http",
-    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
-    "upstreamModel": "agnes-2.5-flash"
-  },
-  {
-    "id": "auto",
-    "owned_by": "agnes",
-    "switch": "agnes-code",
-    "transport": "agnes-http",
-    "upstream": "https://api-agnes-code.agnes-ai.com/v1/chat/completions",
-    "upstreamModel": "auto"
-  },
-  {
-    "id": "glm-5.2",
-    "owned_by": "atomcode",
-    "switch": "atom-code",
+    "id": "opencode",
+    "owned_by": "opencode",
+    "switch": "opencode",
+    "description": "OpenCode agent (opencode-go/step-5-preview-free)",
     "transport": "cli",
     "cli": {
-      "command": "atomcode",
-      "commandPaths": [
-        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
-      ],
+      "command": "opencode",
       "args": [
-        "-p",
-        "{{task}}",
-        "--provider",
-        "AtomGit-GLM-5.2",
-        "--no-telemetry",
-        "-y"
+        "run",
+        "-m",
+        "opencode-go/step-5-preview-free",
+        "--auto",
+        "{{task}}"
       ],
       "inputMode": "arg",
       "outputMode": "stdout-text",
-      "timeout": 120000
+      "timeout": 300000
     }
-  },
-  {
-    "id": "deepseek-v4-flash",
-    "owned_by": "atomcode",
-    "switch": "atom-code",
-    "transport": "cli",
-    "cli": {
-      "command": "atomcode",
-      "commandPaths": [
-        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
-      ],
-      "args": [
-        "-p",
-        "{{task}}",
-        "--provider",
-        "AtomGit-deepseek-v4-flash",
-        "--no-telemetry",
-        "-y"
-      ],
-      "inputMode": "arg",
-      "outputMode": "stdout-text",
-      "timeout": 120000
-    }
-  },
-  {
-    "id": "qwen3-vl-8b-instruct",
-    "owned_by": "atomcode",
-    "switch": "atom-code",
-    "transport": "cli",
-    "cli": {
-      "command": "atomcode",
-      "commandPaths": [
-        "{{LOCALAPPDATA}}/AtomCode/atomcode.exe"
-      ],
-      "args": [
-        "-p",
-        "{{task}}",
-        "--provider",
-        "AtomGit-Qwen-Qwen3-VL-8B-Instruct",
-        "--no-telemetry",
-        "-y"
-      ],
-      "inputMode": "arg",
-      "outputMode": "stdout-text",
-      "timeout": 120000
-    }
-  },
-  {
-    "id": "codely-core",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "codely-core"
-  },
-  {
-    "id": "codely-flash",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "codely-flash"
-  },
-  {
-    "id": "codely-air",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "codely-air"
-  },
-  {
-    "id": "codely-vl",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "codely-vl"
-  },
-  {
-    "id": "codely-basic",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "codely-basic"
-  },
-  {
-    "id": "KIMI-K3",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "KIMI-K3"
-  },
-  {
-    "id": "GLM-5.2",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "GLM-5.2"
-  },
-  {
-    "id": "GLM-5.3",
-    "owned_by": "codely",
-    "switch": "codely",
-    "transport": "codely-http",
-    "upstreamModel": "GLM-5.3"
-  },
-  {
-    "id": "qwen2.5-vl-local",
-    "owned_by": "local",
-    "transport": "local-vl",
-    "ollamaModel": "qwen2.5vl:3b",
-    "upstreamModel": "codely-core",
-    "upstream": "https://codely-litellm.tuanjie.cn"
   }
 ]

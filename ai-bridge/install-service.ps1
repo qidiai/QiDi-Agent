@@ -1,7 +1,7 @@
 $serviceName = "AIBridgeHub"
 $nodePath = "C:\Program Files\nodejs\node.exe"
 # 统一接入:服务运行共享中枢 server.js(非已弃用的 mcp-server.js),默认端口 9800
-$scriptPath = "C:\Users\ASUS\Documents\trae_projects\ai-orchestrator\ai-bridge\server.js"
+$scriptPath = Join-Path $PSScriptRoot 'server.js'
 $arguments = "`"$scriptPath`""
 $binPath = "`"$nodePath`" $arguments"
 

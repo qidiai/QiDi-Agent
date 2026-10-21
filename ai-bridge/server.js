@@ -14,6 +14,8 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const { TOOLS, findInPath, estimateTokens, extractCodeBlocks } = require('./tool-registry');
+const { getKimiProxyModels } = require('./kimi-models');
+const qidiSync = require('./qidi-sync');
 const {
   decorateToolIdentity,
   resolveToolReference,
@@ -27,6 +29,7 @@ const {
 } = require('./routing-score');
 const { CliAdapter } = require('./adapters/cli-adapter');
 const store = require('./store');
+const workspaceManager = require('./workspace-manager');
 const db = require('./db');
 const observe = require('./observe');
 
@@ -148,17 +151,22 @@ function readAtomToken () {
   }
 }
 
-// ── Codely(团结 Cowork)客户端:凭据/cli_api_key/签名/版本跟版,实现见 codely-client.js ──
-const {
-  CODELY_LITELLM_BASE,
-  fetchCodelyCliApiKey,
-  getCodelyCliApiKey,
-  invalidateCodelyKey,
-  buildCodelyHeaders,
-  requestCodelyLiteLLM,
-  codelyCliVersion,
-  codelyTokenExpiryDays
-} = require('./codely-client');
+// ── Codely(团结 Cowork)客户端:可选模块 ──
+// 开源版不包含 codely-client.js(含官方签名逆向实现),缺失时该 transport 自动禁用
+let codelyClient = null;
+try {
+  codelyClient = require('./codely-client');
+} catch (e) {
+  /* 开源版剔除:codely transport 不可用 */
+}
+const CODELY_LITELLM_BASE = codelyClient ? codelyClient.CODELY_LITELLM_BASE : null;
+const fetchCodelyCliApiKey = codelyClient ? codelyClient.fetchCodelyCliApiKey : () => Promise.reject(new Error('codely-client 未包含(开源版剔除)'));
+const getCodelyCliApiKey = codelyClient ? codelyClient.getCodelyCliApiKey : () => Promise.reject(new Error('codely-client 未包含(开源版剔除)'));
+const invalidateCodelyKey = codelyClient ? codelyClient.invalidateCodelyKey : () => {};
+const buildCodelyHeaders = codelyClient ? codelyClient.buildCodelyHeaders : () => ({});
+const requestCodelyLiteLLM = codelyClient ? codelyClient.requestCodelyLiteLLM : () => { throw new Error('codely-client 未包含(开源版剔除)'); };
+const codelyCliVersion = codelyClient ? codelyClient.codelyCliVersion : () => null;
+const codelyTokenExpiryDays = codelyClient ? codelyClient.codelyTokenExpiryDays : () => null;
 
 // ── OpenAI 兼容反代:模型注册表(配置驱动,新增模型只改 models.json,不改代码) ──
 let _modelsCache = null;
@@ -178,7 +186,16 @@ function loadModels () {
 
 function findModel (id) {
   const wanted = String(id || '').toLowerCase();
-  return loadModels().find(m => String(m.id).toLowerCase() === wanted) || null;
+  return loadAllModels().find(m => String(m.id).toLowerCase() === wanted) || null;
+}
+
+// 完整模型清单 = models.json(文件,可被 /api/models/sync 持久化改写)
+// + kimi-code 自动同步条目(内存合并,不落盘;kimi config 变化后 30s 缓存到期自动生效)
+function loadAllModels () {
+  const file = loadModels();
+  const seen = new Set(file.map(m => String(m.id).toLowerCase()));
+  const auto = getKimiProxyModels().filter(m => !seen.has(String(m.id).toLowerCase()));
+  return file.concat(auto);
 }
 
 // 模型是否可用:绑定的工具开关未被显式关闭(与 dispatch 共用 switches.json)
@@ -513,7 +530,11 @@ async function executeTool (name, task, opts = {}) {
       result = await executeClient(toolDef.clientKey || executionName, task, opts);
     } else {
       const tool = TOOLS.find(t => t.name === executionName);
-      result = await tool.execute(task, { taskId, timeout: opts.timeout || CONFIG.EXECUTE_TIMEOUT });
+      result = await tool.execute(task, {
+        taskId,
+        timeout: opts.timeout || CONFIG.EXECUTE_TIMEOUT,
+        workspaceDir: opts.workspace?.path
+      });
     }
   } catch (e) {
     execError = e;
@@ -588,7 +609,11 @@ async function executeClient (clientName, task, opts = {}) {
 
     connectedClients.set(clientName, {
       ...client,
-      pendingTask: { task, taskId: opts.taskId || `${clientName}_${Date.now()}` },
+      pendingTask: {
+        task,
+        taskId: opts.taskId || `${clientName}_${Date.now()}`,
+        workspace: opts.workspace ? { id: opts.workspace.id, name: opts.workspace.name, path: opts.workspace.path } : null
+      },
       pendingResolve: (result) => {
         clearTimeout(timeout);
         const current = connectedClients.get(clientName);
@@ -605,12 +630,22 @@ async function executeClient (clientName, task, opts = {}) {
   });
 }
 
-async function doDispatch (task, toolNames, autoFallback = true, context = '', withReview = false, reviewerPref = null) {
+async function doDispatch (task, toolNames, autoFallback = true, context = '', withReview = false, reviewerPref = null, workspaceRef = null) {
   // 入参校验
   if (!task || typeof task !== 'string') return { error: '缺少 task 参数' };
   if (task.length > CONFIG.MAX_TASK_LENGTH) return { error: `任务描述过长(>${CONFIG.MAX_TASK_LENGTH}字符)` };
   // tools 入参硬化:非数组一律视为未指定(回退全量可用工具),防畸形入参 crash
   if (toolNames != null && !Array.isArray(toolNames)) toolNames = null;
+
+  // 工作区前置校验:不存在/已归档/目录缺失直接返回明确错误,不占用并发额度
+  let workspace = null;
+  if (workspaceRef != null && String(workspaceRef).trim() !== '') {
+    try {
+      workspace = workspaceManager.resolveForDispatch(workspaceRef);
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
 
   // 上下文注入:若有 context 则前置到任务(修复 HTTP 链路静默丢弃上下文的问题)
   const effectiveTask = (context && typeof context === 'string' && context.trim())
@@ -626,8 +661,17 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
   const dispatchStart = Date.now();
   METRICS.dispatchTotal++;
   activeDispatches.add(dispatchId);
+  let workspaceLease = null;
 
   try {
+    // 占用工作区(独占模式可阻止两个 dispatch 同时写同一目录)
+    if (workspace) {
+      try {
+        workspaceLease = workspaceManager.beginRun(workspace.id, dispatchId);
+      } catch (e) {
+        return { error: e.message };
+      }
+    }
     const allTools = await getAllTools();
     const availableTools = allTools.filter(t => t.available);
     const availableNames = availableTools.map(t => t.name);
@@ -690,7 +734,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
     const rawResults = await Promise.allSettled(
       targets.map(async (name) => {
         try {
-          const result = await executeTool(name, effectiveTask);
+          const result = await executeTool(name, effectiveTask, { workspace });
           const check = isToolFailed(result, null);
           if (check.failed) return { tool: name, failed: true, reason: check.reason, partialCode: check.partialCode, result };
           return { tool: name, failed: false, result };
@@ -720,7 +764,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
           usedFallback.add(fb);
           METRICS.fallbackTotal++;
           try {
-            const fbResult = await executeTool(fb, handoffPrompt);
+            const fbResult = await executeTool(fb, handoffPrompt, { workspace });
             // 接力结果二次校验:接力工具本身也可能限额/断连,别把失败回复当成功
             const fbCheck = isToolFailed(fbResult, null);
             if (fbCheck.failed) { fallbackLog.push({ from: failed.tool, to: fb, success: false, reason: fbCheck.reason }); continue; }
@@ -774,7 +818,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
         } else {
           try {
             const code = producer.codeBlocks?.[0]?.code || producer.content || '';
-            const rvResult = await executeTool(reviewer, `你是代码评审专家。请评审以下由 ${producer.tool} 生成的代码,指出潜在问题与改进建议,简洁列点。\n\n## 原任务\n${task.substring(0, 2000)}\n\n## 产出代码\n\`\`\`\n${code.substring(0, 4000)}\n\`\`\``, { taskId: `review_${dispatchId}` });
+            const rvResult = await executeTool(reviewer, `你是代码评审专家。请评审以下由 ${producer.tool} 生成的代码,指出潜在问题与改进建议,简洁列点。\n\n## 原任务\n${task.substring(0, 2000)}\n\n## 产出代码\n\`\`\`\n${code.substring(0, 4000)}\n\`\`\``, { taskId: `review_${dispatchId}`, workspace });
             totalTokens += rvResult.tokens.total || 0;
             review = { reviewer, producer: producer.tool, content: rvResult.content.substring(0, 2000), tokens: rvResult.tokens.total || 0 };
           } catch (e) {
@@ -787,19 +831,21 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
 
     // 记录任务到记忆 + 日志 + 全局库写穿
     const elapsedMs = Date.now() - dispatchStart;
-    const taskRecord = { id: `task_${Date.now()}`, dispatchId, results, successCount, total: targets.length, totalTokens, fallbackLog, skipped, task: task.substring(0, 200), tools: targets, routing };
+    const workspaceInfo = workspace ? { id: workspace.id, name: workspace.name, path: workspace.path } : null;
+    const taskRecord = { id: `task_${Date.now()}`, dispatchId, results, successCount, total: targets.length, totalTokens, fallbackLog, skipped, task: task.substring(0, 200), tools: targets, routing, workspace: workspaceInfo };
     store.recordTask(taskRecord);
     db.recordDispatch({ ...taskRecord, elapsedMs });
     if (successCount > 0) METRICS.dispatchSuccess++; else METRICS.dispatchFail++;
     log('info', `dispatch 完成: ${successCount}/${targets.length} 成功, ${totalTokens} tokens`, { dispatchId, tools: targets, successCount, totalTokens, elapsedMs });
-    return { dispatchId, results, successCount, total: targets.length, totalTokens, elapsedMs, fallbackLog, skipped, routing, ...(review ? { review } : {}) };
+    return { dispatchId, results, successCount, total: targets.length, totalTokens, elapsedMs, fallbackLog, skipped, routing, workspace: workspaceInfo, ...(review ? { review } : {}) };
   } finally {
+    if (workspaceLease) workspaceManager.endRun(workspace.id, workspaceLease.runId);
     activeDispatches.delete(dispatchId);
     activeDispatchCount--;
   }
 }
 
-async function doHandoff (task, existingCode, fromTool, toTool) {
+async function doHandoff (task, existingCode, fromTool, toTool, workspaceRef = null) {
   if (!task) return { error: '缺少 task' };
   if (!existingCode) return { error: '缺少 existing_code' };
   if (!toTool) return { error: '缺少 to' };
@@ -810,12 +856,31 @@ async function doHandoff (task, existingCode, fromTool, toTool) {
   if (!target.available) return { error: `${target.displayName} 不可用` };
   if (!isToolEnabled(target)) return { error: `${target.displayName} 开关已关闭` };
 
+  let workspace = null;
+  if (workspaceRef != null && String(workspaceRef).trim() !== '') {
+    try {
+      workspace = workspaceManager.resolveForDispatch(workspaceRef);
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+  let lease = null;
+  if (workspace) {
+    try {
+      lease = workspaceManager.beginRun(workspace.id, `handoff_${Date.now()}`);
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
   const handoffPrompt = `以下是之前另一个 AI 工具写到一半的代码,请在此基础上继续完成。\n\n## 还需要完成的任务\n${task}\n\n## 已有代码\n\`\`\`\n${existingCode}\n\`\`\`\n\n请基于已有代码继续完成,输出完整的最终代码。`;
   try {
-    const result = await executeTool(target.name, handoffPrompt);
-    return { success: true, tool: target.name, toolId: target.id, canonicalId: target.canonicalId, displayName: target.displayName, duration: result.duration, codeBlocks: result.codeBlocks, content: result.content, tokens: result.tokens, from: fromTool || 'unknown' };
+    const result = await executeTool(target.name, handoffPrompt, { workspace });
+    return { success: true, tool: target.name, toolId: target.id, canonicalId: target.canonicalId, displayName: target.displayName, duration: result.duration, codeBlocks: result.codeBlocks, content: result.content, tokens: result.tokens, from: fromTool || 'unknown', workspace: workspace ? { id: workspace.id, name: workspace.name, path: workspace.path } : null };
   } catch (e) {
     return { success: false, error: e.message };
+  } finally {
+    if (lease) workspaceManager.endRun(workspace.id, lease.runId);
   }
 }
 
@@ -834,6 +899,12 @@ function sendJSON (res, code, data) {
   else headers['Access-Control-Allow-Origin'] = 'http://127.0.0.1:' + CONFIG.PORT;
   res.writeHead(code, headers);
   res.end(JSON.stringify(data));
+}
+
+function sendWorkspaceError (res, e) {
+  const code = Number.isInteger(e?.statusCode) ? e.statusCode : 500;
+  if (code >= 500) log('error', `工作区操作失败: ${e?.message || e}`);
+  sendJSON(res, code, { error: e?.message || '工作区操作失败' });
 }
 
 function readBody (req, cap = 1024 * 1024) {
@@ -939,7 +1010,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': CONFIG.CORS_ORIGIN || `http://127.0.0.1:${CONFIG.PORT}`,
-        'Access-Control-Allow-Methods': 'GET,POST',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'
       });
       res.end();
@@ -1043,6 +1114,78 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ── 工作区管理(dispatch/handoff 的 CLI 执行目录) ──
+    if (p === '/api/workspaces' && req.method === 'GET') {
+      sendJSON(res, 200, { workspaces: workspaceManager.list(), stats: workspaceManager.summary() });
+      return;
+    }
+
+    if (p === '/api/workspaces' && req.method === 'POST') {
+      const body = await readBody(req);
+      try {
+        const ws = workspaceManager.create({
+          name: body.name,
+          path: body.path,
+          description: body.description,
+          exclusive: body.exclusive === true
+        });
+        log('info', `工作区已创建: ${ws.name} (${ws.mode}) ${ws.path}`);
+        sendJSON(res, 201, ws);
+      } catch (e) {
+        sendWorkspaceError(res, e);
+      }
+      return;
+    }
+
+    if (p.startsWith('/api/workspaces/')) {
+      const segs = p.slice('/api/workspaces/'.length).split('/').filter(Boolean);
+      let id = '';
+      try { id = decodeURIComponent(segs[0] || ''); } catch (_) { /* 非法编码按空 ID 处理 */ }
+      const action = segs[1] || '';
+      if (!id || segs.length > 2) { sendJSON(res, 404, { error: 'Not found' }); return; }
+
+      if (!action && req.method === 'GET') {
+        const ws = workspaceManager.get(id);
+        if (!ws) sendJSON(res, 404, { error: `工作区不存在: ${id}` });
+        else sendJSON(res, 200, ws);
+        return;
+      }
+
+      if (!action && req.method === 'DELETE') {
+        const flag = url.searchParams.get('delete_files');
+        const deleteFiles = flag === '1' || flag === 'true' || flag === 'yes';
+        try {
+          const r = workspaceManager.remove(id, { deleteFiles });
+          log('info', `工作区已删除: ${r.deleted.name} (文件${r.filesDeleted ? '已' : '未'}删除)`);
+          sendJSON(res, 200, { success: true, ...r });
+        } catch (e) {
+          sendWorkspaceError(res, e);
+        }
+        return;
+      }
+
+      if (action === 'archive' && req.method === 'POST') {
+        try {
+          const ws = workspaceManager.archive(id);
+          log('info', `工作区已归档: ${ws.name}`);
+          sendJSON(res, 200, ws);
+        } catch (e) { sendWorkspaceError(res, e); }
+        return;
+      }
+
+      if (action === 'restore' && req.method === 'POST') {
+        try {
+          const ws = workspaceManager.restore(id);
+          log('info', `工作区已恢复: ${ws.name}`);
+          sendJSON(res, 200, ws);
+        } catch (e) { sendWorkspaceError(res, e); }
+        return;
+      }
+
+      sendJSON(res, 404, { error: 'Not found' });
+      return;
+    }
+
     // ── 全局观测:配置接管/还原/代理路由/事件上报/用量洞察 ──
 
     if (p === '/api/observe/status' && req.method === 'GET') {
@@ -1126,7 +1269,7 @@ const server = http.createServer(async (req, res) => {
         const taskId = `atask_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
         rememberAsyncTask(taskId, { status: 'running', result: null, ts: new Date().toISOString() });
         db.createAsyncTask(taskId, body.task);
-        doDispatch(body.task, body.tools, body.auto_fallback !== false, body.context, body.review === true, body.reviewer || null)
+        doDispatch(body.task, body.tools, body.auto_fallback !== false, body.context, body.review === true, body.reviewer || null, body.workspace || null)
           .then(r => {
             const status = r.error ? 'failed' : 'done';
             rememberAsyncTask(taskId, { status, result: r, ts: new Date().toISOString() });
@@ -1139,7 +1282,7 @@ const server = http.createServer(async (req, res) => {
         sendJSON(res, 202, { taskId, status: 'running', message: '任务已入队,用 GET /api/task/' + taskId + ' 查询结果' });
         return;
       }
-      const result = await doDispatch(body.task, body.tools, body.auto_fallback !== false, body.context, body.review === true, body.reviewer || null);
+      const result = await doDispatch(body.task, body.tools, body.auto_fallback !== false, body.context, body.review === true, body.reviewer || null, body.workspace || null);
       sendJSON(res, 200, result);
       return;
     }
@@ -1163,7 +1306,7 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/handoff' && req.method === 'POST') {
       const body = await readBody(req);
-      const result = await doHandoff(body.task, body.existing_code, body.from, body.to);
+      const result = await doHandoff(body.task, body.existing_code, body.from, body.to, body.workspace || null);
       sendJSON(res, 200, result);
       return;
     }
@@ -1535,10 +1678,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── OpenAI 兼容反代:把各 AI 编程软件绑定的免费订阅统一以 OpenAI 格式暴露 ──
-    // 模型清单由 models.json 动态生成,受 switches 开关约束(禁用的工具不出现在清单里)
+    // 模型清单由 models.json + kimi-code 自动同步条目动态生成,受 switches 开关约束(禁用的工具不出现在清单里)
     if (p === '/v1/models' && req.method === 'GET') {
       const created = Math.floor(START_TIME / 1000);
-      const data = loadModels().filter(modelEnabled).map(m => ({
+      const data = loadAllModels().filter(modelEnabled).map(m => ({
         id: m.id, object: 'model', created, owned_by: m.owned_by || 'ai-bridge'
       }));
       sendJSON(res, 200, { object: 'list', data });
@@ -1794,8 +1937,17 @@ const server = http.createServer(async (req, res) => {
 
       // ── 分支 B:CLI 型订阅(安全 spawn,shell:false;复用经测试的 CliAdapter,无 execSync 拼接注入面) ──
       if (model.transport === 'cli') {
-        const prompt = messagesToPrompt(body.messages);
-        if (!prompt) { sendJSON(res, 400, { error: '缺少 messages 内容' }); return; }
+        const fullPrompt = messagesToPrompt(body.messages);
+        if (!fullPrompt) { sendJSON(res, 400, { error: '缺少 messages 内容' }); return; }
+        // Windows 命令行参数上限约 32K：超长任务落盘为文件，改用短指令让 agent 读取执行（kimi/qidi 等 coding agent 均可读文件）
+        let prompt = fullPrompt;
+        if (fullPrompt.length > 24000) {
+          const taskDir = path.join(__dirname, 'output', `cli-task-${Date.now()}_${crypto.randomBytes(3).toString('hex')}`);
+          fs.mkdirSync(taskDir, { recursive: true });
+          const taskFile = path.join(taskDir, 'task.md');
+          fs.writeFileSync(taskFile, fullPrompt, 'utf-8');
+          prompt = `完整任务内容已写入文件: ${taskFile}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
+        }
         const cliCfg = model.cli || {};
         const adapter = new CliAdapter({
           name: model.owned_by || model.id,
@@ -1806,7 +1958,7 @@ const server = http.createServer(async (req, res) => {
           outputMode: cliCfg.outputMode || 'stdout-text',
           timeout: cliCfg.timeout || 120000
         });
-        db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: prompt.substring(0, 8000), source: 'bridge' });
+        db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: fullPrompt.substring(0, 8000), source: 'bridge' });
         let result;
         try {
           result = await adapter.execute(prompt, { taskId });
@@ -1817,7 +1969,7 @@ const server = http.createServer(async (req, res) => {
         }
         // 剔除 CLI 噪声行([warning]/[error] 前缀)
         const content = (result.content || '').split('\n').filter(l => !/^\[(warning|error)\]/i.test(l.trim())).join('\n').trim();
-        const usage = { prompt_tokens: estimateTokens(prompt), completion_tokens: estimateTokens(content), total_tokens: 0 };
+        const usage = { prompt_tokens: estimateTokens(fullPrompt), completion_tokens: estimateTokens(content), total_tokens: 0 };
         usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
         db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: true, content: content.substring(0, 8000), source: 'bridge' });
         recordTokens(model.id, { input: usage.prompt_tokens, output: usage.completion_tokens, estimated: true }, '—');
@@ -1991,6 +2143,13 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
   console.log(`[ai-bridge] 鉴权: ${CONFIG.AUTH_TOKEN ? '已启用' : '未启用(设置 AI_BRIDGE_TOKEN 环境变量启用)'}`);
   console.log(`[ai-bridge] 并发上限: ${CONFIG.MAX_CONCURRENT_DISPATCH}`);
 });
+
+// ── qidi-code 配置自动同步:桥接模型清单(models.json + kimi-code 自动条目)变化时重写 qidi config.toml ──
+try {
+  qidiSync.startAutoSync({ loadModels: loadAllModels, modelEnabled, log });
+} catch (e) {
+  log('error', `qidi-sync 启动失败: ${e.message}`);
+}
 
 // ── 异步讨论执行器(带顶层 try/catch/finally) ──
 

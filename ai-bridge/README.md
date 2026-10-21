@@ -30,7 +30,7 @@ node server.js     # 启动服务 (端口 9800)
 | `AI_BRIDGE_CACHE_MAX` | 100 | 反代幂等缓存条目上限(LRU) |
 | `AI_BRIDGE_DAILY_TOKEN_BUDGET` | 无 | 每日 token 预算，超出时 /api/health 告警 |
 | `AI_BRIDGE_OLLAMA_BASE` | http://127.0.0.1:11434 | local-vl 模型的 Ollama 地址 |
-| `CODELY_CLI_EXE` | 自动探测 | codely.exe 路径（UA 版本跟版用） |
+| `AI_BRIDGE_WORKSPACE_ROOT` | `~/.ai-bridge/workspaces` | 受管工作区根目录（托管目录创建/回收均限制在此） |
 
 ## 功能
 
@@ -39,6 +39,7 @@ node server.js     # 启动服务 (端口 9800)
 - **review** — 交叉评审（A 产出 → B 评审）
 - **routing** — 7维贝叶斯路由评分自动选最佳工具（真实历史自学习）
 - **handoff** — 接力续写（A 干不完 → B 接着干）
+- **workspace** — 工作区管理（dispatch/handoff 以指定目录为 CLI 执行 cwd；支持登记目录与受管目录、归档/回收、独占租约）
 - **traffic** — 完整流量监控（所有 AI 和云端的通信记录）
 - **OpenAI 反代** — `/v1/chat/completions` 统一暴露免费模型（含幂等缓存）
 - **Anthropic 反代** — `/v1/messages` Claude Code 类工具直接接入
@@ -52,25 +53,12 @@ node server.js     # 启动服务 (端口 9800)
 |------|------|-----------|
 | agnes-2.0-flash / agnes-2.5-flash / auto | AgnesCode | agnes-http |
 | glm-5.2 / deepseek-v4-flash / qwen3-vl-8b-instruct | AtomCode | cli |
-| codely-core / codely-flash / codely-air / codely-vl / codely-basic | 团结 Cowork | codely-http |
-| GLM-5.2 / GLM-5.3 / KIMI-K3 | 团结 Cowork | codely-http |
 | qwen2.5-vl-local | 本地 Ollama | local-vl |
 
 - **模型清单自动同步**：`POST /api/models/sync` 带签名拉上游 /v1/models，新模型自动注册进 models.json
 - **幂等缓存**：非流式 200 响应按 sha256(model+messages+参数) 缓存，命中直接回放（`X-Cache: HIT`）
 - **上游健康探测**：`GET /api/health?probe=1` 带签名实测 LiteLLM 连通性
 - **用量报表**：`GET /api/usage/report?days=7` 按天/按模型聚合，Web UI「用量」Tab 可视化
-
-### Codely（团结 Cowork）接入说明
-
-`codely-http` transport 由 `codely-client.js` 内建实现（无需单独运行 codely2api 服务）：
-
-1. 启动时自动探测 `~/.codely-cli/oauth_creds.json`（LocalSystem 服务下兜底扫描 `C:\Users\*`）
-2. 用 `access_token` 调团结后端换取 `cli_api_key`（缓存 1 小时；401/403 自动换新重试）
-3. 带 `X-Codely-Signature` 签名 + `x-litellm-session-id` + 自动跟版 UA（从本地 codely.exe 提取版本）转发
-4. access_token 有效期监测：JWT exp 解析，剩 7 天内 /api/health 告警（微信登录无 refresh_token，需重开 Codely CLI 登录）
-
-前提：本机已安装并登录团结 Cowork 桌面端。支持流式（stream）与非流式调用，流量自动记录进 traffic 监控。
 
 ### Claude Code / Anthropic 兼容客户端接入
 
@@ -99,13 +87,43 @@ API Key:  随便填（如 sk-1234）
 | `clients-acl.json` | 客户端准入控制 | 自动生成 |
 | `token-stats.json` | Token 统计 | 自动生成 |
 | `memory.json` | 任务历史 + 经验 + 会议 | 自动生成 |
+| `workspaces.json` | 工作区注册表 | 自动生成 |
 
 ## 测试
 
 ```bash
-node test-unit.mjs    # 纯单元测试
-node test-e2e.mjs     # 全链路 E2E（使用端口 9810，不影响生产）
+node test-unit.mjs       # 纯单元测试
+node test-workspace.mjs  # 工作区管理单元测试（独立临时数据目录）
+node test-e2e.mjs        # 全链路 E2E（使用端口 9810，不影响生产）
 ```
+
+## 工作区管理
+
+dispatch / handoff 可绑定工作区；绑定时 CLI 工具以该目录为 `cwd` 执行（未绑定时仍用一次性输出目录）。两种模式：
+
+| 模式 | 创建方式 | 文件归属 | 删除行为 |
+|------|---------|---------|---------|
+| `linked` | `POST /api/workspaces` 带已存在的绝对 `path` | 用户目录，仅登记 | 只解除登记，**永不删文件** |
+| `managed` | 只带 `name`（省略则自动生成），在 `AI_BRIDGE_WORKSPACE_ROOT` 下创建 | 受管目录 | 可 `delete_files=1` 回收 |
+
+```bash
+# 创建受管工作区
+curl -X POST http://127.0.0.1:9800/api/workspaces -H "Content-Type: application/json" \
+  -d '{"name":"demo","exclusive":true}'
+
+# 登记已有目录
+curl -X POST http://127.0.0.1:9800/api/workspaces -H "Content-Type: application/json" \
+  -d '{"name":"my-repo","path":"D:/code/my-repo"}'
+
+# 绑定工作区执行任务（id / name / path 均可）
+curl -X POST http://127.0.0.1:9800/api/dispatch -H "Content-Type: application/json" \
+  -d '{"task":"修复 bug","workspace":"demo"}'
+```
+
+- `GET /api/workspaces` 列出全部（含 `activeRuns`）；`GET/DELETE /api/workspaces/<id>` 查看/删除（`?delete_files=1` 回收受管目录）
+- `POST /api/workspaces/<id>/archive|restore` 归档/恢复；归档工作区不能被 dispatch 绑定
+- `exclusive: true` 的工作区同一时刻只允许一个任务运行，冲突返回 409
+- 运行中的工作区禁止归档/删除；路径必须是绝对路径，且拒绝文件系统根目录
 
 ## 新增工具
 
@@ -165,8 +183,9 @@ node watchdog.js    # 自动重启 + 熔断（连续崩溃5次停止）
 ai-bridge/
 ├── server.js              # HTTP 常驻服务 (40+ API 端点)
 ├── codely-client.js       # 团结 LiteLLM 客户端(凭据/签名/UA跟版/请求)
-├── bridge-stdio.js        # MCP stdio 桥接器 (17 个 MCP 工具)
+├── bridge-stdio.js        # MCP stdio 桥接器 (20 个 MCP 工具)
 ├── tool-registry.js       # 配置驱动工具注册表
+├── workspace-manager.js   # 工作区注册表（登记/受管/归档/租约）
 ├── routing-score.js       # 7维复合路由评分
 ├── tool-identity.js       # 工具身份归一化
 ├── observe.js             # 工具 baseUrl 接管
@@ -186,5 +205,6 @@ ai-bridge/
 ├── read-cred.ps1          # Windows 凭据读取（AgnesCode token）
 ├── start.bat              # 服务启动脚本
 ├── test-unit.mjs          # 单元测试 (43 用例)
+├── test-workspace.mjs     # 工作区管理单元测试
 └── test-e2e.mjs           # E2E 测试
 ```

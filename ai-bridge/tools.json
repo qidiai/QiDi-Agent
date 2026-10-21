@@ -36,7 +36,7 @@
       "--prompt",
       "{{task}}",
       "--dir",
-      "{{outputDir}}"
+      "{{workspaceDir}}"
     ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
@@ -49,23 +49,22 @@
     "transport": "cli",
     "command": "claude",
     "args": [
-      "-p",
-      "{{task}}"
+      "-p"
     ],
-    "inputMode": "arg",
+    "inputMode": "stdin",
     "outputMode": "stdout-text",
-    "timeout": 120000
+    "timeout": 300000
   },
   {
     "name": "agnes-mcp",
     "displayName": "Agnes MCP",
-    "description": "Route task to Agnes (top-level orchestrator) — no external process",
+    "description": "Route task to Agnes (top-level orchestrator) - no external process",
     "transport": "routing-marker"
   },
   {
     "name": "mimo-code",
     "displayName": "Mimo Code",
-    "description": "Mimo Code CLI (mimo run 非交互模式)",
+    "description": "Mimo Code CLI (mimo run)",
     "transport": "cli",
     "command": "mimo",
     "args": [
@@ -79,7 +78,7 @@
   {
     "name": "qoder",
     "displayName": "Qoder",
-    "description": "Qoder CLI (qodercli -p 非交互模式)",
+    "description": "Qoder CLI (qodercli -p)",
     "transport": "cli",
     "command": "qodercli",
     "args": [
@@ -93,7 +92,7 @@
   {
     "name": "workbuddy",
     "displayName": "WorkBuddy",
-    "description": "WorkBuddy Code CLI (codebuddy -p 非交互模式)",
+    "description": "WorkBuddy Code CLI (codebuddy -p)",
     "transport": "cli",
     "command": "codebuddy",
     "args": [
@@ -103,5 +102,91 @@
     "inputMode": "arg",
     "outputMode": "stdout-text",
     "timeout": 120000
+  },
+  {
+    "name": "codely",
+    "displayName": "Codely",
+    "description": "Codely CLI (Tuanjie Cowork, default GLM-5.3)",
+    "transport": "cli",
+    "command": "codely",
+    "commandPaths": [
+      "{{LOCALAPPDATA}}/Programs/Tuanjie Cowork/cli/bin/win32-x64/codely.exe"
+    ],
+    "args": [
+      "-y",
+      "-p",
+      "{{task}}"
+    ],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 1800000
+  },
+  {
+    "name": "codely-k3",
+    "displayName": "Codely K3",
+    "description": "Codely CLI (KIMI-K3)",
+    "transport": "cli",
+    "command": "codely",
+    "commandPaths": [
+      "{{LOCALAPPDATA}}/Programs/Tuanjie Cowork/cli/bin/win32-x64/codely.exe"
+    ],
+    "args": [
+      "-y",
+      "--model",
+      "KIMI-K3",
+      "-p",
+      "{{task}}"
+    ],
+    "inputMode": "arg",
+    "outputMode": "stdout-text",
+    "timeout": 1800000
+  },
+  {
+    "name": "opencode",
+    "displayName": "OpenCode",
+    "description": "OpenCode CLI (opencode run, opencode-go/step-5-preview-free 1M, --auto)",
+    "transport": "cli",
+    "command": "opencode",
+    "args": [
+      "run",
+      "-m",
+      "opencode-go/step-5-preview-free",
+      "--auto"
+    ],
+    "inputMode": "stdin",
+    "outputMode": "stdout-text",
+    "timeout": 600000
+  },
+  {
+    "name": "opencode-k3",
+    "displayName": "OpenCode K3",
+    "description": "OpenCode CLI (opencode-go/kimi-k3, zen free, --auto)",
+    "transport": "cli",
+    "command": "opencode",
+    "args": [
+      "run",
+      "-m",
+      "opencode-go/kimi-k3",
+      "--auto"
+    ],
+    "inputMode": "stdin",
+    "outputMode": "stdout-text",
+    "timeout": 600000
+  },
+  {
+    "name": "opencode-flash",
+    "displayName": "OpenCode Flash",
+    "description": "OpenCode CLI (opencode-go/deepseek-v4.1-flash, zen free, --auto)",
+    "transport": "cli",
+    "command": "opencode",
+    "args": [
+      "run",
+      "-m",
+      "opencode-go/deepseek-v4.1-flash",
+      "--auto"
+    ],
+    "inputMode": "stdin",
+    "outputMode": "stdout-text",
+    "timeout": 600000
   }
 ]

@@ -1,0 +1,28 @@
+# ── 运行时数据(含真实对话/业务信息,绝不入库) ──
+logs.jsonl*
+traffic.jsonl
+token-stats.json
+memory.json
+switches.json
+clients-acl.json
+workspaces.json
+stderr.log
+stdout.log
+output/
+__pycache__/
+*.pyc
+
+# ── 依赖与第三方二进制 ──
+node_modules/
+nssm.exe
+nssm_new/
+
+# ── 遗留备份(含明文凭据) ──
+deprecated/
+
+# ── Codely 逆向模块(本地保留,不入开源仓) ──
+codely-client.js
+
+# ── 本地环境 ──
+.env
+*.local

@@ -23,7 +23,8 @@ const FILES = {
   memory: path.join(DATA_DIR, 'memory.json'),
   logs: path.join(DATA_DIR, 'logs.jsonl'),
   traffic: path.join(DATA_DIR, 'traffic.jsonl'),
-  acl: path.join(DATA_DIR, 'clients-acl.json')
+  acl: path.join(DATA_DIR, 'clients-acl.json'),
+  workspaces: path.join(DATA_DIR, 'workspaces.json')
 };
 
 const _locks = new Map();
@@ -293,7 +294,8 @@ function recordTask (task) {
     })),
     successCount: task.successCount,
     totalTokens: task.totalTokens,
-    fallbackLog: task.fallbackLog
+    fallbackLog: task.fallbackLog,
+    workspace: task.workspace || null
   });
   // 保留最近 200 条
   if (mem.tasks.length > 200) mem.tasks = mem.tasks.slice(0, 200);

@@ -9,13 +9,18 @@
  * 配置字段:
  *   command:        命令名 (如 "openclaw")
  *   commandPaths:   绝对路径候选 (如 ["{{LOCALAPPDATA}}/AtomCode/atomcode.exe"])
- *   args:            参数模板 (支持 {{task}} {{messageFile}} {{sessionId}} {{outputDir}} {{taskId}})
+ *   args:            参数模板 (支持 {{task}} {{messageFile}} {{sessionId}} {{outputDir}} {{workspaceDir}} {{taskId}})
  *   inputMode:       arg | message-file | stdin
  *   outputMode:      stdout-text | stdout-json | file
  *   parse.textPath:  stdout-json 模式下提取文本的 JSONPath
  *   parse.usagePath: stdout-json 模式下提取 usage 的 JSONPath
  *   parse.outputFile: file 模式下要读取的输出文件名
  *   timeout:         超时毫秒数
+ *
+ * 执行目录:
+ *   opts.workspaceDir 存在时,子进程 cwd = workspaceDir(工作区模式);
+ *   否则回退到 outputDir(一次性输出目录,兼容旧行为)。
+ *   outputDir 始终用于存放 input.txt 等桥接中间产物。
  */
 
 const { spawn, spawnSync } = require('child_process');
@@ -57,6 +62,11 @@ class CliAdapter extends BaseAdapter {
     const dir = opts.outputDir || path.join(process.cwd(), 'output', `${this.name}_${taskId}`);
     fs.mkdirSync(dir, { recursive: true });
 
+    const workspaceDir = opts.workspaceDir ? path.resolve(opts.workspaceDir) : dir;
+    if (opts.workspaceDir && (!fs.existsSync(workspaceDir) || !fs.statSync(workspaceDir).isDirectory())) {
+      throw new Error(`工作区目录不存在或不是目录: ${workspaceDir}`);
+    }
+
     const sessionId = `bridge-${taskId}-${Date.now()}`;
 
     // 准备输入
@@ -73,6 +83,7 @@ class CliAdapter extends BaseAdapter {
         messageFile: messageFile || '',
         sessionId,
         outputDir: dir,
+        workspaceDir,
         taskId
       });
     });
@@ -81,18 +92,18 @@ class CliAdapter extends BaseAdapter {
     const stdin = this.inputMode === 'stdin' ? task : null;
     const stdout = await runCommand(this.config.command, args, {
       timeout: opts.timeout || this.timeout,
-      cwd: dir,
+      cwd: workspaceDir,
       stdin
     });
 
     // 解析输出
-    return this.parseOutput(stdout, dir);
+    return this.parseOutput(stdout, dir, workspaceDir);
   }
 
   /**
    * 按 outputMode 解析命令输出
    */
-  parseOutput (stdout, outputDir) {
+  parseOutput (stdout, outputDir, workspaceDir = outputDir) {
     switch (this.outputMode) {
       case 'stdout-text':
         return this.buildResult(stdout);
@@ -128,13 +139,18 @@ class CliAdapter extends BaseAdapter {
       }
 
       case 'file': {
-        const outputFile = path.join(outputDir, this.parseConfig.outputFile || 'output.md');
+        const outputName = this.parseConfig.outputFile || 'output.md';
+        let outputFile = path.join(outputDir, outputName);
+        // 工作区模式:工具可能把文件直接写进 cwd,两级回退
+        if (!fs.existsSync(outputFile) && workspaceDir !== outputDir) {
+          outputFile = path.join(workspaceDir, outputName);
+        }
         let content = '';
         if (fs.existsSync(outputFile)) {
           content = fs.readFileSync(outputFile, 'utf-8');
         }
         if (!content.trim()) {
-          throw new Error(`${this.config.command} 未产出 ${this.parseConfig.outputFile || 'output.md'}`);
+          throw new Error(`${this.config.command} 未产出 ${outputName}`);
         }
         return this.buildResult(content);
       }
@@ -268,7 +284,7 @@ function runCommand (cmd, args, opts = {}) {
 
 /**
  * 模板变量替换
- * {{task}} {{messageFile}} {{sessionId}} {{outputDir}} {{taskId}}
+ * {{task}} {{messageFile}} {{sessionId}} {{outputDir}} {{workspaceDir}} {{taskId}}
  */
 function replaceTemplates (str, vars) {
   return str
@@ -276,6 +292,7 @@ function replaceTemplates (str, vars) {
     .replace(/\{\{messageFile\}\}/g, vars.messageFile || '')
     .replace(/\{\{sessionId\}\}/g, vars.sessionId || '')
     .replace(/\{\{outputDir\}\}/g, vars.outputDir || '')
+    .replace(/\{\{workspaceDir\}\}/g, vars.workspaceDir || '')
     .replace(/\{\{taskId\}\}/g, vars.taskId || '');
 }
 

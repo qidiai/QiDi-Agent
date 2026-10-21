@@ -1,6 +1,6 @@
 @echo off
 title AI Bridge Server
-cd /d "C:\Users\ASUS\Documents\trae_projects\ai-orchestrator\ai-bridge"
+cd /d "%~dp0"
 echo ==========================================
 echo   AI Bridge 服务启动中...
 echo   Web UI: http://127.0.0.1:9800
