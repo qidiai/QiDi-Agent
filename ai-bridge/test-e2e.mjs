@@ -283,7 +283,7 @@ async function main () {
   // 3) 启动 bridge-stdio 客户端(白名单直接批准)
   bridgeProc = spawn(process.execPath, ['bridge-stdio.js'], {
     cwd: __dirname,
-    env: { ...process.env, AI_BRIDGE_PORT: String(PORT), AI_BRIDGE_HOST: HOST, AI_BRIDGE_CLIENT: CLIENT },
+    env: { ...process.env, AI_BRIDGE_PORT: String(PORT), AI_BRIDGE_HOST: HOST, AI_BRIDGE_CLIENT: CLIENT, AI_BRIDGE_CAP_EXEC: '1' },
     stdio: ['pipe', 'pipe', 'pipe']
   });
   const mcp = makeMcpChannel(bridgeProc);
@@ -332,9 +332,13 @@ async function main () {
 
   const wsDispatch = await req('POST', '/api/dispatch', { task: '写一个 Python cube(x) 函数', tools: [CLIENT], workspace: 'e2e-ws' });
   check('dispatch 绑定工作区成功', wsDispatch.body.successCount === 1 && wsDispatch.body.workspace?.name === 'e2e-ws', JSON.stringify(wsDispatch.body.workspace));
+  check('exec 型客户端任务文本已注入工作区路径', lastSamplingTask.includes('## 工作区目录') && lastSamplingTask.includes(wsCreate.body.path), lastSamplingTask.slice(0, 120));
+  const wsDispatchNoExec = await req('POST', '/api/dispatch', { task: 'x', tools: [REVIEWER], workspace: 'e2e-ws', auto_fallback: false });
+  check('sampling-only 客户端承接 workspace 任务被显式拒绝', wsDispatchNoExec.body.successCount === 0 && /推理型/.test(JSON.stringify(wsDispatchNoExec.body.results ?? wsDispatchNoExec.body)), JSON.stringify(wsDispatchNoExec.body.results?.[0] ?? wsDispatchNoExec.body).slice(0, 200));
   const wsAfterUse = await req('GET', '/api/workspaces');
   const usedWs = (wsAfterUse.body.workspaces || []).find(w => w.name === 'e2e-ws');
-  check('工作区使用统计已更新且租约已释放', usedWs?.useCount === 1 && usedWs?.activeRuns === 0, JSON.stringify(usedWs));
+  // useCount=2:成功派发 1 次 + 被拒绝的 sampling-only 派发 1 次(租约在派发准入时即计数)
+  check('工作区使用统计已更新且租约已释放', usedWs?.useCount === 2 && usedWs?.activeRuns === 0, JSON.stringify(usedWs));
 
   const wsArchive = await req('POST', `/api/workspaces/${encodeURIComponent(wsCreate.body.id)}/archive`);
   check('归档工作区成功', wsArchive.status === 200 && wsArchive.body.status === 'archived', JSON.stringify(wsArchive.body));

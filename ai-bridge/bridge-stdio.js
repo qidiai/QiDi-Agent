@@ -15,6 +15,9 @@ const BRIDGE_PORT = parseInt(process.env.AI_BRIDGE_PORT) || 9800;
 const BRIDGE_HOST = process.env.AI_BRIDGE_HOST || '127.0.0.1';
 const BRIDGE_TOKEN = process.env.AI_BRIDGE_TOKEN || '';
 const CLIENT_NAME = process.env.AI_BRIDGE_CLIENT || 'unknown';
+// 宿主是否具备真实文件执行能力(默认否:sampling 反向调用只是模型补全,无法在工作区改文件)。
+// 有能力的宿主封装(如带本地 runner 的边缘代理)显式设 AI_BRIDGE_CAP_EXEC=1 后才可承接 workspace 任务。
+const CAP_EXEC = /^(1|true|yes|on)$/i.test(process.env.AI_BRIDGE_CAP_EXEC || '');
 // 服务端会在客户端名与内置 CLI 重名时分配 client- 前缀 ID。
 // 后续 poll/result/unregister 必须使用服务端返回的 ID，否则会陷入“未注册→重注册”死循环。
 let registeredClientId = CLIENT_NAME;
@@ -630,7 +633,7 @@ async function handleMessage (msg) {
     hostSupportsSampling = !!params?.capabilities?.sampling;
     if (hasRegistered) {
       // 初始化通常晚于进程启动注册；能力一旦明确，立即幂等刷新到中枢。
-      httpPost('/api/client/register', { name: CLIENT_NAME, capabilities: { sampling: hostSupportsSampling } })
+      httpPost('/api/client/register', { name: CLIENT_NAME, capabilities: { sampling: hostSupportsSampling, exec: CAP_EXEC } })
         .catch(() => {});
     }
     result = { protocolVersion: '2024-11-05', capabilities: { tools: {}, sampling: {} }, serverInfo: { name: 'ai-bridge', version: '1.1.0' } };
@@ -713,7 +716,7 @@ async function registerWithRetry () {
   const MAX_RETRIES = 100;
   while (retryCount < MAX_RETRIES) {
     try {
-      const r = await httpPost('/api/client/register', { name: CLIENT_NAME, capabilities: { sampling: hostSupportsSampling } });
+      const r = await httpPost('/api/client/register', { name: CLIENT_NAME, capabilities: { sampling: hostSupportsSampling, exec: CAP_EXEC } });
       if (r && r.status === 'approved') {
         registeredClientId = r.clientId || CLIENT_NAME;
         hasRegistered = true;

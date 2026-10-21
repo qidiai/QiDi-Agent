@@ -62,16 +62,32 @@ function parseKimiConfig (text) {
   return { providers, models };
 }
 
-/** 读取 kimi-code 中所有 kimi 协议模型 → [{ alias, model, displayName, contextWindow, toolName }] */
+/**
+ * 读取 kimi-code 中所有 kimi 协议模型。
+ * 返回 null = 配置暂不可读/解析失败(文件可能正在被写入);
+ * 返回 []   = 配置可读但确实没有 kimi 模型(权威结果,调用方可安全清空旧条目)。
+ * 调用方(getter)在 null 时回退上一次已知结果,避免瞬时写冲突导致清单闪空。
+ * 带 30s mtime 缓存:mtime 未变且未过期直接回缓存,变了立即重读(热更新不被缓存拖慢)。
+ */
+let _kimiCache = null; // { mtimeMs, at, models }
 function readKimiModels () {
   const cfgPath = kimiConfigPath();
-  if (!fs.existsSync(cfgPath)) return [];
+  let mtimeMs;
+  try {
+    mtimeMs = fs.statSync(cfgPath).mtimeMs;
+  } catch (_) {
+    return null; // 文件不存在或暂不可访问(保留旧缓存供回退)
+  }
+  const now = Date.now();
+  if (_kimiCache && _kimiCache.mtimeMs === mtimeMs && now - _kimiCache.at < 30000) {
+    return _kimiCache.models;
+  }
 
   let parsed;
   try {
     parsed = parseKimiConfig(fs.readFileSync(cfgPath, 'utf-8'));
   } catch (_) {
-    return [];
+    return null; // 读/解析失败:保留旧缓存结论,等下次事件或兜底轮询
   }
 
   const out = [];
@@ -87,12 +103,14 @@ function readKimiModels () {
       toolName: alias.replace(/[/.]/g, '-')
     });
   }
+  _kimiCache = { mtimeMs, at: now, models: out };
   return out;
 }
 
-/** dispatch 工具配置（tool-registry.js 用） */
+/** dispatch 工具配置（tool-registry.js 用）；kimi 配置暂不可读时回退上一次已知结果 */
 function getKimiToolConfigs () {
-  return readKimiModels().map(m => ({
+  const models = readKimiModels() ?? (_kimiCache ? _kimiCache.models : []);
+  return models.map(m => ({
     name: m.toolName,
     displayName: `Kimi Code (${m.displayName})`,
     description: `Kimi Code 模型 ${m.model}（自动同步自 kimi-code config.toml）`,
@@ -108,7 +126,8 @@ function getKimiToolConfigs () {
 
 /** /v1 OpenAI 兼容反代模型条目（server.js loadAllModels 用，与 models.json 同构） */
 function getKimiProxyModels () {
-  return readKimiModels().map(m => ({
+  const models = readKimiModels() ?? (_kimiCache ? _kimiCache.models : []);
+  return models.map(m => ({
     id: m.model,
     owned_by: 'kimi-code',
     switch: m.toolName, // 与 dispatch 工具共用开关

@@ -382,7 +382,8 @@ async function getAllTools () {
       description: `已连接的 AI 编程软件 (${info.name})`,
       available: true,
       type: 'client',
-      clientKey: name
+      clientKey: name,
+      supportsExec: info.supportsExec === true
     };
     tools.push(decorateToolIdentity(clientTool));
   }
@@ -586,6 +587,18 @@ async function executeClient (clientName, task, opts = {}) {
   if (!client.firstPollAt) throw new Error(`客户端尚未完成首次轮询: ${clientName}`);
   if (clientState(client) === 'stale') throw new Error(`客户端连接已过期: ${clientName}`);
 
+  // 工作区任务准入(入队前判定,不占用 pendingTask 槽位):
+  // sampling 反向调用只能拿宿主模型做文本补全,没有文件工具,派了也无法在工作区里干活——
+  // 与其静默"成功"不如显式失败;仅客户端注册时声明 capabilities.exec=true 才放行,
+  // 并把目录路径拼进任务文本(sampling 载荷只透传 task 字符串)。
+  let clientTask = task;
+  if (opts.workspace) {
+    if (!client.supportsExec) {
+      throw new Error(`客户端 ${clientName} 是推理型(sampling)子智能体,无法在工作区执行文件任务;workspace 任务请派给 CLI 工具,或去掉 workspace 参数`);
+    }
+    clientTask = `${task}\n\n## 工作区目录\n${opts.workspace.path}\n请在该目录内完成文件读写任务,不要动其它目录。`;
+  }
+
   // CAS: 检查并原子设置 pendingResolve
   if (client.pendingResolve) {
     throw new Error(`客户端 ${clientName} 正在处理另一个任务,请稍后重试`);
@@ -610,7 +623,7 @@ async function executeClient (clientName, task, opts = {}) {
     connectedClients.set(clientName, {
       ...client,
       pendingTask: {
-        task,
+        task: clientTask,
         taskId: opts.taskId || `${clientName}_${Date.now()}`,
         workspace: opts.workspace ? { id: opts.workspace.id, name: opts.workspace.name, path: opts.workspace.path } : null
       },
@@ -674,6 +687,10 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
     }
     const allTools = await getAllTools();
     const availableTools = allTools.filter(t => t.available);
+    // 带 workspace 时,默认路由/接力候选排除声明不了 exec 的客户端(手动点名仍放行,由 executeClient 给出明确拒绝原因)
+    const dispatchableTools = workspace
+      ? availableTools.filter(t => t.type !== 'client' || t.supportsExec)
+      : availableTools;
     const availableNames = availableTools.map(t => t.name);
     // 智能路由:未指定 tools 时按真实历史构建可解释综合评分；失败仍有接力链兜底。
     let routing = { mode: 'manual' };
@@ -686,7 +703,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
         .filter(t => isToolEnabled(t))
         .map(t => t.name);
     } else {
-      const enabledTools = availableTools.filter(t => isToolEnabled(t));
+      const enabledTools = dispatchableTools.filter(t => isToolEnabled(t));
       const tokenStats = loadJSON(STATS_FILE);
       const profiles = enabledTools.map(t => buildToolRoutingProfile(t, allTools, tokenStats));
       const ranking = rankRoutingProfiles(profiles, task).map(row => ({
@@ -758,7 +775,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
           continue;
         }
         // 接力链:依次尝试所有未用过的可用工具,直到有一个真正成功(而非只试第一个)
-        const untried = availableTools.filter(t => !targets.includes(t.name) && isToolEnabled(t) && !usedFallback.has(t.name) && !coolingToolIds.has(t.id)).map(t => t.name);
+        const untried = dispatchableTools.filter(t => !targets.includes(t.name) && isToolEnabled(t) && !usedFallback.has(t.name) && !coolingToolIds.has(t.id)).map(t => t.name);
         const handoffPrompt = `以下是之前另一个 AI 工具写到一半的代码(工具突然限额/断开),请在此基础上继续完成。\n\n## 任务\n${effectiveTask}\n\n## 已有代码(可能不完整)\n\`\`\`\n${failed.partialCode || '(无可用代码,请从头开始)'}\n\`\`\`\n\n请输出完整的最终代码。`;
         for (const fb of untried) {
           usedFallback.add(fb);
@@ -1386,6 +1403,7 @@ const server = http.createServer(async (req, res) => {
           const wasStale = clientState(old) === 'stale';
           old.lastSeen = Date.now();
           if (typeof body.capabilities?.sampling === 'boolean') old.supportsSampling = body.capabilities.sampling;
+          if (typeof body.capabilities?.exec === 'boolean') old.supportsExec = body.capabilities.exec;
           if (wasStale) {
             old.firstPollAt = null;
             old.reconnectCount = (old.reconnectCount || 0) + 1;
@@ -1405,6 +1423,7 @@ const server = http.createServer(async (req, res) => {
           lastSeen: now,
           reconnectCount: tombstone ? 1 : 0,
           supportsSampling: body.capabilities?.sampling === true,
+          supportsExec: body.capabilities?.exec === true,
           lastError: null,
           disconnectReason: null
         });
@@ -1936,18 +1955,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ── 分支 B:CLI 型订阅(安全 spawn,shell:false;复用经测试的 CliAdapter,无 execSync 拼接注入面) ──
+      // 超长 prompt 的落盘回退已下沉到 CliAdapter(inputMode=arg 时自动生效)
       if (model.transport === 'cli') {
         const fullPrompt = messagesToPrompt(body.messages);
         if (!fullPrompt) { sendJSON(res, 400, { error: '缺少 messages 内容' }); return; }
-        // Windows 命令行参数上限约 32K：超长任务落盘为文件，改用短指令让 agent 读取执行（kimi/qidi 等 coding agent 均可读文件）
-        let prompt = fullPrompt;
-        if (fullPrompt.length > 24000) {
-          const taskDir = path.join(__dirname, 'output', `cli-task-${Date.now()}_${crypto.randomBytes(3).toString('hex')}`);
-          fs.mkdirSync(taskDir, { recursive: true });
-          const taskFile = path.join(taskDir, 'task.md');
-          fs.writeFileSync(taskFile, fullPrompt, 'utf-8');
-          prompt = `完整任务内容已写入文件: ${taskFile}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
-        }
         const cliCfg = model.cli || {};
         const adapter = new CliAdapter({
           name: model.owned_by || model.id,
@@ -1961,7 +1972,7 @@ const server = http.createServer(async (req, res) => {
         db.recordTraffic({ ts: new Date().toISOString(), direction: 'out', tool: model.id, taskId, type: 'openai-proxy', content: fullPrompt.substring(0, 8000), source: 'bridge' });
         let result;
         try {
-          result = await adapter.execute(prompt, { taskId });
+          result = await adapter.execute(fullPrompt, { taskId });
         } catch (e) {
           db.recordTraffic({ ts: new Date().toISOString(), direction: 'in', tool: model.id, taskId, type: 'openai-proxy', success: false, error: e.message, content: '', source: 'bridge' });
           sendJSON(res, 502, { error: `${model.id} CLI 执行失败`, detail: String(e.message || e).substring(0, 300) });
@@ -2143,6 +2154,22 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
   console.log(`[ai-bridge] 鉴权: ${CONFIG.AUTH_TOKEN ? '已启用' : '未启用(设置 AI_BRIDGE_TOKEN 环境变量启用)'}`);
   console.log(`[ai-bridge] 并发上限: ${CONFIG.MAX_CONCURRENT_DISPATCH}`);
 });
+
+// ── 清理反代超长 prompt 遗留任务目录(cli-task-*，>24h；现行落盘已由 CliAdapter 执行后自删) ──
+function cleanupStaleTaskDirs () {
+  const outRoot = path.join(__dirname, 'output');
+  try {
+    for (const name of fs.readdirSync(outRoot)) {
+      if (!name.startsWith('cli-task-')) continue;
+      const dir = path.join(outRoot, name);
+      try {
+        if (Date.now() - fs.statSync(dir).mtimeMs > 24 * 3600 * 1000) fs.rmSync(dir, { recursive: true, force: true });
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+cleanupStaleTaskDirs();
+setInterval(cleanupStaleTaskDirs, 3600 * 1000).unref();
 
 // ── qidi-code 配置自动同步:桥接模型清单(models.json + kimi-code 自动条目)变化时重写 qidi config.toml ──
 try {

@@ -28,6 +28,9 @@ const path = require('path');
 const fs = require('fs');
 const { BaseAdapter } = require('./base');
 
+// Windows CreateProcess 命令行上限约 32K 字符，留出模板其余部分的安全余量
+const MAX_ARG_TASK_LEN = 24000;
+
 class CliAdapter extends BaseAdapter {
   constructor (config) {
     super(config);
@@ -76,10 +79,19 @@ class CliAdapter extends BaseAdapter {
       fs.writeFileSync(messageFile, task, 'utf-8');
     }
 
+    // Windows 命令行 argv 上限约 32K：arg 模式超长时落盘，任务文本改为让 agent 读文件的短指令
+    let effectiveTask = task;
+    let longTaskFile = null;
+    if (this.inputMode === 'arg' && task.length > MAX_ARG_TASK_LEN) {
+      longTaskFile = path.join(dir, 'long-task.md');
+      fs.writeFileSync(longTaskFile, task, 'utf-8');
+      effectiveTask = `完整任务内容已写入文件: ${longTaskFile}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
+    }
+
     // 构建参数（模板替换）
     const args = (this.config.args || []).map(arg => {
       return replaceTemplates(arg, {
-        task,
+        task: effectiveTask,
         messageFile: messageFile || '',
         sessionId,
         outputDir: dir,
@@ -90,11 +102,16 @@ class CliAdapter extends BaseAdapter {
 
     // 执行
     const stdin = this.inputMode === 'stdin' ? task : null;
-    const stdout = await runCommand(this.config.command, args, {
-      timeout: opts.timeout || this.timeout,
-      cwd: workspaceDir,
-      stdin
-    });
+    let stdout;
+    try {
+      stdout = await runCommand(this.config.command, args, {
+        timeout: opts.timeout || this.timeout,
+        cwd: workspaceDir,
+        stdin
+      });
+    } finally {
+      if (longTaskFile) { try { fs.rmSync(longTaskFile, { force: true }); } catch (_) {} }
+    }
 
     // 解析输出
     return this.parseOutput(stdout, dir, workspaceDir);

@@ -84,12 +84,18 @@ function loadTools () {
 const TOOLS = loadTools();
 
 // kimi-code config.toml 热更新：模型增删后自动重同步 dispatch 工具（原地变更 TOOLS，server.js 引用立即可见）
+// 幂等：名单一致时不动 TOOLS；kimi-models 在配置暂不可读时回退旧结果，配合本比较不会把工具洗空
 function resyncKimiTools () {
   try {
+    const configs = getKimiToolConfigs();
+    const current = TOOLS.filter(t => t.autoSync === 'kimi-code').map(t => t.name).join(',');
+    const next = new Set(TOOLS.filter(t => t.autoSync !== 'kimi-code').map(t => t.name));
+    const wanted = configs.filter(c => c && c.name && !next.has(c.name)).map(c => c.name).join(',');
+    if (current === wanted) return; // 无变化（含配置不可读时回退旧结果的情形）
     for (let i = TOOLS.length - 1; i >= 0; i--) {
       if (TOOLS[i].autoSync === 'kimi-code') TOOLS.splice(i, 1);
     }
-    addConfigs(TOOLS, new Set(TOOLS.map(t => t.name)), getKimiToolConfigs());
+    addConfigs(TOOLS, next, configs);
     console.log('[tool-registry] kimi-code 模型工具已热更新');
   } catch (e) {
     console.error(`[tool-registry] kimi-code 热更新失败: ${e.message}`);
@@ -108,6 +114,9 @@ try {
 } catch (e) {
   console.error(`[tool-registry] kimi-code config 监听失败: ${e.message}`);
 }
+
+// 兜底轮询：fs.watch 事件丢失（如原子替换写、启动时文件尚不存在）时仍能恢复同步
+setInterval(resyncKimiTools, 5000).unref();
 
 // ============================================================
 // 共享工具函数（向后兼容导出）
