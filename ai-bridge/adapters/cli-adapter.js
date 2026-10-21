@@ -62,7 +62,8 @@ class CliAdapter extends BaseAdapter {
    */
   async execute (task, opts = {}) {
     const taskId = opts.taskId || `${this.name}_${Date.now()}`;
-    const dir = opts.outputDir || path.join(process.cwd(), 'output', `${this.name}_${taskId}`);
+    // 默认输出根固定在 ai-bridge/output(不随进程 cwd 漂移,与 server 清理逻辑同一坐标系)
+    const dir = opts.outputDir || path.join(__dirname, '..', 'output', `${this.name}_${taskId}`);
     fs.mkdirSync(dir, { recursive: true });
 
     const workspaceDir = opts.workspaceDir ? path.resolve(opts.workspaceDir) : dir;
@@ -80,12 +81,14 @@ class CliAdapter extends BaseAdapter {
     }
 
     // Windows 命令行 argv 上限约 32K：arg 模式超长时落盘，任务文本改为让 agent 读文件的短指令
+    // 落盘位置用 cwd(workspaceDir)内的相对路径,保证 agent 以自身 cwd 就能读到,且不污染任务目录之外的位置
     let effectiveTask = task;
     let longTaskFile = null;
     if (this.inputMode === 'arg' && task.length > MAX_ARG_TASK_LEN) {
-      longTaskFile = path.join(dir, 'long-task.md');
+      const longTaskName = '.ai-bridge-long-task.md';
+      longTaskFile = path.join(workspaceDir, longTaskName);
       fs.writeFileSync(longTaskFile, task, 'utf-8');
-      effectiveTask = `完整任务内容已写入文件: ${longTaskFile}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
+      effectiveTask = `完整任务内容已写入当前目录下的文件: ./${longTaskName}\n请先读取该文件的全部内容，然后严格按照文件中的指令执行任务并给出最终结果。`;
     }
 
     // 构建参数（模板替换）

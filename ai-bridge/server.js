@@ -466,6 +466,7 @@ function clientView (id, info, approved = true) {
     disconnectReason: info?.disconnectReason || null,
     reconnectCount: info?.reconnectCount || 0,
     supportsSampling: info?.supportsSampling === true,
+    supportsExec: info?.supportsExec === true,
     executionEligible: (state === 'online_idle' || state === 'online_busy') && info?.supportsSampling === true
   };
 }
@@ -490,9 +491,18 @@ function rememberClientDisconnect (id, info, reason, lastError = null) {
   if (clientTombstones.size > 100) clientTombstones.delete(clientTombstones.keys().next().value);
 }
 
+/** sampling 反向调用只透传 task 字符串,工作区路径靠拼进任务文本下发 */
+function withWorkspaceBrief (task, workspacePath) {
+  return `${task}\n\n## 工作区目录\n${workspacePath}\n请在该目录内完成文件读写任务,不要动其它目录。`;
+}
+
 function isToolFailed (result, error) {
   if (error) return { failed: true, reason: error.message || String(error), partialCode: '' };
   const text = (result.content || '').toLowerCase();
+  // exit 0 但零产出是 CLI 静默失败(典型:额度耗尽)的特征,不能算成功
+  if (!(result.content || '').trim() && (result.codeBlocks || []).length === 0) {
+    return { failed: true, reason: '空产出(进程正常退出但无输出,疑似额度耗尽/静默失败)', partialCode: '' };
+  }
   const failKeywords = ['insufficient balance', '额度', '限额', 'rate limit', 'quota', 'exceeded', 'unauthorized', '402', '429', '401'];
   if (result.codeBlocks.length === 0 && failKeywords.some(k => text.includes(k))) {
     return { failed: true, reason: text.substring(0, 200), partialCode: '' };
@@ -514,6 +524,11 @@ async function executeTool (name, task, opts = {}) {
   const taskId = opts.taskId || `${executionName}_${Date.now()}`;
   const startTime = Date.now();
 
+  // 客户端工作区任务会把目录简报拼进任务文本,流量记录记实际下发的载荷
+  const outboundTask = (toolDef.type === 'client' && opts.workspace)
+    ? withWorkspaceBrief(task, opts.workspace.path)
+    : task;
+
   // 流量记录:发出
   db.recordTraffic({
     ts: new Date().toISOString(),
@@ -521,7 +536,7 @@ async function executeTool (name, task, opts = {}) {
     tool: toolDef.id,
     taskId,
     type: toolDef.type || 'cli',
-    content: task
+    content: outboundTask
   });
 
   let result;
@@ -533,12 +548,13 @@ async function executeTool (name, task, opts = {}) {
       const tool = TOOLS.find(t => t.name === executionName);
       result = await tool.execute(task, {
         taskId,
-        timeout: opts.timeout || CONFIG.EXECUTE_TIMEOUT,
+        timeout: opts.timeout || tool.timeout || CONFIG.EXECUTE_TIMEOUT,
         workspaceDir: opts.workspace?.path
       });
     }
   } catch (e) {
     execError = e;
+    log('warn', `executeTool 异常: tool=${toolDef.id} taskId=${taskId} error=${(e.message || String(e)).substring(0, 200)}`);
   }
 
   // 流量记录:返回
@@ -596,7 +612,7 @@ async function executeClient (clientName, task, opts = {}) {
     if (!client.supportsExec) {
       throw new Error(`客户端 ${clientName} 是推理型(sampling)子智能体,无法在工作区执行文件任务;workspace 任务请派给 CLI 工具,或去掉 workspace 参数`);
     }
-    clientTask = `${task}\n\n## 工作区目录\n${opts.workspace.path}\n请在该目录内完成文件读写任务,不要动其它目录。`;
+    clientTask = withWorkspaceBrief(task, opts.workspace.path);
   }
 
   // CAS: 检查并原子设置 pendingResolve
@@ -745,7 +761,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
     });
 
     if (targets.length === 0) {
-      return { error: `没有可用工具。检测到: ${availableNames.join(', ') || '无'}` };
+      return { error: `没有选中可执行的目标。当前可调度工具: ${availableNames.join(', ') || '无'}(可能被禁用,或 workspace 任务要求 exec 能力)` };
     }
 
     const rawResults = await Promise.allSettled(
@@ -753,7 +769,10 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
         try {
           const result = await executeTool(name, effectiveTask, { workspace });
           const check = isToolFailed(result, null);
-          if (check.failed) return { tool: name, failed: true, reason: check.reason, partialCode: check.partialCode, result };
+          if (check.failed) {
+            log('warn', `dispatch 判定工具失败: tool=${name} reason=${String(check.reason || '').substring(0, 200)}`);
+            return { tool: name, failed: true, reason: check.reason, partialCode: check.partialCode, result };
+          }
           return { tool: name, failed: false, result };
         } catch (e) {
           return { tool: name, failed: true, reason: e.message, partialCode: '' };
@@ -784,7 +803,7 @@ async function doDispatch (task, toolNames, autoFallback = true, context = '', w
             const fbResult = await executeTool(fb, handoffPrompt, { workspace });
             // 接力结果二次校验:接力工具本身也可能限额/断连,别把失败回复当成功
             const fbCheck = isToolFailed(fbResult, null);
-            if (fbCheck.failed) { fallbackLog.push({ from: failed.tool, to: fb, success: false, reason: fbCheck.reason }); continue; }
+            if (fbCheck.failed) { log('warn', `接力工具仍失败: from=${failed.tool} to=${fb} reason=${String(fbCheck.reason || '').substring(0, 200)}`); fallbackLog.push({ from: failed.tool, to: fb, success: false, reason: fbCheck.reason }); continue; }
             fallbackLog.push({ from: failed.tool, to: fb, success: true, duration: fbResult.duration });
             rawResults[i] = { status: 'fulfilled', value: { tool: fb, failed: false, result: fbResult, fallback: true, fallbackFrom: failed.tool, fallbackTo: fb } };
             METRICS.fallbackSuccess++;
@@ -1403,7 +1422,8 @@ const server = http.createServer(async (req, res) => {
           const wasStale = clientState(old) === 'stale';
           old.lastSeen = Date.now();
           if (typeof body.capabilities?.sampling === 'boolean') old.supportsSampling = body.capabilities.sampling;
-          if (typeof body.capabilities?.exec === 'boolean') old.supportsExec = body.capabilities.exec;
+          // exec 每次注册都重新判定:能力只允许严格 opt-in,防止旧值把已撤回的执行权限带进新会话
+          old.supportsExec = body.capabilities?.exec === true;
           if (wasStale) {
             old.firstPollAt = null;
             old.reconnectCount = (old.reconnectCount || 0) + 1;
@@ -2155,18 +2175,28 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
   console.log(`[ai-bridge] 并发上限: ${CONFIG.MAX_CONCURRENT_DISPATCH}`);
 });
 
-// ── 清理反代超长 prompt 遗留任务目录(cli-task-*，>24h；现行落盘已由 CliAdapter 执行后自删) ──
+// ── 清理超长 prompt 落盘等异常退出遗留的任务目录(>24h；正常路径 CliAdapter 执行后自删) ──
+// 目录命名两类:cli-task-*(反代旧格式) 与 <tool>_<13位以上时间戳>(CliAdapter 现行格式)
+function isStaleTaskDir (name) {
+  return name.startsWith('cli-task-') || /_\d{13,}$/.test(name);
+}
+
 function cleanupStaleTaskDirs () {
-  const outRoot = path.join(__dirname, 'output');
-  try {
-    for (const name of fs.readdirSync(outRoot)) {
-      if (!name.startsWith('cli-task-')) continue;
-      const dir = path.join(outRoot, name);
-      try {
-        if (Date.now() - fs.statSync(dir).mtimeMs > 24 * 3600 * 1000) fs.rmSync(dir, { recursive: true, force: true });
-      } catch (_) {}
-    }
-  } catch (_) {}
+  const roots = [
+    path.join(__dirname, 'output'), // ai-bridge/output(现行统一输出根)
+    path.join(__dirname, '..', 'output') // 仓库根 output(旧进程 cwd 漂移时期遗留)
+  ];
+  for (const outRoot of roots) {
+    try {
+      for (const name of fs.readdirSync(outRoot)) {
+        if (!isStaleTaskDir(name)) continue;
+        const dir = path.join(outRoot, name);
+        try {
+          if (Date.now() - fs.statSync(dir).mtimeMs > 24 * 3600 * 1000) fs.rmSync(dir, { recursive: true, force: true });
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 }
 cleanupStaleTaskDirs();
 setInterval(cleanupStaleTaskDirs, 3600 * 1000).unref();

@@ -766,7 +766,13 @@ async function pollLoop () {
             maxTokens: parseInt(process.env.AI_BRIDGE_SAMPLING_MAX_TOKENS) || 16384,
             includeContext: 'none'
           });
-          const content = result?.content?.text || result?.content || JSON.stringify(result || '');
+          // sampling 载荷的 content 是内容块(对象或块数组);逐形态提取文本,
+          // 空产出保持空字符串上报——用 || 回退会把对象塞进 content,中枢误判且丢失失败信号
+          const block = result?.content;
+          const content = typeof block === 'string' ? block
+            : typeof block?.text === 'string' ? block.text
+            : Array.isArray(block) ? block.map(b => (typeof b?.text === 'string' ? b.text : '')).join('')
+            : block == null ? '' : JSON.stringify(block);
           await httpPost('/api/result', {
             clientId: registeredClientId,
             content,

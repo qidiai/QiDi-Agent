@@ -86,9 +86,13 @@ function makeMcpChannel (child) {
       if (msg.method === 'sampling/createMessage' && msg.id !== undefined) {
         lastSamplingTask = msg.params?.messages?.[0]?.content || '';
         // 含 LONGOUT_MARK 标记时返回超长文本,用于验证 RESULT_MAX_CHARS 截断
-        const text = lastSamplingTask.includes('LONGOUT_MARK')
-          ? 'L'.repeat(5000)
-          : '```python\ndef add(a, b):\n    return a + b\n```';
+        // 含 EMPTYOUT_MARK 标记时返回空文本,模拟 CLI exit0/无输出的静默失败(如额度耗尽)
+        // 仅"以标记开头"时空产出:接力 prompt 会内嵌原任务文本,避免标记传播到接力工具
+        const text = lastSamplingTask.trimStart().startsWith('EMPTYOUT_MARK')
+          ? ''
+          : lastSamplingTask.includes('LONGOUT_MARK')
+            ? 'L'.repeat(5000)
+            : '```python\ndef add(a, b):\n    return a + b\n```';
         const result = {
           content: { type: 'text', text },
           usage: { inputTokens: 12, outputTokens: 34 }
@@ -431,6 +435,15 @@ async function main () {
   check('主产出成功', rv.body.successCount === 1, JSON.stringify(rv.body).slice(0, 120));
   check('评审由独立工具完成(reviewer≠producer)', rv.body.review?.reviewer === REVIEWER && rv.body.review?.producer === CLIENT, JSON.stringify(rv.body.review || {}).slice(0, 200));
   check('评审有实质内容', typeof rv.body.review?.content === 'string' && rv.body.review.content.length > 0);
+
+  // 9.65) 空产出假成功:exit0/无输出必须判失败,且能触发自动接力(此前 mimo 额度耗尽被记 1/1 成功)
+  section('空产出判失败 + 接力链');
+  const emptyDisp = await req('POST', '/api/dispatch', { task: 'EMPTYOUT_MARK 这个任务宿主返回空输出', tools: [CLIENT], auto_fallback: false });
+  check('空产出判为失败(successCount=0)', emptyDisp.body.successCount === 0, JSON.stringify(emptyDisp.body).slice(0, 200));
+  check('失败原因是空产出', /空产出/.test(emptyDisp.body.results?.[0]?.reason || ''), JSON.stringify(emptyDisp.body.results?.[0] || {}).slice(0, 200));
+  const emptyFb = await req('POST', '/api/dispatch', { task: 'EMPTYOUT_MARK 应触发接力', tools: [CLIENT] });
+  check('空产出后自动接力换工具成功', emptyFb.body.successCount === 1 && emptyFb.body.results?.[0]?.fallback === true, JSON.stringify(emptyFb.body.results?.[0] || {}).slice(0, 220));
+  check('接力目标为评审客户端', emptyFb.body.results?.[0]?.tool === REVIEWER, 'tool=' + emptyFb.body.results?.[0]?.tool);
 
   // 9.7) 异步任务队列:async dispatch 立即返回 taskId,轮询取结果
   section('异步任务队列:async dispatch + taskId 轮询');

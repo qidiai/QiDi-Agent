@@ -25,7 +25,7 @@ node server.js     # 启动服务 (端口 9800)
 | `AI_BRIDGE_HOST` | 127.0.0.1 | 监听地址（**仅本机**；改 0.0.0.0 前务必设 TOKEN） |
 | `AI_BRIDGE_TOKEN` | 无 | API 鉴权 token（不设则无鉴权） |
 | `AI_BRIDGE_CLIENT` | unknown | 作为 MCP 客户端时的身份名 |
-| `AI_BRIDGE_EXECUTE_TIMEOUT` | 300000 | 单次执行超时(ms) |
+| `AI_BRIDGE_EXECUTE_TIMEOUT` | 900000 | 单次执行超时(ms) |
 | `AI_BRIDGE_CACHE_TTL` | 600000 | 反代幂等缓存 TTL(ms) |
 | `AI_BRIDGE_CACHE_MAX` | 100 | 反代幂等缓存条目上限(LRU) |
 | `AI_BRIDGE_DAILY_TOKEN_BUDGET` | 无 | 每日 token 预算，超出时 /api/health 告警 |

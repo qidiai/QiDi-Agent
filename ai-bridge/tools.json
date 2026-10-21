@@ -40,7 +40,7 @@
     ],
     "inputMode": "arg",
     "outputMode": "stdout-text",
-    "timeout": 1800000
+    "timeout": 300000
   },
   {
     "name": "claude-code",
@@ -60,20 +60,6 @@
     "displayName": "Agnes MCP",
     "description": "Route task to Agnes (top-level orchestrator) - no external process",
     "transport": "routing-marker"
-  },
-  {
-    "name": "mimo-code",
-    "displayName": "Mimo Code",
-    "description": "Mimo Code CLI (mimo run)",
-    "transport": "cli",
-    "command": "mimo",
-    "args": [
-      "run",
-      "{{task}}"
-    ],
-    "inputMode": "arg",
-    "outputMode": "stdout-text",
-    "timeout": 120000
   },
   {
     "name": "qoder",
