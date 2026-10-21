@@ -134,3 +134,6 @@ cloud-control/.wrangler/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# ── 全息记忆库本地数据(体积大且含项目全量语义,不入库) ──
+.hologram/
